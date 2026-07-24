@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<title>รายงานตรวจสอบงานช่าง</title>
+<meta name="app-version" content="1.0.0">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0b1220;
+    --bg-panel:#121b2e;
+    --bg-panel-2:#0f1729;
+    --line:#223047;
+    --line-soft:#1a2439;
+    --text:#e7edf7;
+    --text-dim:#8b9bb5;
+    --accent:#ffb020;
+    --accent-2:#3ddc97;
+    --danger:#ff5c5c;
+    --amber:#ffb020;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:
+      radial-gradient(1200px 500px at 50% -10%, #16223a 0%, transparent 60%),
+      var(--bg);
+    color:var(--text);
+    font-family:'IBM Plex Sans Thai','Kanit',sans-serif;
+    min-height:100vh;
+    padding-bottom:120px;
+  }
+  header{
+    padding:22px 18px 16px;
+    border-bottom:1px solid var(--line);
+    background:linear-gradient(180deg, rgba(255,176,32,0.06), transparent);
+    position:sticky; top:0; z-index:10;
+    backdrop-filter:blur(10px);
+  }
+  header .eyebrow{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:11px; letter-spacing:.14em; text-transform:uppercase;
+    color:var(--accent); margin-bottom:6px;
+  }
+  header h1{
+    font-family:'Kanit',sans-serif; font-weight:600; font-size:20px; margin:0;
+    letter-spacing:.01em;
+  }
+  .version-tag{
+    font-family:'IBM Plex Mono',monospace; font-size:11px; font-weight:400;
+    color:var(--text-dim); vertical-align:middle; margin-left:6px;
+  }
+  .update-banner{
+    position:fixed; top:0; left:0; right:0; z-index:200;
+    background:var(--accent); color:#231400;
+    font-family:'Kanit',sans-serif; font-weight:600; font-size:13.5px;
+    text-align:center; padding:10px; transform:translateY(-100%);
+    transition:transform .25s ease;
+  }
+  .update-banner.show{transform:translateY(0);}
+  main{max-width:640px; margin:0 auto; padding:16px;}
+  .card{
+    background:var(--bg-panel);
+    border:1px solid var(--line);
+    border-radius:14px;
+    padding:16px;
+    margin-bottom:14px;
+  }
+  .card-title{
+    display:flex; align-items:center; gap:8px;
+    font-family:'Kanit',sans-serif; font-weight:600; font-size:15px;
+    color:var(--text); margin-bottom:12px;
+  }
+  .card-title .dot{width:6px;height:6px;border-radius:50%;background:var(--accent);}
+  label{
+    display:block; font-size:12.5px; color:var(--text-dim); margin:10px 0 5px;
+    font-weight:500;
+  }
+  label .req{color:var(--danger); margin-left:2px;}
+  input[type=text], input[type=date], input[type=tel], select, textarea{
+    width:100%;
+    background:var(--bg-panel-2);
+    border:1px solid var(--line);
+    color:var(--text);
+    border-radius:9px;
+    padding:11px 12px;
+    font-size:14.5px;
+    font-family:inherit;
+    appearance:none;
+    -webkit-appearance:none;
+  }
+  select{
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%238b9bb5' stroke-width='2'><path d='M6 9l6 6 6-6'/></svg>");
+    background-repeat:no-repeat;
+    background-position:right 12px center;
+    padding-right:34px;
+  }
+  select:invalid{color:var(--text-dim);}
+  input:focus, select:focus, textarea:focus{
+    outline:none; border-color:var(--accent);
+    box-shadow:0 0 0 3px rgba(255,176,32,0.12);
+  }
+  .row2{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
+  .item-row{
+    display:grid; grid-template-columns:1fr 68px auto; gap:8px; align-items:end;
+    margin-bottom:8px;
+  }
+  .item-row .qty{text-align:center;}
+  .btn-remove{
+    background:var(--bg-panel-2); border:1px solid var(--line);
+    color:var(--text-dim); border-radius:9px; height:41px; width:41px;
+    font-size:16px; cursor:pointer;
+  }
+  .btn-remove:hover{color:var(--danger); border-color:var(--danger);}
+  .btn-add{
+    width:100%; margin-top:4px;
+    background:transparent; border:1px dashed var(--line);
+    color:var(--text-dim); border-radius:9px; padding:10px;
+    font-size:13.5px; cursor:pointer; font-family:inherit;
+  }
+  .btn-add:hover{border-color:var(--accent); color:var(--accent);}
+  .check-item{
+    border:1px solid var(--line-soft); border-radius:10px;
+    padding:11px 12px; margin-bottom:9px; background:var(--bg-panel-2);
+  }
+  .check-item .lbl{
+    font-size:13.5px; font-weight:500; margin-bottom:8px;
+    display:flex; gap:7px; align-items:flex-start; line-height:1.4;
+  }
+  .check-item .lbl .mark{color:var(--amber); flex-shrink:0;}
+  .status-select{margin-top:0;}
+  .status-select.bad{border-color:var(--danger) !important; background:rgba(255,92,92,0.06);}
+  .sticker-grid{display:grid; gap:9px;}
+  .sticker-row{
+    display:grid; grid-template-columns:1fr 1fr; gap:10px; align-items:center;
+    border:1px solid var(--line-soft); border-radius:10px; padding:10px 12px;
+    background:var(--bg-panel-2);
+  }
+  .sticker-row .name{font-size:13.5px; color:var(--text);}
+  .tpl-tabs{display:flex; gap:6px; margin-bottom:2px;}
+  .tpl-tabs button{
+    flex:1; padding:10px 8px; border-radius:9px; border:1px solid var(--line);
+    background:var(--bg-panel-2); color:var(--text-dim); font-family:inherit;
+    font-size:13px; font-weight:500; cursor:pointer;
+  }
+  .tpl-tabs button.active{
+    background:rgba(255,176,32,0.12); border-color:var(--accent); color:var(--accent);
+  }
+  .preview{
+    font-family:'IBM Plex Sans Thai', sans-serif;
+    font-size:13.5px; line-height:1.85; white-space:pre-wrap;
+    background:var(--bg-panel-2); border:1px solid var(--line);
+    border-radius:10px; padding:14px; color:var(--text);
+    max-height:340px; overflow-y:auto;
+  }
+  .actionbar{
+    position:fixed; bottom:0; left:0; right:0;
+    background:linear-gradient(0deg, var(--bg) 65%, transparent);
+    padding:18px 16px 20px;
+  }
+  .actionbar-inner{max-width:640px; margin:0 auto; display:flex; gap:10px;}
+  .btn-primary, .btn-secondary{
+    flex:1; padding:14px; border-radius:11px; border:none; font-family:'Kanit',sans-serif;
+    font-weight:600; font-size:14.5px; cursor:pointer; display:flex; align-items:center;
+    justify-content:center; gap:8px;
+  }
+  .btn-primary{background:var(--accent-2); color:#06251a;}
+  .btn-primary:active{transform:scale(0.98);}
+  .btn-primary:disabled{background:var(--line); color:var(--text-dim); cursor:not-allowed;}
+  .btn-secondary{background:var(--bg-panel); color:var(--text); border:1px solid var(--line);}
+  .hint{font-size:11.5px; color:var(--text-dim); margin-top:8px; line-height:1.6;}
+  .missing-badge{
+    font-size:11px; color:var(--danger); font-family:'IBM Plex Mono',monospace;
+    margin-top:6px;
+  }
+  .toast{
+    position:fixed; top:16px; left:50%; transform:translateX(-50%) translateY(-140%);
+    background:var(--accent-2); color:#06251a; padding:11px 18px; border-radius:10px;
+    font-family:'Kanit',sans-serif; font-weight:600; font-size:13.5px;
+    transition:transform .25s ease; z-index:100; box-shadow:0 8px 24px rgba(0,0,0,0.4);
+  }
+  .toast.show{transform:translateX(-50%) translateY(0);}
+  .settings-toggle{
+    font-size:11.5px; color:var(--text-dim); text-align:right; margin-top:-4px; margin-bottom:10px;
+    cursor:pointer; text-decoration:underline; text-underline-offset:2px;
+  }
+</style>
+</head>
+<body>
+
+<div class="update-banner" id="updateBanner">มีเวอร์ชันใหม่ กำลังโหลดหน้าล่าสุดให้...</div>
+
+<header>
+  <div class="eyebrow">SONGDEE GPS · เทสช่าง</div>
+  <h1>รายงานตรวจสอบงานช่าง <span id="versionTag" class="version-tag"></span></h1>
+</header>
+
+<main>
+
+  <div class="card">
+    <div class="card-title"><span class="dot"></span>ประเภทงาน</div>
+    <div class="tpl-tabs" id="tplTabs"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><span class="dot"></span>ข้อมูลงาน</div>
+    <div class="row2">
+      <div>
+        <label>วันที่<span class="req">*</span></label>
+        <input type="date" id="jobDate">
+      </div>
+      <div>
+        <label>ทะเบียน / ชื่อลูกค้า<span class="req">*</span></label>
+        <input type="text" id="jobPlate" placeholder="เช่น 1กก-1234 หรือ ชื่อลูกค้า">
+      </div>
+    </div>
+    <label>เบอร์โทร</label>
+    <input type="tel" id="jobPhone" placeholder="เช่น 949-700-1503">
+  </div>
+
+  <div class="card" id="removedCard">
+    <div class="card-title"><span class="dot"></span>ถอด</div>
+    <div id="removedRows"></div>
+    <button class="btn-add" onclick="addItemRow('removed')">+ เพิ่มรายการที่ถอด</button>
+  </div>
+
+  <div class="card" id="installedCard">
+    <div class="card-title"><span class="dot"></span>ติดตั้ง</div>
+    <div id="installedRows"></div>
+    <button class="btn-add" onclick="addItemRow('installed')">+ เพิ่มรายการที่ติดตั้ง</button>
+  </div>
+
+  <div class="card" id="stickerCard">
+    <div class="card-title"><span class="dot"></span>ตรวจสอบสติ๊กเกอร์ 3 จุด</div>
+    <div class="sticker-grid" id="stickerGrid"></div>
+  </div>
+
+  <div class="card" id="checklistCard">
+    <div class="card-title"><span class="dot"></span>รายการตรวจสอบ</div>
+    <div id="checklistItems"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><span class="dot"></span>ตัวอย่างข้อความที่จะส่ง</div>
+    <div class="preview" id="preview"></div>
+    <div class="missing-badge" id="missingBadge"></div>
+  </div>
+
+</main>
+
+<div class="actionbar">
+  <div class="actionbar-inner">
+    <button class="btn-secondary" onclick="copyText()">คัดลอกข้อความ</button>
+    <button class="btn-primary" id="sendBtn" onclick="sendToLine()">ส่งเข้า LINE →</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// Reuses the existing songdee-line-proxy Worker (same one Stock System uses)
+// instead of a separate Worker. Remember: songdee-line-proxy only allows
+// requests from origins listed in its ALLOWED_ORIGINS — add this page's
+// real domain there once it's hosted (see songdee-line-proxy source).
+const LINE_ENDPOINT = "https://songdee-line-proxy.songdeegps.workers.dev";
+const LINE_API_KEY = "d124c1ea1175a07fcbf0358d733e0c57d822df836ff3f1004dfa5285fb28d69f";
+
+// ---------------------------------------------------------------
+// Mock product list — swap this array for a live fetch from the
+// SONGDEE GPS Stock System (songdeegps-stock, Firebase `songdee-stock`)
+// e.g. fetch product names/SKUs from its Firestore `products` collection.
+// ---------------------------------------------------------------
+const PRODUCTS = [
+  "MDVR32-04 V.1", "SD Card 64GB", "SD Card 128GB", "HDD 1TB", "ชุด Caredrive",
+  "Motor", "โมดูล 3G/GPS", "Intercom", "สายกล้องเก่า", "ME41-04 V.3 AI",
+  "กล้อง AI", "สาย 5 เมตร (4 เส้น)", "สาย 10 เมตร (2 เส้น)", "ซิมการ์ด",
+  "DMS V.3", "ฐานรองกล้อง", "เสาอากาศ GPS", "เสาอากาศ 3G", "สายไฟหลัก MDVR",
+  "อื่นๆ (พิมพ์เอง)"
+];
+
+const STATUS_OPTS = {
+  lock: ["-- เลือกผล --","ล็อคแน่นเรียบร้อย","ล็อคไม่แน่น ต้องแก้ไข","ไม่มีจุดล็อค"],
+  mirror: ["-- เลือกผล --","ไม่มีกล้อง Mirror","มีกล้อง Mirror ปรับมุมเรียบร้อย","มีกล้อง Mirror มุมไม่ตรง ต้องแก้ไข"],
+  config: ["-- เลือกผล --","Config ถูกต้อง","Config ผิดพลาด ต้องแก้ไข"],
+  apn: ["-- เลือกผล --","ตั้งค่าเรียบร้อย","ตั้งค่าไม่สำเร็จ"],
+  cable: ["-- เลือกผล --","ล็อคเรียบร้อย / เก็บสายเรียบร้อย","ล็อคไม่แน่น ต้องแก้ไข"],
+  signal: ["-- เลือกผล --","สัญญาณปกติ ทดสอบผ่าน","สัญญาณไม่เสถียร ต้องติดตาม"],
+  camera: ["-- เลือกผล --","ภาพชัดเจน ทดสอบผ่าน","ภาพไม่ชัด / มีปัญหา"],
+  symptom: ["-- เลือกผล --","แก้ไขตามอาการที่แจ้งเรียบร้อย","แก้ไขได้บางส่วน ต้องนัดติดตาม"],
+  sticker: ["-- เลือกผล --","มีติดเรียบร้อย","ไม่มีสติ๊กเกอร์","สติ๊กเกอร์ชำรุด"]
+};
+
+// Checklist templates per job type. "อัปเกรด" matches the reference report format.
+const TEMPLATES = {
+  upgrade: {
+    label: "อัปเกรด",
+    checklist: [
+      {key:"lock",   text:"ตรวจสอบ การรัดล็อคอุปกรณ์กล้อง", type:"lock"},
+      {key:"mirror", text:"ตรวจสอบ มุมกล้องทั้งหมด (Mirror Check list)", type:"mirror"},
+      {key:"config", text:"ตรวจสอบ Config ระบบรอบคัน", type:"config"},
+      {key:"apn",    text:"ตรวจสอบ Config APN", type:"apn"},
+      {key:"cable",  text:"ตรวจสอบ การล็อคสายหลัง MDVR", type:"cable"},
+    ]
+  },
+  new_install: {
+    label: "ติดตั้งใหม่",
+    checklist: [
+      {key:"lock",   text:"ตรวจสอบ การรัดล็อคอุปกรณ์กล้อง", type:"lock"},
+      {key:"mirror", text:"ตรวจสอบ มุมกล้องทั้งหมด (Mirror Check list)", type:"mirror"},
+      {key:"config", text:"ตรวจสอบ Config ระบบรอบคัน", type:"config"},
+      {key:"apn",    text:"ตรวจสอบ Config APN", type:"apn"},
+      {key:"signal", text:"ทดสอบสัญญาณ GPS / เครือข่าย", type:"signal"},
+      {key:"camera", text:"ทดสอบภาพกล้องทุกช่อง", type:"camera"},
+      {key:"cable",  text:"ตรวจสอบ การเก็บ/ล็อคสายทั้งหมด", type:"cable"},
+    ]
+  },
+  repair: {
+    label: "ซ่อม",
+    checklist: [
+      {key:"symptom", text:"ตรวจสอบ อาการตามที่แจ้งซ่อม", type:"symptom"},
+      {key:"lock",    text:"ตรวจสอบ การรัดล็อคอุปกรณ์หลังซ่อม", type:"lock"},
+      {key:"config",  text:"ตรวจสอบ Config ระบบรอบคัน", type:"config"},
+      {key:"signal",  text:"ทดสอบสัญญาณหลังซ่อม", type:"signal"},
+      {key:"cable",   text:"ตรวจสอบ การเก็บ/ล็อคสาย", type:"cable"},
+    ]
+  }
+};
+// NOTE for whoever edits this next: item text/order for "new_install" and
+// "repair" are starting drafts (not confirmed against a real reference report
+// like the "upgrade" one was) — swap in the real wording per template.
+
+const STICKERS = [
+  {key:"front", text:"หน้ารถ"},
+  {key:"unit",  text:"เครื่องบันทึก (ตัวเครื่อง)"},
+  {key:"pdpa",  text:"PDPA"},
+];
+
+let state = {
+  tpl: "upgrade",
+  date: "",
+  plate: "",
+  phone: "",
+  removed: [],
+  installed: [],
+  stickers: {},
+  checklist: {},
+};
+
+document.getElementById('jobDate').value = new Date().toISOString().slice(0,10);
+state.date = document.getElementById('jobDate').value;
+
+function renderTabs(){
+  const wrap = document.getElementById('tplTabs');
+  wrap.innerHTML = '';
+  Object.entries(TEMPLATES).forEach(([key, t])=>{
+    const b = document.createElement('button');
+    b.textContent = t.label;
+    b.className = key === state.tpl ? 'active' : '';
+    b.onclick = ()=>{ state.tpl = key; state.checklist = {}; renderAll(); };
+    wrap.appendChild(b);
+  });
+}
+
+function addItemRow(kind, prefill){
+  const list = state[kind];
+  list.push({product: prefill||"", qty:1, custom:""});
+  renderItemRows(kind);
+  updatePreview();
+}
+function removeItemRow(kind, idx){
+  state[kind].splice(idx,1);
+  renderItemRows(kind);
+  updatePreview();
+}
+function renderItemRows(kind){
+  const container = document.getElementById(kind === 'removed' ? 'removedRows' : 'installedRows');
+  container.innerHTML = '';
+  state[kind].forEach((row, idx)=>{
+    const div = document.createElement('div');
+    div.className = 'item-row';
+
+    const sel = document.createElement('select');
+    sel.required = true;
+    const blank = document.createElement('option');
+    blank.value=''; blank.textContent='-- เลือกอุปกรณ์ --'; sel.appendChild(blank);
+    PRODUCTS.forEach(p=>{
+      const o = document.createElement('option');
+      o.value=p; o.textContent=p;
+      if(p===row.product) o.selected=true;
+      sel.appendChild(o);
+    });
+    sel.onchange = ()=>{ row.product = sel.value; updatePreview(); renderItemRows(kind); };
+
+    const qty = document.createElement('input');
+    qty.type='text'; qty.className='qty'; qty.value=row.qty; qty.placeholder='จำนวน';
+    qty.oninput = ()=>{ row.qty = qty.value; updatePreview(); };
+
+    const rm = document.createElement('button');
+    rm.className='btn-remove'; rm.textContent='×'; rm.type='button';
+    rm.onclick = ()=> removeItemRow(kind, idx);
+
+    div.appendChild(sel); div.appendChild(qty); div.appendChild(rm);
+    container.appendChild(div);
+
+    if(row.product === "อื่นๆ (พิมพ์เอง)"){
+      const custom = document.createElement('input');
+      custom.type='text'; custom.placeholder='พิมพ์ชื่ออุปกรณ์'; custom.value=row.custom;
+      custom.style.marginBottom='8px';
+      custom.oninput = ()=>{ row.custom = custom.value; updatePreview(); };
+      container.appendChild(custom);
+    }
+  });
+}
+
+function renderStickers(){
+  const grid = document.getElementById('stickerGrid');
+  grid.innerHTML = '';
+  STICKERS.forEach(s=>{
+    const row = document.createElement('div');
+    row.className = 'sticker-row';
+    const name = document.createElement('div');
+    name.className='name'; name.textContent = s.text;
+    const sel = document.createElement('select');
+    sel.required = true;
+    STATUS_OPTS.sticker.forEach(opt=>{
+      const o = document.createElement('option');
+      o.value = opt; o.textContent = opt;
+      if(state.stickers[s.key] === opt) o.selected = true;
+      sel.appendChild(o);
+    });
+    sel.onchange = ()=>{ state.stickers[s.key] = sel.value; updatePreview(); };
+    row.appendChild(name); row.appendChild(sel);
+    grid.appendChild(row);
+  });
+}
+
+function renderChecklist(){
+  const wrap = document.getElementById('checklistItems');
+  wrap.innerHTML = '';
+  TEMPLATES[state.tpl].checklist.forEach(item=>{
+    const box = document.createElement('div');
+    box.className = 'check-item';
+    const lbl = document.createElement('div');
+    lbl.className = 'lbl';
+    lbl.innerHTML = `<span class="mark">🔺</span><span>${item.text}</span>`;
+    const sel = document.createElement('select');
+    sel.className = 'status-select';
+    sel.required = true;
+    STATUS_OPTS[item.type].forEach(opt=>{
+      const o = document.createElement('option');
+      o.value = opt; o.textContent = opt;
+      if(state.checklist[item.key] === opt) o.selected = true;
+      sel.appendChild(o);
+    });
+    sel.onchange = ()=>{
+      state.checklist[item.key] = sel.value;
+      sel.classList.toggle('bad', /ต้องแก้ไข|ไม่สำเร็จ|ไม่ชัด|ไม่เสถียร|ชำรุด|บางส่วน/.test(sel.value));
+      updatePreview();
+    };
+    box.appendChild(lbl); box.appendChild(sel);
+    wrap.appendChild(box);
+  });
+}
+
+function itemLine(row){
+  const name = row.product === "อื่นๆ (พิมพ์เอง)" ? (row.custom || "-") : row.product;
+  if(!name) return null;
+  const qty = row.qty ? ` x${row.qty}` : '';
+  return `- ${name}${qty}`;
+}
+
+function buildMessage(){
+  const dateStr = state.date ? state.date.split('-').reverse().join('/') : '(ยังไม่ระบุวันที่)';
+  const lines = [];
+  lines.push(`${dateStr} ${TEMPLATES[state.tpl].label} ${state.plate || '(ยังไม่ระบุทะเบียน/ชื่อลูกค้า)'}`);
+  if(state.phone) lines.push(`ทะเบียน  (${state.phone})`);
+  lines.push('');
+
+  const removedLines = state.removed.map(itemLine).filter(Boolean);
+  if(removedLines.length){
+    lines.push('ถอด');
+    lines.push(...removedLines);
+    lines.push('');
+  }
+  const installedLines = state.installed.map(itemLine).filter(Boolean);
+  if(installedLines.length){
+    lines.push('ติดตั้ง');
+    lines.push(...installedLines);
+    lines.push('');
+  }
+
+  lines.push('◆ตรวจสอบ สติ๊กเกอร์ 3 จุด◆');
+  STICKERS.forEach(s=>{
+    const v = state.stickers[s.key];
+    lines.push(`> ${s.text} : ${v && v !== STATUS_OPTS.sticker[0] ? v : '(ยังไม่เลือก)'}`);
+  });
+  lines.push('');
+
+  TEMPLATES[state.tpl].checklist.forEach(item=>{
+    const v = state.checklist[item.key];
+    lines.push(`🔺${item.text}`);
+    lines.push(`: ${v && v !== STATUS_OPTS[item.type][0] ? v : '(ยังไม่เลือก)'}`);
+  });
+
+  return lines.join('\n');
+}
+
+function getMissingFields(){
+  const missing = [];
+  if(!state.date) missing.push('วันที่');
+  if(!state.plate) missing.push('ทะเบียน/ชื่อลูกค้า');
+  STICKERS.forEach(s=>{
+    if(!state.stickers[s.key] || state.stickers[s.key] === STATUS_OPTS.sticker[0]) missing.push(s.text);
+  });
+  TEMPLATES[state.tpl].checklist.forEach(item=>{
+    if(!state.checklist[item.key] || state.checklist[item.key] === STATUS_OPTS[item.type][0]) missing.push(item.text);
+  });
+  return missing;
+}
+
+function updatePreview(){
+  document.getElementById('preview').textContent = buildMessage();
+  const missing = getMissingFields();
+  const badge = document.getElementById('missingBadge');
+  const btn = document.getElementById('sendBtn');
+  if(missing.length){
+    badge.textContent = `ยังไม่ครบ: ${missing.join(' · ')}`;
+    btn.disabled = true;
+  } else {
+    badge.textContent = '';
+    btn.disabled = false;
+  }
+}
+
+document.getElementById('jobDate').addEventListener('input', e=>{ state.date = e.target.value; updatePreview(); });
+document.getElementById('jobPlate').addEventListener('input', e=>{ state.plate = e.target.value; updatePreview(); });
+document.getElementById('jobPhone').addEventListener('input', e=>{ state.phone = e.target.value; updatePreview(); });
+
+function showToast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(()=> t.classList.remove('show'), 2200);
+}
+
+function copyText(){
+  const text = buildMessage();
+  navigator.clipboard.writeText(text).then(()=> showToast('คัดลอกข้อความแล้ว'))
+    .catch(()=> showToast('คัดลอกไม่สำเร็จ ลองแตะค้างที่ข้อความแทน'));
+}
+
+async function sendToLine(){
+  const endpoint = LINE_ENDPOINT.trim();
+  const text = buildMessage();
+  if(!endpoint){
+    navigator.clipboard.writeText(text).catch(()=>{});
+    showToast('ยังไม่ได้ตั้งค่า endpoint — คัดลอกข้อความให้แล้ว');
+    return;
+  }
+  try{
+    showToast('กำลังส่ง...');
+    const res = await fetch(endpoint, {
+      method:'POST',
+      headers:{'Content-Type':'application/json', 'X-Api-Key': LINE_API_KEY},
+      body: JSON.stringify({ message:text })
+    });
+    if(res.ok){ showToast('ส่งเข้า LINE แล้ว ✓'); }
+    else{ showToast('ส่งไม่สำเร็จ (' + res.status + ') — คัดลอกข้อความสำรองไว้แล้ว'); navigator.clipboard.writeText(text).catch(()=>{}); }
+  }catch(err){
+    showToast('เชื่อมต่อ endpoint ไม่ได้ — คัดลอกข้อความสำรองไว้แล้ว');
+    navigator.clipboard.writeText(text).catch(()=>{});
+  }
+}
+
+function renderAll(){
+  renderTabs();
+  renderItemRows('removed');
+  renderItemRows('installed');
+  renderStickers();
+  renderChecklist();
+  updatePreview();
+}
+
+// ---------------------------------------------------------------
+// Version display + auto-update check.
+// Bump the <meta name="app-version"> value in <head> on every deploy.
+// Open tabs poll the live page every 2 minutes (and whenever the tab
+// regains focus) and auto-reload if a newer version is detected.
+// ---------------------------------------------------------------
+const APP_VERSION = document.querySelector('meta[name="app-version"]').content;
+document.getElementById('versionTag').textContent = 'v' + APP_VERSION;
+
+async function checkForUpdate(){
+  try{
+    const res = await fetch(location.pathname, { cache: 'no-store' });
+    const html = await res.text();
+    const match = html.match(/<meta name="app-version" content="([^"]+)">/);
+    const liveVersion = match && match[1];
+    if(liveVersion && liveVersion !== APP_VERSION){
+      const banner = document.getElementById('updateBanner');
+      banner.classList.add('show');
+      setTimeout(()=> location.reload(), 1800);
+    }
+  }catch(e){ /* offline or blocked — silently skip, try again next interval */ }
+}
+setInterval(checkForUpdate, 2 * 60 * 1000);
+document.addEventListener('visibilitychange', ()=>{
+  if(document.visibilityState === 'visible') checkForUpdate();
+});
+
+// seed one empty row each so the form isn't empty on load
+state.removed.push({product:'', qty:1, custom:''});
+state.installed.push({product:'', qty:1, custom:''});
+renderAll();
+</script>
+
+</body>
+</html>
