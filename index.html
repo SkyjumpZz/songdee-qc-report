@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.3.0">
+<meta name="app-version" content="1.4.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -908,6 +908,49 @@ function buildMessage(){
   return lines.join('\n');
 }
 
+// songdee-line-proxy renders {message:{title,color,badge,fields,items,...}}
+// as a LINE Flex Message card (same schema the Stock/Admin apps already
+// use for their "การ์ดสวยๆ" notifications) instead of a wall of plain text.
+function buildLineCard(){
+  const dateStr = state.date ? state.date.split('-').reverse().join('/') : '(ยังไม่ระบุวันที่)';
+
+  const fields = [];
+  if(state.customer) fields.push({label:'ลูกค้า', value: state.customer});
+  if(state.fleet) fields.push({label:'Fleet', value: state.fleet});
+  fields.push({label:'ทะเบียน', value: state.plate || '-'});
+  fields.push({label:'ผู้ทดสอบ', value: tester.techName || '-'});
+
+  const items = [];
+  const problemLines = state.problems.map(problemLine).filter(Boolean);
+  if(problemLines.length){
+    items.push('❗ ปัญหา');
+    items.push(...problemLines.map(l=>'  ' + l.replace(/^- /,'• ')));
+  }
+  const fixLines = state.fixes.map(fixLine).filter(Boolean);
+  if(fixLines.length){
+    items.push('🔧 แก้ไข');
+    items.push(...fixLines.map(l=>'  ' + l.replace(/^- /,'• ')));
+  }
+  items.push('🔹 สติ๊กเกอร์ 3 จุด');
+  STICKERS.forEach(s=>{
+    const v = state.stickers[s.key];
+    items.push(`  • ${s.text}: ${v && v !== STATUS_OPTS.sticker[0] ? v : '(ยังไม่เลือก)'}`);
+  });
+  items.push('✅ รายการตรวจสอบ');
+  TEMPLATES[state.tpl].checklist.forEach(item=>{
+    const done = !!state.checklist[item.key];
+    items.push(`  • ${item.text}: ${done ? CHECK_PASS_LABEL[item.type] : '(ยังไม่ตรวจสอบ)'}`);
+  });
+
+  return {
+    title: `✅ รายงานตรวจสอบงานช่าง · ${TEMPLATES[state.tpl].label}`,
+    color: '#3ddc97',
+    badge: `📋 ${dateStr}`,
+    fields,
+    items
+  };
+}
+
 function getMissingFields(){
   const missing = [];
   if(!state.date) missing.push('วันที่');
@@ -967,7 +1010,7 @@ async function sendToLine(){
     const res = await fetch(endpoint, {
       method:'POST',
       headers:{'Content-Type':'application/json', 'X-Api-Key': LINE_API_KEY},
-      body: JSON.stringify({ message:text })
+      body: JSON.stringify({ message: buildLineCard() })
     });
     if(res.ok){ showToast('ส่งเข้า LINE แล้ว ✓'); }
     else{ showToast('ส่งไม่สำเร็จ (' + res.status + ') — คัดลอกข้อความสำรองไว้แล้ว'); navigator.clipboard.writeText(text).catch(()=>{}); }
