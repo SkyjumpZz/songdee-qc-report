@@ -267,8 +267,6 @@
         <input type="text" id="jobPlate" placeholder="เช่น 1กก-1234 หรือ ชื่อลูกค้า">
       </div>
     </div>
-    <label>เบอร์โทร</label>
-    <input type="tel" id="jobPhone" placeholder="เช่น 949-700-1503">
   </div>
 
   <div class="card" id="removedCard">
@@ -540,7 +538,6 @@ let state = {
   tpl: "upgrade",
   date: "",
   plate: "",
-  phone: "",
   removed: [],
   installed: [],
   stickers: {},
@@ -690,7 +687,6 @@ function buildMessage(){
   const dateStr = state.date ? state.date.split('-').reverse().join('/') : '(ยังไม่ระบุวันที่)';
   const lines = [];
   lines.push(`${dateStr} ${TEMPLATES[state.tpl].label} ${state.plate || '(ยังไม่ระบุทะเบียน/ชื่อลูกค้า)'}`);
-  if(state.phone) lines.push(`ทะเบียน  (${state.phone})`);
   lines.push(`ผู้ทดสอบ: ${tester.techName || '-'}`);
   lines.push('');
 
@@ -752,7 +748,6 @@ function updatePreview(){
 
 document.getElementById('jobDate').addEventListener('input', e=>{ state.date = e.target.value; updatePreview(); });
 document.getElementById('jobPlate').addEventListener('input', e=>{ state.plate = e.target.value; updatePreview(); scheduleStockLockCheck(); });
-document.getElementById('jobPhone').addEventListener('input', e=>{ state.phone = e.target.value; updatePreview(); });
 
 function showToast(msg){
   const t = document.getElementById('toast');
