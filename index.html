@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.4.0">
+<meta name="app-version" content="1.5.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -236,6 +236,30 @@
   }
   .stock-lock-banner.locked{border-color:var(--accent-2); color:var(--accent-2);}
   .stock-lock-banner.warn{border-color:var(--amber); color:var(--amber);}
+  .history-overlay{
+    position:fixed; inset:0; z-index:250; background:rgba(5,9,18,0.85);
+    display:flex; align-items:flex-end; justify-content:center;
+  }
+  .history-panel{
+    width:100%; max-width:640px; max-height:82vh; background:var(--bg-panel);
+    border:1px solid var(--line); border-radius:18px 18px 0 0; padding:16px;
+    display:flex; flex-direction:column;
+  }
+  .history-head{display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;}
+  .history-head h2{font-family:'Kanit',sans-serif; font-size:16px; font-weight:600; margin:0;}
+  .history-list{overflow-y:auto;}
+  .history-item{
+    border:1px solid var(--line-soft); border-radius:10px; padding:11px 12px;
+    margin-bottom:8px; cursor:pointer; background:var(--bg-panel-2);
+  }
+  .history-item:hover{border-color:var(--accent);}
+  .history-item .title{font-size:13.5px; font-weight:600; color:var(--text);}
+  .history-item .meta{font-size:11.5px; color:var(--text-dim); margin-top:3px;}
+  .editing-banner{
+    font-size:12px; color:var(--accent); background:rgba(255,176,32,0.08);
+    border:1px solid var(--accent); border-radius:9px; padding:9px 11px; margin-bottom:10px;
+    display:flex; align-items:center; justify-content:space-between; gap:8px;
+  }
 </style>
 </head>
 <body>
@@ -260,11 +284,30 @@
   <h1>รายงานตรวจสอบงานช่าง <span id="versionTag" class="version-tag"></span></h1>
   <div class="tester-bar app-hidden" id="testerBar">
     <span>ผู้ทดสอบ: <span class="who" id="testerName"></span></span>
-    <span class="logout" onclick="doLogout()">ออกจากระบบ</span>
+    <span>
+      <span class="logout" onclick="openHistory()">ประวัติ</span>
+      <span class="logout" onclick="startNewReport()">+ รายงานใหม่</span>
+      <span class="logout" onclick="doLogout()">ออกจากระบบ</span>
+    </span>
   </div>
 </header>
 
+<div class="history-overlay app-hidden" id="historyOverlay">
+  <div class="history-panel">
+    <div class="history-head">
+      <h2>ประวัติรายงาน</h2>
+      <button class="btn-remove" onclick="closeHistory()">×</button>
+    </div>
+    <div id="historyList" class="history-list"></div>
+  </div>
+</div>
+
 <main class="app-hidden" id="appMain">
+
+  <div class="editing-banner app-hidden" id="editingBanner">
+    <span id="editingBannerText"></span>
+    <span class="logout" onclick="startNewReport()">ปิด</span>
+  </div>
 
   <div class="card">
     <div class="card-title"><span class="dot"></span>ประเภทงาน</div>
@@ -404,6 +447,7 @@ _auth.onAuthStateChanged(async user=>{
     tester = { uid:null, techName:null };
     stockLock = null;
     assignments = [];
+    currentReportId = null;
     renderAssignmentSelect();
     overlay.classList.remove('hide');
     appMain.classList.add('app-hidden');
@@ -570,6 +614,107 @@ function onAssignmentSelect(id){
   scheduleStockLockCheck();
 }
 
+function escapeHtmlLite(s){
+  return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+// ---------------------------------------------------------------
+// Report history — persists each submitted report to Firestore
+// (collection "qc_reports", own collection, not shared with the Stock
+// or Admin apps' own report collections) so a technician can reopen and
+// edit a past report, or just see what they've submitted. Saved on
+// every "ส่งเข้า LINE" click; currentReportId tracks whether we're
+// creating a new doc or updating one already opened from history.
+// ---------------------------------------------------------------
+async function saveReport(){
+  const payload = {
+    tpl: state.tpl, date: state.date, customer: state.customer, fleet: state.fleet, plate: state.plate,
+    problems: state.problems, fixes: state.fixes, stickers: state.stickers, checklist: state.checklist,
+    techUid: tester.uid, techName: tester.techName,
+    updatedAt: Date.now(),
+  };
+  if(currentReportId){
+    await _db.collection('qc_reports').doc(currentReportId).set(payload, {merge:true});
+  } else {
+    payload.createdAt = Date.now();
+    const ref = await _db.collection('qc_reports').add(payload);
+    currentReportId = ref.id;
+  }
+}
+
+async function openHistory(){
+  document.getElementById('historyOverlay').classList.remove('app-hidden');
+  const wrap = document.getElementById('historyList');
+  wrap.innerHTML = '<div style="color:var(--text-dim);font-size:13px;padding:20px 0;text-align:center">กำลังโหลด...</div>';
+  try{
+    const snap = await _db.collection('qc_reports')
+      .where('techUid', '==', tester.uid)
+      .orderBy('createdAt', 'desc')
+      .limit(50)
+      .get();
+    renderHistoryList(snap.docs.map(d=>({id:d.id, ...d.data()})));
+  }catch(e){
+    wrap.innerHTML = `<div style="color:var(--danger);font-size:13px;padding:20px 0;text-align:center">โหลดประวัติไม่สำเร็จ: ${escapeHtmlLite(e.message)}</div>`;
+  }
+}
+
+function closeHistory(){
+  document.getElementById('historyOverlay').classList.add('app-hidden');
+}
+
+function renderHistoryList(list){
+  const wrap = document.getElementById('historyList');
+  if(!list.length){
+    wrap.innerHTML = '<div style="color:var(--text-dim);font-size:13px;padding:20px 0;text-align:center">ยังไม่มีรายงาน</div>';
+    return;
+  }
+  wrap.innerHTML = '';
+  list.forEach(doc=>{
+    const item = document.createElement('div');
+    item.className = 'history-item';
+    const dateStr = doc.date ? doc.date.split('-').reverse().join('/') : '(ไม่ระบุวันที่)';
+    const tplLabel = (TEMPLATES[doc.tpl]||{}).label || doc.tpl || '';
+    item.innerHTML = `<div class="title">${escapeHtmlLite(dateStr)} ${escapeHtmlLite(tplLabel)} ${escapeHtmlLite(doc.customer||'')}</div><div class="meta">ทะเบียน: ${escapeHtmlLite(doc.plate||'-')}</div>`;
+    item.onclick = ()=> loadReportIntoForm(doc);
+    wrap.appendChild(item);
+  });
+}
+
+function loadReportIntoForm(doc){
+  currentReportId = doc.id;
+  state = {
+    tpl: doc.tpl || 'upgrade',
+    date: doc.date || '',
+    customer: doc.customer || '',
+    fleet: doc.fleet || '',
+    plate: doc.plate || '',
+    problems: (doc.problems && doc.problems.length) ? doc.problems : [{symptom:''}],
+    fixes: (doc.fixes && doc.fixes.length) ? doc.fixes : [{product:'', qty:1, custom:'', oldModel:'', oldModelCustom:''}],
+    stickers: doc.stickers || {},
+    checklist: doc.checklist || {},
+  };
+  syncFormInputsFromState();
+  const dateStr = state.date ? state.date.split('-').reverse().join('/') : '(ไม่ระบุวันที่)';
+  const tplLabel = (TEMPLATES[state.tpl]||{}).label || state.tpl || '';
+  document.getElementById('editingBannerText').textContent = `กำลังแก้ไขรายงาน: ${dateStr} ${tplLabel} ${state.plate || ''}`.trim();
+  document.getElementById('editingBanner').classList.remove('app-hidden');
+  closeHistory();
+  renderAll();
+  scheduleStockLockCheck();
+}
+
+function startNewReport(){
+  currentReportId = null;
+  state = defaultState();
+  document.getElementById('editingBanner').classList.add('app-hidden');
+  syncFormInputsFromState();
+  stockLock = null;
+  const banner = document.getElementById('stockLockBanner');
+  banner.textContent = '';
+  banner.className = 'stock-lock-banner';
+  renderAll();
+}
+
 // ---------------------------------------------------------------
 // Mock product list — swap this array for a live fetch from the
 // SONGDEE GPS Stock System (songdeegps-stock, Firebase `songdee-stock`)
@@ -646,20 +791,28 @@ const STICKERS = [
   {key:"pdpa",  text:"PDPA"},
 ];
 
-let state = {
-  tpl: "upgrade",
-  date: "",
-  customer: "",
-  fleet: "",
-  plate: "",
-  problems: [],
-  fixes: [],
-  stickers: {},
-  checklist: {},
-};
+function defaultState(){
+  return {
+    tpl: "upgrade",
+    date: new Date().toISOString().slice(0,10),
+    customer: "",
+    fleet: "",
+    plate: "",
+    problems: [{symptom:""}],
+    fixes: [{product:"", qty:1, custom:"", oldModel:"", oldModelCustom:""}],
+    stickers: {},
+    checklist: {},
+  };
+}
+let state = defaultState();
+let currentReportId = null;
 
-document.getElementById('jobDate').value = new Date().toISOString().slice(0,10);
-state.date = document.getElementById('jobDate').value;
+function syncFormInputsFromState(){
+  document.getElementById('jobDate').value = state.date || '';
+  document.getElementById('jobCustomer').value = state.customer || '';
+  document.getElementById('jobFleet').value = state.fleet || '';
+  document.getElementById('jobPlate').value = state.plate || '';
+}
 
 function renderTabs(){
   const wrap = document.getElementById('tplTabs');
@@ -1000,9 +1153,15 @@ function copyText(){
 async function sendToLine(){
   const endpoint = LINE_ENDPOINT.trim();
   const text = buildMessage();
+
+  let saveError = null;
+  try{ await saveReport(); }
+  catch(e){ saveError = e; console.error('[Report save]', e); }
+  const saveSuffix = saveError ? ` (บันทึกลง database ไม่สำเร็จ: ${saveError.message})` : '';
+
   if(!endpoint){
     navigator.clipboard.writeText(text).catch(()=>{});
-    showToast('ยังไม่ได้ตั้งค่า endpoint — คัดลอกข้อความให้แล้ว');
+    showToast('ยังไม่ได้ตั้งค่า endpoint — คัดลอกข้อความให้แล้ว' + saveSuffix);
     return;
   }
   try{
@@ -1012,10 +1171,10 @@ async function sendToLine(){
       headers:{'Content-Type':'application/json', 'X-Api-Key': LINE_API_KEY},
       body: JSON.stringify({ message: buildLineCard() })
     });
-    if(res.ok){ showToast('ส่งเข้า LINE แล้ว ✓'); }
-    else{ showToast('ส่งไม่สำเร็จ (' + res.status + ') — คัดลอกข้อความสำรองไว้แล้ว'); navigator.clipboard.writeText(text).catch(()=>{}); }
+    if(res.ok){ showToast('ส่งเข้า LINE แล้ว ✓' + saveSuffix); }
+    else{ showToast('ส่งไม่สำเร็จ (' + res.status + ') — คัดลอกข้อความสำรองไว้แล้ว' + saveSuffix); navigator.clipboard.writeText(text).catch(()=>{}); }
   }catch(err){
-    showToast('เชื่อมต่อ endpoint ไม่ได้ — คัดลอกข้อความสำรองไว้แล้ว');
+    showToast('เชื่อมต่อ endpoint ไม่ได้ — คัดลอกข้อความสำรองไว้แล้ว' + saveSuffix);
     navigator.clipboard.writeText(text).catch(()=>{});
   }
 }
@@ -1056,9 +1215,7 @@ document.addEventListener('visibilitychange', ()=>{
   if(document.visibilityState === 'visible') checkForUpdate();
 });
 
-// seed one empty row each so the form isn't empty on load
-state.problems.push({symptom:''});
-state.fixes.push({product:'', qty:1, custom:'', oldModel:'', oldModelCustom:''});
+syncFormInputsFromState();
 renderAll();
 </script>
 
