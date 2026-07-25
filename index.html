@@ -263,8 +263,18 @@
         <input type="date" id="jobDate">
       </div>
       <div>
-        <label>ทะเบียน / ชื่อลูกค้า<span class="req">*</span></label>
-        <input type="text" id="jobPlate" placeholder="เช่น 1กก-1234 หรือ ชื่อลูกค้า">
+        <label>ชื่อลูกค้า</label>
+        <input type="text" id="jobCustomer" placeholder="เช่น บริษัท เอบีซี จำกัด">
+      </div>
+    </div>
+    <div class="row2">
+      <div>
+        <label>Fleet</label>
+        <input type="text" id="jobFleet" placeholder="เช่น Fleet A">
+      </div>
+      <div>
+        <label>ทะเบียน<span class="req">*</span></label>
+        <input type="text" id="jobPlate" placeholder="เช่น 1กก-1234">
       </div>
     </div>
   </div>
@@ -537,6 +547,8 @@ const STICKERS = [
 let state = {
   tpl: "upgrade",
   date: "",
+  customer: "",
+  fleet: "",
   plate: "",
   removed: [],
   installed: [],
@@ -686,7 +698,10 @@ function itemLine(row){
 function buildMessage(){
   const dateStr = state.date ? state.date.split('-').reverse().join('/') : '(ยังไม่ระบุวันที่)';
   const lines = [];
-  lines.push(`${dateStr} ${TEMPLATES[state.tpl].label} ${state.plate || '(ยังไม่ระบุทะเบียน/ชื่อลูกค้า)'}`);
+  lines.push(`${dateStr} ${TEMPLATES[state.tpl].label}`);
+  if(state.customer) lines.push(`ชื่อลูกค้า: ${state.customer}`);
+  if(state.fleet) lines.push(`Fleet: ${state.fleet}`);
+  lines.push(`ทะเบียน: ${state.plate || '(ยังไม่ระบุ)'}`);
   lines.push(`ผู้ทดสอบ: ${tester.techName || '-'}`);
   lines.push('');
 
@@ -722,7 +737,7 @@ function buildMessage(){
 function getMissingFields(){
   const missing = [];
   if(!state.date) missing.push('วันที่');
-  if(!state.plate) missing.push('ทะเบียน/ชื่อลูกค้า');
+  if(!state.plate) missing.push('ทะเบียน');
   STICKERS.forEach(s=>{
     if(!state.stickers[s.key] || state.stickers[s.key] === STATUS_OPTS.sticker[0]) missing.push(s.text);
   });
@@ -747,6 +762,8 @@ function updatePreview(){
 }
 
 document.getElementById('jobDate').addEventListener('input', e=>{ state.date = e.target.value; updatePreview(); });
+document.getElementById('jobCustomer').addEventListener('input', e=>{ state.customer = e.target.value; updatePreview(); });
+document.getElementById('jobFleet').addEventListener('input', e=>{ state.fleet = e.target.value; updatePreview(); });
 document.getElementById('jobPlate').addEventListener('input', e=>{ state.plate = e.target.value; updatePreview(); scheduleStockLockCheck(); });
 
 function showToast(msg){
