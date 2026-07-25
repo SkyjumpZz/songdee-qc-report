@@ -83,12 +83,13 @@
   <div class="tester-bar" id="testerBar" style="display:none">
     <span>ผู้ทดสอบ: <span class="who" id="testerName"></span></span>
     <span>
-      <a href="index.html">+ รายงานใหม่</a>
+      <a href="form.html">+ รายงานใหม่</a>
       <span class="link" onclick="doLogout()">ออกจากระบบ</span>
     </span>
   </div>
   <div class="page-tabs" id="pageTabs" style="display:none">
-    <a href="index.html">ฟอร์ม</a>
+    <a href="index.html">Dashboard</a>
+    <a href="form.html">ฟอร์ม</a>
     <span class="tab active">ประวัติ</span>
   </div>
 </header>
@@ -163,7 +164,7 @@ function renderList(list){
     const tplLabel = TEMPLATE_LABELS[doc.tpl] || doc.tpl || '';
     const a = document.createElement('a');
     a.className = 'history-item';
-    a.href = `index.html?report=${encodeURIComponent(doc.id)}`;
+    a.href = `form.html?report=${encodeURIComponent(doc.id)}`;
     a.innerHTML = `<div class="title">${escapeHtmlLite(dateStr)} ${escapeHtmlLite(tplLabel)} ${escapeHtmlLite(doc.customer||'')}</div><div class="meta">ทะเบียน: ${escapeHtmlLite(doc.plate||'-')}</div>`;
     listEl.appendChild(a);
   });

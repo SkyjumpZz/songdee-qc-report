@@ -1,0 +1,1125 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<title>รายงานตรวจสอบงานช่าง</title>
+<meta name="app-version" content="1.6.0">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<style>
+  :root{
+    --bg:#0b1220;
+    --bg-panel:#121b2e;
+    --bg-panel-2:#0f1729;
+    --line:#223047;
+    --line-soft:#1a2439;
+    --text:#e7edf7;
+    --text-dim:#8b9bb5;
+    --accent:#ffb020;
+    --accent-2:#3ddc97;
+    --danger:#ff5c5c;
+    --amber:#ffb020;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:
+      radial-gradient(1200px 500px at 50% -10%, #16223a 0%, transparent 60%),
+      var(--bg);
+    color:var(--text);
+    font-family:'IBM Plex Sans Thai','Kanit',sans-serif;
+    min-height:100vh;
+    padding-bottom:120px;
+  }
+  header{
+    padding:22px 18px 16px;
+    border-bottom:1px solid var(--line);
+    background:linear-gradient(180deg, rgba(255,176,32,0.06), transparent);
+    position:sticky; top:0; z-index:10;
+    backdrop-filter:blur(10px);
+  }
+  header .eyebrow{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:11px; letter-spacing:.14em; text-transform:uppercase;
+    color:var(--accent); margin-bottom:6px;
+  }
+  header h1{
+    font-family:'Kanit',sans-serif; font-weight:600; font-size:20px; margin:0;
+    letter-spacing:.01em;
+  }
+  .version-tag{
+    font-family:'IBM Plex Mono',monospace; font-size:11px; font-weight:400;
+    color:var(--text-dim); vertical-align:middle; margin-left:6px;
+  }
+  .update-banner{
+    position:fixed; top:0; left:0; right:0; z-index:200;
+    background:var(--accent); color:#231400;
+    font-family:'Kanit',sans-serif; font-weight:600; font-size:13.5px;
+    text-align:center; padding:10px; transform:translateY(-100%);
+    transition:transform .25s ease;
+  }
+  .update-banner.show{transform:translateY(0);}
+  main{max-width:640px; margin:0 auto; padding:16px;}
+  .card{
+    background:var(--bg-panel);
+    border:1px solid var(--line);
+    border-radius:14px;
+    padding:16px;
+    margin-bottom:14px;
+  }
+  .card-title{
+    display:flex; align-items:center; gap:8px;
+    font-family:'Kanit',sans-serif; font-weight:600; font-size:15px;
+    color:var(--text); margin-bottom:12px;
+  }
+  .card-title .dot{width:6px;height:6px;border-radius:50%;background:var(--accent);}
+  label{
+    display:block; font-size:12.5px; color:var(--text-dim); margin:10px 0 5px;
+    font-weight:500;
+  }
+  label .req{color:var(--danger); margin-left:2px;}
+  input[type=text], input[type=date], input[type=tel], input[type=password], select, textarea{
+    width:100%;
+    background:var(--bg-panel-2);
+    border:1px solid var(--line);
+    color:var(--text);
+    border-radius:9px;
+    padding:11px 12px;
+    font-size:14.5px;
+    font-family:inherit;
+    appearance:none;
+    -webkit-appearance:none;
+  }
+  select{
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%238b9bb5' stroke-width='2'><path d='M6 9l6 6 6-6'/></svg>");
+    background-repeat:no-repeat;
+    background-position:right 12px center;
+    padding-right:34px;
+  }
+  select:invalid{color:var(--text-dim);}
+  input:focus, select:focus, textarea:focus{
+    outline:none; border-color:var(--accent);
+    box-shadow:0 0 0 3px rgba(255,176,32,0.12);
+  }
+  .row2{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
+  .item-row{
+    display:grid; grid-template-columns:1fr 68px auto; gap:8px; align-items:end;
+    margin-bottom:8px;
+  }
+  .item-row .qty{text-align:center;}
+  .btn-remove{
+    background:var(--bg-panel-2); border:1px solid var(--line);
+    color:var(--text-dim); border-radius:9px; height:41px; width:41px;
+    font-size:16px; cursor:pointer;
+  }
+  .btn-remove:hover{color:var(--danger); border-color:var(--danger);}
+  .btn-add{
+    width:100%; margin-top:4px;
+    background:transparent; border:1px dashed var(--line);
+    color:var(--text-dim); border-radius:9px; padding:10px;
+    font-size:13.5px; cursor:pointer; font-family:inherit;
+  }
+  .btn-add:hover{border-color:var(--accent); color:var(--accent);}
+  .check-item{
+    border:1px solid var(--line-soft); border-radius:10px;
+    padding:11px 12px; margin-bottom:9px; background:var(--bg-panel-2);
+  }
+  .check-item .lbl{
+    font-size:13.5px; font-weight:500; margin-bottom:8px;
+    display:flex; gap:7px; align-items:flex-start; line-height:1.4;
+  }
+  .check-item .lbl .mark{color:var(--amber); flex-shrink:0;}
+  .check-toggle{
+    display:flex; align-items:center; gap:8px;
+    background:var(--bg-panel-2); border:1px solid var(--line);
+    border-radius:9px; padding:11px 12px; cursor:pointer;
+    font-size:14px; color:var(--text-dim);
+  }
+  .check-toggle input{width:16px; height:16px; accent-color:var(--accent-2);}
+  .check-toggle.checked{border-color:var(--accent-2); color:var(--accent-2); background:rgba(61,220,151,0.08);}
+  .problem-row{
+    display:grid; grid-template-columns:1fr auto; gap:8px; align-items:end;
+    margin-bottom:8px;
+  }
+  .fix-entry{
+    margin-bottom:14px; padding-bottom:12px; border-bottom:1px dashed var(--line-soft);
+  }
+  .fix-entry:last-child{border-bottom:none; margin-bottom:0; padding-bottom:0;}
+  .old-model-row{margin-top:8px;}
+  .old-model-row label{font-size:11.5px; margin:0 0 5px;}
+  .sticker-grid{display:grid; gap:9px;}
+  .sticker-row{
+    display:grid; grid-template-columns:1fr 1fr; gap:10px; align-items:center;
+    border:1px solid var(--line-soft); border-radius:10px; padding:10px 12px;
+    background:var(--bg-panel-2);
+  }
+  .sticker-row .name{font-size:13.5px; color:var(--text);}
+  .tpl-tabs{display:flex; gap:6px; margin-bottom:2px;}
+  .tpl-tabs button{
+    flex:1; padding:10px 8px; border-radius:9px; border:1px solid var(--line);
+    background:var(--bg-panel-2); color:var(--text-dim); font-family:inherit;
+    font-size:13px; font-weight:500; cursor:pointer;
+  }
+  .tpl-tabs button.active{
+    background:rgba(255,176,32,0.12); border-color:var(--accent); color:var(--accent);
+  }
+  .page-tabs{display:flex; gap:6px; margin-top:10px;}
+  .page-tabs a, .page-tabs span.tab{
+    flex:1; padding:9px 8px; border-radius:9px; border:1px solid var(--line);
+    background:var(--bg-panel-2); color:var(--text-dim); font-family:'Kanit',sans-serif;
+    font-size:13px; font-weight:500; text-align:center; text-decoration:none; cursor:pointer;
+  }
+  .page-tabs .active{
+    background:rgba(255,176,32,0.12); border-color:var(--accent); color:var(--accent); cursor:default;
+  }
+  .preview{
+    font-family:'IBM Plex Sans Thai', sans-serif;
+    font-size:13.5px; line-height:1.85; white-space:pre-wrap;
+    background:var(--bg-panel-2); border:1px solid var(--line);
+    border-radius:10px; padding:14px; color:var(--text);
+    max-height:340px; overflow-y:auto;
+  }
+  .actionbar{
+    position:fixed; bottom:0; left:0; right:0;
+    background:linear-gradient(0deg, var(--bg) 65%, transparent);
+    padding:18px 16px 20px;
+  }
+  .actionbar-inner{max-width:640px; margin:0 auto; display:flex; gap:10px;}
+  .btn-primary, .btn-secondary{
+    flex:1; padding:14px; border-radius:11px; border:none; font-family:'Kanit',sans-serif;
+    font-weight:600; font-size:14.5px; cursor:pointer; display:flex; align-items:center;
+    justify-content:center; gap:8px;
+  }
+  .btn-primary{background:var(--accent-2); color:#06251a;}
+  .btn-primary:active{transform:scale(0.98);}
+  .btn-primary:disabled{background:var(--line); color:var(--text-dim); cursor:not-allowed;}
+  .btn-secondary{background:var(--bg-panel); color:var(--text); border:1px solid var(--line);}
+  .hint{font-size:11.5px; color:var(--text-dim); margin-top:8px; line-height:1.6;}
+  .missing-badge{
+    font-size:11px; color:var(--danger); font-family:'IBM Plex Mono',monospace;
+    margin-top:6px;
+  }
+  .toast{
+    position:fixed; top:16px; left:50%; transform:translateX(-50%) translateY(-140%);
+    background:var(--accent-2); color:#06251a; padding:11px 18px; border-radius:10px;
+    font-family:'Kanit',sans-serif; font-weight:600; font-size:13.5px;
+    transition:transform .25s ease; z-index:100; box-shadow:0 8px 24px rgba(0,0,0,0.4);
+  }
+  .toast.show{transform:translateX(-50%) translateY(0);}
+  .settings-toggle{
+    font-size:11.5px; color:var(--text-dim); text-align:right; margin-top:-4px; margin-bottom:10px;
+    cursor:pointer; text-decoration:underline; text-underline-offset:2px;
+  }
+  .app-hidden{display:none !important;}
+  .tester-bar{
+    display:flex; align-items:center; justify-content:space-between;
+    font-size:12px; color:var(--text-dim); margin-top:8px;
+  }
+  .tester-bar .who{color:var(--accent-2); font-weight:600;}
+  .tester-bar .logout{cursor:pointer; text-decoration:underline; text-underline-offset:2px; color:inherit;}
+  .stock-lock-banner{
+    font-size:12px; border-radius:9px; padding:9px 11px; margin-bottom:10px;
+    border:1px solid var(--line-soft); background:var(--bg-panel-2); color:var(--text-dim);
+  }
+  .stock-lock-banner.locked{border-color:var(--accent-2); color:var(--accent-2);}
+  .stock-lock-banner.warn{border-color:var(--amber); color:var(--amber);}
+  .editing-banner{
+    font-size:12px; color:var(--accent); background:rgba(255,176,32,0.08);
+    border:1px solid var(--accent); border-radius:9px; padding:9px 11px; margin-bottom:10px;
+    display:flex; align-items:center; justify-content:space-between; gap:8px;
+  }
+</style>
+</head>
+<body>
+
+<div class="update-banner" id="updateBanner">มีเวอร์ชันใหม่ กำลังโหลดหน้าล่าสุดให้...</div>
+
+<header>
+  <div class="eyebrow">SONGDEE GPS · เทสช่าง</div>
+  <h1>รายงานตรวจสอบงานช่าง <span id="versionTag" class="version-tag"></span></h1>
+  <div class="tester-bar app-hidden" id="testerBar">
+    <span>ผู้ทดสอบ: <span class="who" id="testerName"></span></span>
+    <span>
+      <span class="logout" onclick="startNewReport()">+ รายงานใหม่</span>
+      <span class="logout" onclick="doLogout()">ออกจากระบบ</span>
+    </span>
+  </div>
+  <div class="page-tabs app-hidden" id="pageTabs">
+    <a href="index.html">Dashboard</a>
+    <span class="tab active">ฟอร์ม</span>
+    <a href="history.html">ประวัติ</a>
+  </div>
+</header>
+
+<main class="app-hidden" id="appMain">
+
+  <div class="editing-banner app-hidden" id="editingBanner">
+    <span id="editingBannerText"></span>
+    <span class="logout" onclick="startNewReport()">ปิด</span>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><span class="dot"></span>ประเภทงาน</div>
+    <div class="tpl-tabs" id="tplTabs"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><span class="dot"></span>ข้อมูลงาน</div>
+    <label>งานที่ได้รับมอบหมาย (จาก Admin)</label>
+    <select id="jobAssignSelect">
+      <option value="">-- เลือกงาน หรือกรอกเอง --</option>
+    </select>
+    <div class="row2">
+      <div>
+        <label>วันที่<span class="req">*</span></label>
+        <input type="date" id="jobDate">
+      </div>
+      <div>
+        <label>ชื่อลูกค้า</label>
+        <input type="text" id="jobCustomer" placeholder="เช่น บริษัท เอบีซี จำกัด">
+      </div>
+    </div>
+    <div class="row2">
+      <div>
+        <label>Fleet</label>
+        <input type="text" id="jobFleet" placeholder="เช่น Fleet A">
+      </div>
+      <div>
+        <label>ทะเบียน<span class="req">*</span></label>
+        <input type="text" id="jobPlate" placeholder="เช่น 1กก-1234">
+      </div>
+    </div>
+  </div>
+
+  <div class="card" id="problemsCard">
+    <div class="card-title"><span class="dot"></span>ปัญหา</div>
+    <div id="problemRows"></div>
+    <button class="btn-add" onclick="addProblemRow()">+ เพิ่มปัญหา</button>
+  </div>
+
+  <div class="card" id="fixesCard">
+    <div class="card-title"><span class="dot"></span>แก้ไข</div>
+    <div class="stock-lock-banner" id="stockLockBanner"></div>
+    <div id="fixRows"></div>
+    <button class="btn-add" id="addFixBtn" onclick="addFixRow()">+ เพิ่มรายการแก้ไข</button>
+  </div>
+
+  <div class="card" id="stickerCard">
+    <div class="card-title"><span class="dot"></span>ตรวจสอบสติ๊กเกอร์ 3 จุด</div>
+    <div class="sticker-grid" id="stickerGrid"></div>
+  </div>
+
+  <div class="card" id="checklistCard">
+    <div class="card-title"><span class="dot"></span>รายการตรวจสอบ</div>
+    <div id="checklistItems"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><span class="dot"></span>ตัวอย่างข้อความที่จะส่ง</div>
+    <div class="preview" id="preview"></div>
+    <div class="missing-badge" id="missingBadge"></div>
+  </div>
+
+</main>
+
+<div class="actionbar app-hidden" id="actionBar">
+  <div class="actionbar-inner">
+    <button class="btn-secondary" onclick="copyText()">คัดลอกข้อความ</button>
+    <button class="btn-primary" id="sendBtn" onclick="sendToLine()">ส่งเข้า LINE →</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// Reuses the existing songdee-line-proxy Worker (same one Stock System uses)
+// instead of a separate Worker. Remember: songdee-line-proxy only allows
+// requests from origins listed in its ALLOWED_ORIGINS — add this page's
+// real domain there once it's hosted (see songdee-line-proxy source).
+const LINE_ENDPOINT = "https://songdee-line-proxy.songdeegps.workers.dev";
+const LINE_API_KEY = "d124c1ea1175a07fcbf0358d733e0c57d822df836ff3f1004dfa5285fb28d69f";
+
+// ---------------------------------------------------------------
+// Firebase Auth + Firestore — same "songdee-stock" project used by the
+// Stock System, so a technician's login here is the same account/role
+// an admin already set up over there (roles collection, uid -> techName).
+// This app never creates accounts — that's still done from the Stock
+// System's User Management screen.
+// ---------------------------------------------------------------
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyB7rlrX4YvmDzPgV2n76Dg2eiy84bVmeVw",
+  authDomain: "songdee-stock.firebaseapp.com",
+  projectId: "songdee-stock",
+  storageBucket: "songdee-stock.firebasestorage.app",
+  messagingSenderId: "702521617982",
+  appId: "1:702521617982:web:dcb3c77e44d208a679ab6f"
+};
+firebase.initializeApp(FIREBASE_CONFIG);
+const _auth = firebase.auth();
+const _db = firebase.firestore();
+
+let tester = { uid: null, techName: null };
+
+// Login lives on index.html (Dashboard) now — this page just gates on
+// an existing session and bounces back there if there isn't one.
+function doLogout(){
+  _auth.signOut().then(()=>{ location.href = 'index.html'; });
+}
+
+_auth.onAuthStateChanged(async user=>{
+  const appMain = document.getElementById('appMain');
+  const actionBar = document.getElementById('actionBar');
+  const testerBar = document.getElementById('testerBar');
+  const pageTabs = document.getElementById('pageTabs');
+  if(!user){
+    location.href = 'index.html';
+    return;
+  }
+  try{
+    const roleSnap = await _db.collection('roles').doc(user.uid).get();
+    const role = roleSnap.exists ? roleSnap.data() : null;
+    if(!role || !role.techName){
+      alert('บัญชีนี้ยังไม่ได้กำหนดชื่อช่าง (techName) กรุณาให้แอดมินตั้งค่าในระบบ Stock ก่อน');
+      await _auth.signOut();
+      location.href = 'index.html';
+      return;
+    }
+    tester = { uid: user.uid, techName: role.techName };
+    document.getElementById('testerName').textContent = role.techName;
+    appMain.classList.remove('app-hidden');
+    actionBar.classList.remove('app-hidden');
+    testerBar.classList.remove('app-hidden');
+    pageTabs.classList.remove('app-hidden');
+    updatePreview();
+    scheduleStockLockCheck();
+    loadAssignments();
+    loadReportFromUrlIfAny();
+  }catch(e){
+    alert('โหลดข้อมูลสิทธิ์ไม่สำเร็จ: ' + e.message);
+    await _auth.signOut();
+    location.href = 'index.html';
+  }
+});
+
+// ---------------------------------------------------------------
+// Stock lock — after a technician types a ทะเบียน, look up the most
+// recent matching ใบเบิก (withdrawal doc) from the Stock System
+// (collection "sd", keys "sd:doc:*", each doc's `v` is a JSON blob with
+// plate/items) and restrict the "แก้ไข" picker to only the items
+// actually withdrawn on that doc, capped at the withdrawn qty.
+// Matched by ทะเบียน only (latest ใบเบิก wins) — NOT by techName, since
+// the Admin app's own tech names never reliably match roles.techName.
+// ---------------------------------------------------------------
+let stockLock = null; // { noStock, items: {name: qty} } or null
+let _stockLockTimer = null;
+
+function scheduleStockLockCheck(){
+  clearTimeout(_stockLockTimer);
+  _stockLockTimer = setTimeout(checkStockLock, 500);
+}
+
+async function checkStockLock(){
+  const banner = document.getElementById('stockLockBanner');
+  const plate = (state.plate || '').trim();
+  if(!plate){
+    stockLock = null;
+    banner.textContent = '';
+    banner.className = 'stock-lock-banner';
+    renderFixRows();
+    updatePreview();
+    return;
+  }
+  banner.textContent = 'กำลังตรวจสอบใบเบิก...';
+  banner.className = 'stock-lock-banner';
+  try{
+    const snap = await _db.collection('sd')
+      .where('k', '>=', 'sd:doc:')
+      .where('k', '<', 'sd:doc:' + String.fromCharCode(0xf8ff))
+      .get();
+    const docs = snap.docs
+      .map(d=>{ try{ return JSON.parse(d.data().v); }catch{ return null; } })
+      .filter(d=> d && d.plate && d.plate.trim() === plate)
+      .sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
+    const match = docs[0];
+    if(match){
+      const items = {};
+      Object.entries(match.items||{}).forEach(([name,it])=>{
+        if(it && it.qty > 0) items[name] = it.qty;
+      });
+      stockLock = { noStock: match.noStock || '(ไม่มีเลขที่)', items };
+      banner.textContent = `ล็อกรายการติดตั้งตามใบเบิกล่าสุด ${stockLock.noStock} (${Object.keys(items).length} รายการ)`;
+      banner.className = 'stock-lock-banner locked';
+    } else {
+      stockLock = null;
+      banner.textContent = 'ไม่พบใบเบิกที่ตรงกับทะเบียนนี้ — เลือกอุปกรณ์แบบอิสระได้';
+      banner.className = 'stock-lock-banner warn';
+    }
+  }catch(e){
+    stockLock = null;
+    banner.textContent = 'ตรวจสอบใบเบิกไม่สำเร็จ: ' + e.message + ' — เลือกอุปกรณ์แบบอิสระได้';
+    banner.className = 'stock-lock-banner warn';
+  }
+  renderFixRows();
+  updatePreview();
+}
+
+// ---------------------------------------------------------------
+// Job assignments — read-only lookup into the Admin web app's own
+// "assignments" collection (same songdee-stock Firebase project). Admin
+// assigns jobs there with customer/vehicle/assignedToName; here we just
+// list the logged-in technician's own assignments so ชื่อลูกค้า/ทะเบียน
+// can be picked instead of typed, cutting down typos. Selecting one
+// auto-fills both fields (and still lets them be edited manually after).
+//
+// The Admin web app has its OWN technician list (its "technicians"
+// collection, no shared ID with Firebase Auth) — assignedToName there is
+// whatever name the admin picked, which is NOT guaranteed to match this
+// account's roles.techName used to log in here. Bridge the two names
+// manually below as people are confirmed (roles.techName -> Admin name).
+// ---------------------------------------------------------------
+const ADMIN_NAME_MAP = {
+  "ช่างเทส": "Pu",
+};
+let assignments = [];
+
+async function loadAssignments(){
+  if(!tester.techName) return;
+  const adminName = ADMIN_NAME_MAP[tester.techName] || tester.techName;
+  try{
+    const snap = await _db.collection('assignments')
+      .where('assignedToName', '==', adminName)
+      .get();
+    assignments = snap.docs
+      .map(d=>({id:d.id, ...d.data()}))
+      .filter(a=> a.status !== 'cancelled')
+      .sort((a,b)=>{
+        const ta = typeof a.createdAt === 'number' ? a.createdAt : 0;
+        const tb = typeof b.createdAt === 'number' ? b.createdAt : 0;
+        return tb - ta;
+      });
+  }catch(e){
+    console.error('[Assignments] load failed', e);
+    assignments = [];
+  }
+  renderAssignmentSelect();
+}
+
+function renderAssignmentSelect(){
+  const sel = document.getElementById('jobAssignSelect');
+  sel.innerHTML = '';
+  const blank = document.createElement('option');
+  blank.value = ''; blank.textContent = '-- เลือกงาน หรือกรอกเอง --';
+  sel.appendChild(blank);
+  assignments.forEach(a=>{
+    const o = document.createElement('option');
+    o.value = a.id;
+    const custLabel = a.customer || '(ไม่ระบุลูกค้า)';
+    o.textContent = `${custLabel} · ${a.vehicle || '(ไม่ระบุทะเบียน)'}`;
+    sel.appendChild(o);
+  });
+}
+
+function onAssignmentSelect(id){
+  if(!id) return;
+  const a = assignments.find(x=>x.id===id);
+  if(!a) return;
+  state.customer = a.customer || '';
+  state.plate = a.vehicle || '';
+  document.getElementById('jobCustomer').value = state.customer;
+  document.getElementById('jobPlate').value = state.plate;
+  if(a.problem){
+    if(!state.problems.length) state.problems.push({symptom:''});
+    state.problems[0].symptom = a.problem;
+    renderProblemRows();
+  }
+  updatePreview();
+  scheduleStockLockCheck();
+}
+
+// ---------------------------------------------------------------
+// Report history — persists each submitted report to Firestore
+// (collection "qc_reports", own collection, not shared with the Stock
+// or Admin apps' own report collections) so a technician can reopen and
+// edit a past report, or just see what they've submitted. Saved on
+// every "ส่งเข้า LINE" click; currentReportId tracks whether we're
+// creating a new doc or updating one already opened from history.
+// The history list itself lives on its own page (history.html), which
+// links back here as index.html?report=<id> to open one for editing.
+// ---------------------------------------------------------------
+async function saveReport(){
+  const payload = {
+    tpl: state.tpl, date: state.date, customer: state.customer, fleet: state.fleet, plate: state.plate,
+    problems: state.problems, fixes: state.fixes, stickers: state.stickers, checklist: state.checklist,
+    techUid: tester.uid, techName: tester.techName,
+    updatedAt: Date.now(),
+  };
+  if(currentReportId){
+    await _db.collection('qc_reports').doc(currentReportId).set(payload, {merge:true});
+  } else {
+    payload.createdAt = Date.now();
+    const ref = await _db.collection('qc_reports').add(payload);
+    currentReportId = ref.id;
+  }
+}
+
+function loadReportIntoForm(doc){
+  currentReportId = doc.id;
+  state = {
+    tpl: doc.tpl || 'upgrade',
+    date: doc.date || '',
+    customer: doc.customer || '',
+    fleet: doc.fleet || '',
+    plate: doc.plate || '',
+    problems: (doc.problems && doc.problems.length) ? doc.problems : [{symptom:''}],
+    fixes: (doc.fixes && doc.fixes.length) ? doc.fixes : [{product:'', qty:1, custom:'', oldModel:'', oldModelCustom:''}],
+    stickers: doc.stickers || {},
+    checklist: doc.checklist || {},
+  };
+  syncFormInputsFromState();
+  const dateStr = state.date ? state.date.split('-').reverse().join('/') : '(ไม่ระบุวันที่)';
+  const tplLabel = (TEMPLATES[state.tpl]||{}).label || state.tpl || '';
+  document.getElementById('editingBannerText').textContent = `กำลังแก้ไขรายงาน: ${dateStr} ${tplLabel} ${state.plate || ''}`.trim();
+  document.getElementById('editingBanner').classList.remove('app-hidden');
+  renderAll();
+  scheduleStockLockCheck();
+}
+
+// If opened as index.html?report=<id> (link from history.html), load
+// that report once logged in, then strip the param so a page refresh
+// doesn't keep reloading the same report over manual edits.
+async function loadReportFromUrlIfAny(){
+  const params = new URLSearchParams(location.search);
+  const id = params.get('report');
+  if(!id) return;
+  try{
+    const snap = await _db.collection('qc_reports').doc(id).get();
+    if(snap.exists) loadReportIntoForm({id: snap.id, ...snap.data()});
+  }catch(e){
+    console.error('[Report load from URL]', e);
+    showToast('โหลดรายงานที่เลือกไม่สำเร็จ: ' + e.message);
+  }
+  history.replaceState(null, '', location.pathname);
+}
+
+function startNewReport(){
+  currentReportId = null;
+  state = defaultState();
+  document.getElementById('editingBanner').classList.add('app-hidden');
+  syncFormInputsFromState();
+  stockLock = null;
+  const banner = document.getElementById('stockLockBanner');
+  banner.textContent = '';
+  banner.className = 'stock-lock-banner';
+  renderAll();
+}
+
+// ---------------------------------------------------------------
+// Mock product list — swap this array for a live fetch from the
+// SONGDEE GPS Stock System (songdeegps-stock, Firebase `songdee-stock`)
+// e.g. fetch product names/SKUs from its Firestore `products` collection.
+// ---------------------------------------------------------------
+const PRODUCTS = [
+  "MDVR32-04 V.1", "SD Card 64GB", "SD Card 128GB", "HDD 1TB", "ชุด Caredrive",
+  "Motor", "โมดูล 3G/GPS", "Intercom", "สายกล้องเก่า", "ME41-04 V.3 AI",
+  "กล้อง AI", "สาย 5 เมตร (4 เส้น)", "สาย 10 เมตร (2 เส้น)", "ซิมการ์ด",
+  "DMS V.3", "ฐานรองกล้อง", "เสาอากาศ GPS", "เสาอากาศ 3G", "สายไฟหลัก MDVR",
+  "อื่นๆ (พิมพ์เอง)"
+];
+
+const STATUS_OPTS = {
+  sticker: ["-- เลือกผล --","ติดเรียบร้อย","ลูกค้าไม่ให้ติด"]
+};
+
+// Checklist items are pass/fail-free — a single checkbox confirms the check
+// was done. This is the label shown once checked (no "ต้องแก้ไข" option
+// anymore; a failed check belongs in the ปัญหา section instead).
+const CHECK_PASS_LABEL = {
+  lock: "ล็อคแน่นเรียบร้อย",
+  mirror: "มีกล้อง Mirror ปรับมุมเรียบร้อย",
+  config: "Config ถูกต้อง",
+  apn: "ตั้งค่าเรียบร้อย",
+  cable: "ล็อคเรียบร้อย / เก็บสายเรียบร้อย",
+  signal: "สัญญาณปกติ ทดสอบผ่าน",
+  camera: "ภาพชัดเจน ทดสอบผ่าน",
+  symptom: "แก้ไขตามอาการที่แจ้งเรียบร้อย"
+};
+
+// Checklist templates per job type. "อัปเกรด" matches the reference report format.
+const TEMPLATES = {
+  upgrade: {
+    label: "อัปเกรด",
+    checklist: [
+      {key:"lock",   text:"ตรวจสอบ การรัดล็อคอุปกรณ์กล้อง", type:"lock"},
+      {key:"mirror", text:"ตรวจสอบ มุมกล้องทั้งหมด (Mirror Check list)", type:"mirror"},
+      {key:"config", text:"ตรวจสอบ Config ระบบรอบคัน", type:"config"},
+      {key:"apn",    text:"ตรวจสอบ Config APN", type:"apn"},
+      {key:"cable",  text:"ตรวจสอบ การล็อคสายหลัง MDVR", type:"cable"},
+    ]
+  },
+  new_install: {
+    label: "ติดตั้งใหม่",
+    checklist: [
+      {key:"lock",   text:"ตรวจสอบ การรัดล็อคอุปกรณ์กล้อง", type:"lock"},
+      {key:"mirror", text:"ตรวจสอบ มุมกล้องทั้งหมด (Mirror Check list)", type:"mirror"},
+      {key:"config", text:"ตรวจสอบ Config ระบบรอบคัน", type:"config"},
+      {key:"apn",    text:"ตรวจสอบ Config APN", type:"apn"},
+      {key:"signal", text:"ทดสอบสัญญาณ GPS / เครือข่าย", type:"signal"},
+      {key:"camera", text:"ทดสอบภาพกล้องทุกช่อง", type:"camera"},
+      {key:"cable",  text:"ตรวจสอบ การเก็บ/ล็อคสายทั้งหมด", type:"cable"},
+    ]
+  },
+  repair: {
+    label: "ซ่อม",
+    checklist: [
+      {key:"symptom", text:"ตรวจสอบ อาการตามที่แจ้งซ่อม", type:"symptom"},
+      {key:"lock",    text:"ตรวจสอบ การรัดล็อคอุปกรณ์หลังซ่อม", type:"lock"},
+      {key:"config",  text:"ตรวจสอบ Config ระบบรอบคัน", type:"config"},
+      {key:"signal",  text:"ทดสอบสัญญาณหลังซ่อม", type:"signal"},
+      {key:"cable",   text:"ตรวจสอบ การเก็บ/ล็อคสาย", type:"cable"},
+    ]
+  }
+};
+// NOTE for whoever edits this next: item text/order for "new_install" and
+// "repair" are starting drafts (not confirmed against a real reference report
+// like the "upgrade" one was) — swap in the real wording per template.
+
+const STICKERS = [
+  {key:"front", text:"หน้ารถ"},
+  {key:"unit",  text:"เครื่องรูดบัตร"},
+  {key:"pdpa",  text:"PDPA"},
+];
+
+function defaultState(){
+  return {
+    tpl: "upgrade",
+    date: new Date().toISOString().slice(0,10),
+    customer: "",
+    fleet: "",
+    plate: "",
+    problems: [{symptom:""}],
+    fixes: [{product:"", qty:1, custom:"", oldModel:"", oldModelCustom:""}],
+    stickers: {},
+    checklist: {},
+  };
+}
+let state = defaultState();
+let currentReportId = null;
+
+function syncFormInputsFromState(){
+  document.getElementById('jobDate').value = state.date || '';
+  document.getElementById('jobCustomer').value = state.customer || '';
+  document.getElementById('jobFleet').value = state.fleet || '';
+  document.getElementById('jobPlate').value = state.plate || '';
+}
+
+function renderTabs(){
+  const wrap = document.getElementById('tplTabs');
+  wrap.innerHTML = '';
+  Object.entries(TEMPLATES).forEach(([key, t])=>{
+    const b = document.createElement('button');
+    b.textContent = t.label;
+    b.className = key === state.tpl ? 'active' : '';
+    b.onclick = ()=>{ state.tpl = key; state.checklist = {}; renderAll(); };
+    wrap.appendChild(b);
+  });
+}
+
+function addProblemRow(){
+  state.problems.push({symptom:""});
+  renderProblemRows();
+  updatePreview();
+}
+function removeProblemRow(idx){
+  state.problems.splice(idx,1);
+  renderProblemRows();
+  updatePreview();
+}
+function renderProblemRows(){
+  const container = document.getElementById('problemRows');
+  container.innerHTML = '';
+  state.problems.forEach((row, idx)=>{
+    const line = document.createElement('div');
+    line.className = 'problem-row';
+
+    const symptom = document.createElement('input');
+    symptom.type='text'; symptom.placeholder='อาการ/รายละเอียดปัญหา'; symptom.value=row.symptom;
+    symptom.oninput = ()=>{ row.symptom = symptom.value; updatePreview(); };
+
+    const rm = document.createElement('button');
+    rm.className='btn-remove'; rm.textContent='×'; rm.type='button';
+    rm.onclick = ()=> removeProblemRow(idx);
+
+    line.appendChild(symptom); line.appendChild(rm);
+    container.appendChild(line);
+  });
+}
+
+function addFixRow(){
+  state.fixes.push({product:"", qty:1, custom:"", oldModel:"", oldModelCustom:""});
+  renderFixRows();
+  updatePreview();
+}
+function removeFixRow(idx){
+  state.fixes.splice(idx,1);
+  renderFixRows();
+  updatePreview();
+}
+function renderFixRows(){
+  const container = document.getElementById('fixRows');
+  const locked = !!stockLock;
+  const options = locked ? Object.keys(stockLock.items) : PRODUCTS;
+  container.innerHTML = '';
+  state.fixes.forEach((row, idx)=>{
+    const wrap = document.createElement('div');
+    wrap.className = 'fix-entry';
+
+    const line = document.createElement('div');
+    line.className = 'item-row';
+
+    const sel = document.createElement('select');
+    sel.required = true;
+    const blank = document.createElement('option');
+    blank.value=''; blank.textContent='-- เลือกอุปกรณ์ --'; sel.appendChild(blank);
+    options.forEach(p=>{
+      const o = document.createElement('option');
+      o.value=p; o.textContent = locked ? `${p} (เบิก ${stockLock.items[p]})` : p;
+      if(p===row.product) o.selected=true;
+      sel.appendChild(o);
+    });
+    sel.onchange = ()=>{ row.product = sel.value; row.qty = locked ? (stockLock.items[row.product]||1) : row.qty; updatePreview(); renderFixRows(); };
+
+    const qty = document.createElement('input');
+    qty.type = locked ? 'number' : 'text';
+    if(locked){ qty.min = 0; qty.max = stockLock.items[row.product] || 0; }
+    qty.className='qty'; qty.value=row.qty; qty.placeholder='จำนวน';
+    qty.oninput = ()=>{
+      let v = qty.value;
+      if(locked){
+        const max = stockLock.items[row.product] || 0;
+        v = Math.max(0, Math.min(parseInt(v)||0, max));
+        qty.value = v;
+      }
+      row.qty = v; updatePreview();
+    };
+
+    const rm = document.createElement('button');
+    rm.className='btn-remove'; rm.textContent='×'; rm.type='button';
+    rm.onclick = ()=> removeFixRow(idx);
+
+    line.appendChild(sel); line.appendChild(qty); line.appendChild(rm);
+    wrap.appendChild(line);
+
+    if(!locked && row.product === "อื่นๆ (พิมพ์เอง)"){
+      const custom = document.createElement('input');
+      custom.type='text'; custom.placeholder='พิมพ์ชื่ออุปกรณ์'; custom.value=row.custom;
+      custom.style.marginTop='6px';
+      custom.oninput = ()=>{ row.custom = custom.value; updatePreview(); };
+      wrap.appendChild(custom);
+    }
+
+    const oldWrap = document.createElement('div');
+    oldWrap.className = 'old-model-row';
+    const oldLabel = document.createElement('label');
+    oldLabel.textContent = 'รุ่นเก่าที่เปลี่ยน (ถ้ามี)';
+    const oldSel = document.createElement('select');
+    const oldBlank = document.createElement('option');
+    oldBlank.value=''; oldBlank.textContent='-- ไม่มีการเปลี่ยนอุปกรณ์ --'; oldSel.appendChild(oldBlank);
+    PRODUCTS.forEach(p=>{
+      const o = document.createElement('option');
+      o.value=p; o.textContent=p;
+      if(p===row.oldModel) o.selected=true;
+      oldSel.appendChild(o);
+    });
+    oldSel.onchange = ()=>{ row.oldModel = oldSel.value; updatePreview(); renderFixRows(); };
+    oldWrap.appendChild(oldLabel); oldWrap.appendChild(oldSel);
+
+    if(row.oldModel === "อื่นๆ (พิมพ์เอง)"){
+      const oldCustom = document.createElement('input');
+      oldCustom.type='text'; oldCustom.placeholder='พิมพ์ชื่อรุ่นเก่า'; oldCustom.value=row.oldModelCustom;
+      oldCustom.style.marginTop='6px';
+      oldCustom.oninput = ()=>{ row.oldModelCustom = oldCustom.value; updatePreview(); };
+      oldWrap.appendChild(oldCustom);
+    }
+
+    wrap.appendChild(oldWrap);
+
+    container.appendChild(wrap);
+  });
+  const addBtn = document.getElementById('addFixBtn');
+  if(addBtn){
+    addBtn.disabled = locked && state.fixes.length >= options.length;
+  }
+}
+
+function renderStickers(){
+  const grid = document.getElementById('stickerGrid');
+  grid.innerHTML = '';
+  STICKERS.forEach(s=>{
+    const row = document.createElement('div');
+    row.className = 'sticker-row';
+    const name = document.createElement('div');
+    name.className='name'; name.textContent = s.text;
+    const sel = document.createElement('select');
+    sel.required = true;
+    STATUS_OPTS.sticker.forEach(opt=>{
+      const o = document.createElement('option');
+      o.value = opt; o.textContent = opt;
+      if(state.stickers[s.key] === opt) o.selected = true;
+      sel.appendChild(o);
+    });
+    sel.onchange = ()=>{ state.stickers[s.key] = sel.value; updatePreview(); };
+    row.appendChild(name); row.appendChild(sel);
+    grid.appendChild(row);
+  });
+}
+
+function renderChecklist(){
+  const wrap = document.getElementById('checklistItems');
+  wrap.innerHTML = '';
+  TEMPLATES[state.tpl].checklist.forEach(item=>{
+    const box = document.createElement('div');
+    box.className = 'check-item';
+    const lbl = document.createElement('div');
+    lbl.className = 'lbl';
+    lbl.innerHTML = `<span class="mark">🔺</span><span>${item.text}</span>`;
+
+    const toggle = document.createElement('label');
+    toggle.className = 'check-toggle' + (state.checklist[item.key] ? ' checked' : '');
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.checked = !!state.checklist[item.key];
+    const txt = document.createElement('span');
+    txt.textContent = CHECK_PASS_LABEL[item.type];
+    cb.onchange = ()=>{
+      state.checklist[item.key] = cb.checked;
+      toggle.classList.toggle('checked', cb.checked);
+      updatePreview();
+    };
+    toggle.appendChild(cb); toggle.appendChild(txt);
+
+    box.appendChild(lbl); box.appendChild(toggle);
+    wrap.appendChild(box);
+  });
+}
+
+function problemLine(row){
+  if(!row.symptom) return null;
+  return `- ${row.symptom}`;
+}
+
+function fixLine(row){
+  const name = row.product === "อื่นๆ (พิมพ์เอง)" ? (row.custom || "") : row.product;
+  const oldName = row.oldModel === "อื่นๆ (พิมพ์เอง)" ? (row.oldModelCustom || "") : row.oldModel;
+  if(oldName && name) return `- ทำการเปลี่ยน ${oldName} เป็น ${name}`;
+  if(name){
+    const qty = row.qty ? ` x${row.qty}` : '';
+    return `- ทำการติดตั้ง ${name}${qty}`;
+  }
+  if(oldName) return `- ทำการถอด ${oldName}`;
+  return null;
+}
+
+function buildMessage(){
+  const dateStr = state.date ? state.date.split('-').reverse().join('/') : '(ยังไม่ระบุวันที่)';
+  const lines = [];
+  lines.push(`${dateStr} ${TEMPLATES[state.tpl].label}${state.customer ? ' ' + state.customer : ''}`);
+  if(state.fleet) lines.push(`Fleet: ${state.fleet}`);
+  lines.push(`ทะเบียน: ${state.plate || '(ยังไม่ระบุ)'}`);
+  lines.push('');
+
+  const problemLines = state.problems.map(problemLine).filter(Boolean);
+  if(problemLines.length){
+    lines.push('ปัญหา');
+    lines.push(...problemLines);
+    lines.push('');
+  }
+  const fixLines = state.fixes.map(fixLine).filter(Boolean);
+  if(fixLines.length){
+    lines.push('แก้ไข');
+    lines.push(...fixLines);
+    lines.push('');
+  }
+
+  lines.push('🔹ตรวจสอบ สติ๊กเกอร์ 3 จุด🔹');
+  STICKERS.forEach(s=>{
+    const v = state.stickers[s.key];
+    lines.push(`> ${s.text} : ${v && v !== STATUS_OPTS.sticker[0] ? v : '(ยังไม่เลือก)'}`);
+  });
+  lines.push('');
+
+  TEMPLATES[state.tpl].checklist.forEach(item=>{
+    const done = !!state.checklist[item.key];
+    lines.push(`🔺${item.text}`);
+    lines.push(`: ${done ? CHECK_PASS_LABEL[item.type] : '(ยังไม่ตรวจสอบ)'}`);
+  });
+
+  lines.push('');
+  lines.push(`ผู้ทดสอบ: ${tester.techName || '-'}`);
+
+  return lines.join('\n');
+}
+
+// songdee-line-proxy renders {message:{title,color,badge,fields,items,...}}
+// as a LINE Flex Message card (same schema the Stock/Admin apps already
+// use for their "การ์ดสวยๆ" notifications) instead of a wall of plain text.
+function buildLineCard(){
+  const dateStr = state.date ? state.date.split('-').reverse().join('/') : '(ยังไม่ระบุวันที่)';
+
+  const fields = [];
+  if(state.customer) fields.push({label:'ลูกค้า', value: state.customer});
+  if(state.fleet) fields.push({label:'Fleet', value: state.fleet});
+  fields.push({label:'ทะเบียน', value: state.plate || '-'});
+  fields.push({label:'ผู้ทดสอบ', value: tester.techName || '-'});
+
+  const items = [];
+  const problemLines = state.problems.map(problemLine).filter(Boolean);
+  if(problemLines.length){
+    items.push('❗ ปัญหา');
+    items.push(...problemLines.map(l=>'  ' + l.replace(/^- /,'• ')));
+  }
+  const fixLines = state.fixes.map(fixLine).filter(Boolean);
+  if(fixLines.length){
+    items.push('🔧 แก้ไข');
+    items.push(...fixLines.map(l=>'  ' + l.replace(/^- /,'• ')));
+  }
+  items.push('🔹 สติ๊กเกอร์ 3 จุด');
+  STICKERS.forEach(s=>{
+    const v = state.stickers[s.key];
+    items.push(`  • ${s.text}: ${v && v !== STATUS_OPTS.sticker[0] ? v : '(ยังไม่เลือก)'}`);
+  });
+  items.push('✅ รายการตรวจสอบ');
+  TEMPLATES[state.tpl].checklist.forEach(item=>{
+    const done = !!state.checklist[item.key];
+    items.push(`  • ${item.text}: ${done ? CHECK_PASS_LABEL[item.type] : '(ยังไม่ตรวจสอบ)'}`);
+  });
+
+  return {
+    title: `✅ รายงานตรวจสอบงานช่าง · ${TEMPLATES[state.tpl].label}`,
+    color: '#3ddc97',
+    badge: `📋 ${dateStr}`,
+    fields,
+    items
+  };
+}
+
+function getMissingFields(){
+  const missing = [];
+  if(!state.date) missing.push('วันที่');
+  if(!state.plate) missing.push('ทะเบียน');
+  STICKERS.forEach(s=>{
+    if(!state.stickers[s.key] || state.stickers[s.key] === STATUS_OPTS.sticker[0]) missing.push(s.text);
+  });
+  TEMPLATES[state.tpl].checklist.forEach(item=>{
+    if(!state.checklist[item.key]) missing.push(item.text);
+  });
+  return missing;
+}
+
+function updatePreview(){
+  document.getElementById('preview').textContent = buildMessage();
+  const missing = getMissingFields();
+  const badge = document.getElementById('missingBadge');
+  const btn = document.getElementById('sendBtn');
+  if(missing.length){
+    badge.textContent = `ยังไม่ครบ: ${missing.join(' · ')}`;
+    btn.disabled = true;
+  } else {
+    badge.textContent = '';
+    btn.disabled = false;
+  }
+}
+
+document.getElementById('jobDate').addEventListener('input', e=>{ state.date = e.target.value; updatePreview(); });
+document.getElementById('jobCustomer').addEventListener('input', e=>{ state.customer = e.target.value; updatePreview(); });
+document.getElementById('jobFleet').addEventListener('input', e=>{ state.fleet = e.target.value; updatePreview(); });
+document.getElementById('jobPlate').addEventListener('input', e=>{ state.plate = e.target.value; updatePreview(); scheduleStockLockCheck(); });
+document.getElementById('jobAssignSelect').addEventListener('change', e=>{ onAssignmentSelect(e.target.value); });
+
+function showToast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(()=> t.classList.remove('show'), 2200);
+}
+
+function copyText(){
+  const text = buildMessage();
+  navigator.clipboard.writeText(text).then(()=> showToast('คัดลอกข้อความแล้ว'))
+    .catch(()=> showToast('คัดลอกไม่สำเร็จ ลองแตะค้างที่ข้อความแทน'));
+}
+
+async function sendToLine(){
+  const endpoint = LINE_ENDPOINT.trim();
+  const text = buildMessage();
+
+  let saveError = null;
+  try{ await saveReport(); }
+  catch(e){ saveError = e; console.error('[Report save]', e); }
+  const saveSuffix = saveError ? ` (บันทึกลง database ไม่สำเร็จ: ${saveError.message})` : '';
+
+  if(!endpoint){
+    navigator.clipboard.writeText(text).catch(()=>{});
+    showToast('ยังไม่ได้ตั้งค่า endpoint — คัดลอกข้อความให้แล้ว' + saveSuffix);
+    return;
+  }
+  try{
+    showToast('กำลังส่ง...');
+    const res = await fetch(endpoint, {
+      method:'POST',
+      headers:{'Content-Type':'application/json', 'X-Api-Key': LINE_API_KEY},
+      body: JSON.stringify({ message: buildLineCard() })
+    });
+    if(res.ok){ showToast('ส่งเข้า LINE แล้ว ✓' + saveSuffix); }
+    else{ showToast('ส่งไม่สำเร็จ (' + res.status + ') — คัดลอกข้อความสำรองไว้แล้ว' + saveSuffix); navigator.clipboard.writeText(text).catch(()=>{}); }
+  }catch(err){
+    showToast('เชื่อมต่อ endpoint ไม่ได้ — คัดลอกข้อความสำรองไว้แล้ว' + saveSuffix);
+    navigator.clipboard.writeText(text).catch(()=>{});
+  }
+}
+
+function renderAll(){
+  renderTabs();
+  renderProblemRows();
+  renderFixRows();
+  renderStickers();
+  renderChecklist();
+  updatePreview();
+}
+
+// ---------------------------------------------------------------
+// Version display + auto-update check.
+// Bump the <meta name="app-version"> value in <head> on every deploy.
+// Open tabs poll the live page every 2 minutes (and whenever the tab
+// regains focus) and auto-reload if a newer version is detected.
+// ---------------------------------------------------------------
+const APP_VERSION = document.querySelector('meta[name="app-version"]').content;
+document.getElementById('versionTag').textContent = 'v' + APP_VERSION;
+
+async function checkForUpdate(){
+  try{
+    const res = await fetch(location.pathname, { cache: 'no-store' });
+    const html = await res.text();
+    const match = html.match(/<meta name="app-version" content="([^"]+)">/);
+    const liveVersion = match && match[1];
+    if(liveVersion && liveVersion !== APP_VERSION){
+      const banner = document.getElementById('updateBanner');
+      banner.classList.add('show');
+      setTimeout(()=> location.reload(), 1800);
+    }
+  }catch(e){ /* offline or blocked — silently skip, try again next interval */ }
+}
+setInterval(checkForUpdate, 2 * 60 * 1000);
+document.addEventListener('visibilitychange', ()=>{
+  if(document.visibilityState === 'visible') checkForUpdate();
+});
+
+syncFormInputsFromState();
+renderAll();
+</script>
+
+</body>
+</html>
