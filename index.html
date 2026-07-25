@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.2.0">
+<meta name="app-version" content="1.2.1">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -868,23 +868,6 @@ function fixLine(row){
   return null;
 }
 
-// Compact ถอด/ติดตั้ง summary derived from the same fix rows (oldModel =
-// removed part, product = installed part) — shown as a bare bullet list
-// with no heading, matching the reference report format.
-function fixSummaryLines(){
-  const lines = [];
-  state.fixes.forEach(row=>{
-    const oldName = row.oldModel === "อื่นๆ (พิมพ์เอง)" ? (row.oldModelCustom || "") : row.oldModel;
-    if(oldName) lines.push(`- ถอด ${oldName}`);
-    const name = row.product === "อื่นๆ (พิมพ์เอง)" ? (row.custom || "") : row.product;
-    if(name){
-      const qty = row.qty ? ` x${row.qty}` : '';
-      lines.push(`- ติดตั้ง ${name}${qty}`);
-    }
-  });
-  return lines;
-}
-
 function buildMessage(){
   const dateStr = state.date ? state.date.split('-').reverse().join('/') : '(ยังไม่ระบุวันที่)';
   const lines = [];
@@ -892,12 +875,6 @@ function buildMessage(){
   if(state.fleet) lines.push(`Fleet: ${state.fleet}`);
   lines.push(`ทะเบียน: ${state.plate || '(ยังไม่ระบุ)'}`);
   lines.push('');
-
-  const summaryLines = fixSummaryLines();
-  if(summaryLines.length){
-    lines.push(...summaryLines);
-    lines.push('');
-  }
 
   const problemLines = state.problems.map(problemLine).filter(Boolean);
   if(problemLines.length){
