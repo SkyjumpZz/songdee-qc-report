@@ -551,6 +551,11 @@ function onAssignmentSelect(id){
   state.plate = a.vehicle || '';
   document.getElementById('jobCustomer').value = state.customer;
   document.getElementById('jobPlate').value = state.plate;
+  if(a.problem){
+    if(!state.problems.length) state.problems.push({equipment:'', symptom:'', custom:''});
+    state.problems[0].symptom = a.problem;
+    renderProblemRows();
+  }
   updatePreview();
   scheduleStockLockCheck();
 }
