@@ -584,7 +584,7 @@ const PRODUCTS = [
 ];
 
 const STATUS_OPTS = {
-  sticker: ["-- เลือกผล --","ติดแล้ว","ลูกค้าไม่ให้ติด"]
+  sticker: ["-- เลือกผล --","ติดเรียบร้อย","ลูกค้าไม่ให้ติด"]
 };
 
 // Checklist items are pass/fail-free — a single checkbox confirms the check
@@ -642,7 +642,7 @@ const TEMPLATES = {
 
 const STICKERS = [
   {key:"front", text:"หน้ารถ"},
-  {key:"unit",  text:"เครื่องบันทึก (ตัวเครื่อง)"},
+  {key:"unit",  text:"เครื่องรูดบัตร"},
   {key:"pdpa",  text:"PDPA"},
 ];
 
@@ -888,8 +888,7 @@ function fixSummaryLines(){
 function buildMessage(){
   const dateStr = state.date ? state.date.split('-').reverse().join('/') : '(ยังไม่ระบุวันที่)';
   const lines = [];
-  lines.push(`${dateStr} ${TEMPLATES[state.tpl].label}`);
-  if(state.customer) lines.push(`ชื่อลูกค้า: ${state.customer}`);
+  lines.push(`${dateStr} ${TEMPLATES[state.tpl].label}${state.customer ? ' ' + state.customer : ''}`);
   if(state.fleet) lines.push(`Fleet: ${state.fleet}`);
   lines.push(`ทะเบียน: ${state.plate || '(ยังไม่ระบุ)'}`);
   lines.push('');
@@ -913,7 +912,7 @@ function buildMessage(){
     lines.push('');
   }
 
-  lines.push('◆ตรวจสอบ สติ๊กเกอร์ 3 จุด◆');
+  lines.push('🔹ตรวจสอบ สติ๊กเกอร์ 3 จุด🔹');
   STICKERS.forEach(s=>{
     const v = state.stickers[s.key];
     lines.push(`> ${s.text} : ${v && v !== STATUS_OPTS.sticker[0] ? v : '(ยังไม่เลือก)'}`);
