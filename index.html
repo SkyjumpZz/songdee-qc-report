@@ -504,14 +504,24 @@ async function checkStockLock(){
 // list the logged-in technician's own assignments so ชื่อลูกค้า/ทะเบียน
 // can be picked instead of typed, cutting down typos. Selecting one
 // auto-fills both fields (and still lets them be edited manually after).
+//
+// The Admin web app has its OWN technician list (its "technicians"
+// collection, no shared ID with Firebase Auth) — assignedToName there is
+// whatever name the admin picked, which is NOT guaranteed to match this
+// account's roles.techName used to log in here. Bridge the two names
+// manually below as people are confirmed (roles.techName -> Admin name).
 // ---------------------------------------------------------------
+const ADMIN_NAME_MAP = {
+  "ช่างเทส": "Pu",
+};
 let assignments = [];
 
 async function loadAssignments(){
   if(!tester.techName) return;
+  const adminName = ADMIN_NAME_MAP[tester.techName] || tester.techName;
   try{
     const snap = await _db.collection('assignments')
-      .where('assignedToName', '==', tester.techName)
+      .where('assignedToName', '==', adminName)
       .get();
     assignments = snap.docs
       .map(d=>({id:d.id, ...d.data()}))
