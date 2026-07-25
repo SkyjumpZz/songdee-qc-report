@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.2.1">
+<meta name="app-version" content="1.3.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -436,12 +436,13 @@ _auth.onAuthStateChanged(async user=>{
 });
 
 // ---------------------------------------------------------------
-// Stock lock — after a technician is logged in and types a ทะเบียน,
-// look up the matching ใบเบิก (withdrawal doc) from the Stock System
+// Stock lock — after a technician types a ทะเบียน, look up the most
+// recent matching ใบเบิก (withdrawal doc) from the Stock System
 // (collection "sd", keys "sd:doc:*", each doc's `v` is a JSON blob with
-// techName/plate/items) and restrict the "ติดตั้ง" picker to only the
-// items actually withdrawn on that doc, capped at the withdrawn qty.
-// Matched by plate + techName of the logged-in user (confirmed approach).
+// plate/items) and restrict the "แก้ไข" picker to only the items
+// actually withdrawn on that doc, capped at the withdrawn qty.
+// Matched by ทะเบียน only (latest ใบเบิก wins) — NOT by techName, since
+// the Admin app's own tech names never reliably match roles.techName.
 // ---------------------------------------------------------------
 let stockLock = null; // { noStock, items: {name: qty} } or null
 let _stockLockTimer = null;
@@ -454,7 +455,7 @@ function scheduleStockLockCheck(){
 async function checkStockLock(){
   const banner = document.getElementById('stockLockBanner');
   const plate = (state.plate || '').trim();
-  if(!tester.techName || !plate){
+  if(!plate){
     stockLock = null;
     banner.textContent = '';
     banner.className = 'stock-lock-banner';
@@ -471,8 +472,7 @@ async function checkStockLock(){
       .get();
     const docs = snap.docs
       .map(d=>{ try{ return JSON.parse(d.data().v); }catch{ return null; } })
-      .filter(d=> d && d.plate && d.techName)
-      .filter(d=> d.plate.trim() === plate && d.techName === tester.techName)
+      .filter(d=> d && d.plate && d.plate.trim() === plate)
       .sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
     const match = docs[0];
     if(match){
@@ -481,11 +481,11 @@ async function checkStockLock(){
         if(it && it.qty > 0) items[name] = it.qty;
       });
       stockLock = { noStock: match.noStock || '(ไม่มีเลขที่)', items };
-      banner.textContent = `ล็อกรายการติดตั้งตามใบเบิก ${stockLock.noStock} (${Object.keys(items).length} รายการ)`;
+      banner.textContent = `ล็อกรายการติดตั้งตามใบเบิกล่าสุด ${stockLock.noStock} (${Object.keys(items).length} รายการ)`;
       banner.className = 'stock-lock-banner locked';
     } else {
       stockLock = null;
-      banner.textContent = 'ไม่พบใบเบิกที่ตรงกับทะเบียนนี้และชื่อช่างที่ login — เลือกอุปกรณ์แบบอิสระได้';
+      banner.textContent = 'ไม่พบใบเบิกที่ตรงกับทะเบียนนี้ — เลือกอุปกรณ์แบบอิสระได้';
       banner.className = 'stock-lock-banner warn';
     }
   }catch(e){
