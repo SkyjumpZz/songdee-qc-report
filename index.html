@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.5.0">
+<meta name="app-version" content="1.5.1">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -229,32 +229,13 @@
     font-size:12px; color:var(--text-dim); margin-top:8px;
   }
   .tester-bar .who{color:var(--accent-2); font-weight:600;}
-  .tester-bar .logout{cursor:pointer; text-decoration:underline; text-underline-offset:2px;}
+  .tester-bar .logout{cursor:pointer; text-decoration:underline; text-underline-offset:2px; color:inherit;}
   .stock-lock-banner{
     font-size:12px; border-radius:9px; padding:9px 11px; margin-bottom:10px;
     border:1px solid var(--line-soft); background:var(--bg-panel-2); color:var(--text-dim);
   }
   .stock-lock-banner.locked{border-color:var(--accent-2); color:var(--accent-2);}
   .stock-lock-banner.warn{border-color:var(--amber); color:var(--amber);}
-  .history-overlay{
-    position:fixed; inset:0; z-index:250; background:rgba(5,9,18,0.85);
-    display:flex; align-items:flex-end; justify-content:center;
-  }
-  .history-panel{
-    width:100%; max-width:640px; max-height:82vh; background:var(--bg-panel);
-    border:1px solid var(--line); border-radius:18px 18px 0 0; padding:16px;
-    display:flex; flex-direction:column;
-  }
-  .history-head{display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;}
-  .history-head h2{font-family:'Kanit',sans-serif; font-size:16px; font-weight:600; margin:0;}
-  .history-list{overflow-y:auto;}
-  .history-item{
-    border:1px solid var(--line-soft); border-radius:10px; padding:11px 12px;
-    margin-bottom:8px; cursor:pointer; background:var(--bg-panel-2);
-  }
-  .history-item:hover{border-color:var(--accent);}
-  .history-item .title{font-size:13.5px; font-weight:600; color:var(--text);}
-  .history-item .meta{font-size:11.5px; color:var(--text-dim); margin-top:3px;}
   .editing-banner{
     font-size:12px; color:var(--accent); background:rgba(255,176,32,0.08);
     border:1px solid var(--accent); border-radius:9px; padding:9px 11px; margin-bottom:10px;
@@ -285,22 +266,12 @@
   <div class="tester-bar app-hidden" id="testerBar">
     <span>ผู้ทดสอบ: <span class="who" id="testerName"></span></span>
     <span>
-      <span class="logout" onclick="openHistory()">ประวัติ</span>
+      <a class="logout" href="history.html">ประวัติ</a>
       <span class="logout" onclick="startNewReport()">+ รายงานใหม่</span>
       <span class="logout" onclick="doLogout()">ออกจากระบบ</span>
     </span>
   </div>
 </header>
-
-<div class="history-overlay app-hidden" id="historyOverlay">
-  <div class="history-panel">
-    <div class="history-head">
-      <h2>ประวัติรายงาน</h2>
-      <button class="btn-remove" onclick="closeHistory()">×</button>
-    </div>
-    <div id="historyList" class="history-list"></div>
-  </div>
-</div>
 
 <main class="app-hidden" id="appMain">
 
@@ -473,6 +444,7 @@ _auth.onAuthStateChanged(async user=>{
     updatePreview();
     scheduleStockLockCheck();
     loadAssignments();
+    loadReportFromUrlIfAny();
   }catch(e){
     err.textContent = 'โหลดข้อมูลสิทธิ์ไม่สำเร็จ: ' + e.message;
     await _auth.signOut();
@@ -614,10 +586,6 @@ function onAssignmentSelect(id){
   scheduleStockLockCheck();
 }
 
-function escapeHtmlLite(s){
-  return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-}
-
 // ---------------------------------------------------------------
 // Report history — persists each submitted report to Firestore
 // (collection "qc_reports", own collection, not shared with the Stock
@@ -625,6 +593,8 @@ function escapeHtmlLite(s){
 // edit a past report, or just see what they've submitted. Saved on
 // every "ส่งเข้า LINE" click; currentReportId tracks whether we're
 // creating a new doc or updating one already opened from history.
+// The history list itself lives on its own page (history.html), which
+// links back here as index.html?report=<id> to open one for editing.
 // ---------------------------------------------------------------
 async function saveReport(){
   const payload = {
@@ -640,44 +610,6 @@ async function saveReport(){
     const ref = await _db.collection('qc_reports').add(payload);
     currentReportId = ref.id;
   }
-}
-
-async function openHistory(){
-  document.getElementById('historyOverlay').classList.remove('app-hidden');
-  const wrap = document.getElementById('historyList');
-  wrap.innerHTML = '<div style="color:var(--text-dim);font-size:13px;padding:20px 0;text-align:center">กำลังโหลด...</div>';
-  try{
-    const snap = await _db.collection('qc_reports')
-      .where('techUid', '==', tester.uid)
-      .orderBy('createdAt', 'desc')
-      .limit(50)
-      .get();
-    renderHistoryList(snap.docs.map(d=>({id:d.id, ...d.data()})));
-  }catch(e){
-    wrap.innerHTML = `<div style="color:var(--danger);font-size:13px;padding:20px 0;text-align:center">โหลดประวัติไม่สำเร็จ: ${escapeHtmlLite(e.message)}</div>`;
-  }
-}
-
-function closeHistory(){
-  document.getElementById('historyOverlay').classList.add('app-hidden');
-}
-
-function renderHistoryList(list){
-  const wrap = document.getElementById('historyList');
-  if(!list.length){
-    wrap.innerHTML = '<div style="color:var(--text-dim);font-size:13px;padding:20px 0;text-align:center">ยังไม่มีรายงาน</div>';
-    return;
-  }
-  wrap.innerHTML = '';
-  list.forEach(doc=>{
-    const item = document.createElement('div');
-    item.className = 'history-item';
-    const dateStr = doc.date ? doc.date.split('-').reverse().join('/') : '(ไม่ระบุวันที่)';
-    const tplLabel = (TEMPLATES[doc.tpl]||{}).label || doc.tpl || '';
-    item.innerHTML = `<div class="title">${escapeHtmlLite(dateStr)} ${escapeHtmlLite(tplLabel)} ${escapeHtmlLite(doc.customer||'')}</div><div class="meta">ทะเบียน: ${escapeHtmlLite(doc.plate||'-')}</div>`;
-    item.onclick = ()=> loadReportIntoForm(doc);
-    wrap.appendChild(item);
-  });
 }
 
 function loadReportIntoForm(doc){
@@ -698,9 +630,25 @@ function loadReportIntoForm(doc){
   const tplLabel = (TEMPLATES[state.tpl]||{}).label || state.tpl || '';
   document.getElementById('editingBannerText').textContent = `กำลังแก้ไขรายงาน: ${dateStr} ${tplLabel} ${state.plate || ''}`.trim();
   document.getElementById('editingBanner').classList.remove('app-hidden');
-  closeHistory();
   renderAll();
   scheduleStockLockCheck();
+}
+
+// If opened as index.html?report=<id> (link from history.html), load
+// that report once logged in, then strip the param so a page refresh
+// doesn't keep reloading the same report over manual edits.
+async function loadReportFromUrlIfAny(){
+  const params = new URLSearchParams(location.search);
+  const id = params.get('report');
+  if(!id) return;
+  try{
+    const snap = await _db.collection('qc_reports').doc(id).get();
+    if(snap.exists) loadReportIntoForm({id: snap.id, ...snap.data()});
+  }catch(e){
+    console.error('[Report load from URL]', e);
+    showToast('โหลดรายงานที่เลือกไม่สำเร็จ: ' + e.message);
+  }
+  history.replaceState(null, '', location.pathname);
 }
 
 function startNewReport(){

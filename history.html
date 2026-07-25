@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<title>ประวัติรายงาน · SONGDEE GPS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<style>
+  :root{
+    --bg:#0b1220;
+    --bg-panel:#121b2e;
+    --bg-panel-2:#0f1729;
+    --line:#223047;
+    --line-soft:#1a2439;
+    --text:#e7edf7;
+    --text-dim:#8b9bb5;
+    --accent:#ffb020;
+    --accent-2:#3ddc97;
+    --danger:#ff5c5c;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:
+      radial-gradient(1200px 500px at 50% -10%, #16223a 0%, transparent 60%),
+      var(--bg);
+    color:var(--text);
+    font-family:'IBM Plex Sans Thai','Kanit',sans-serif;
+    min-height:100vh;
+  }
+  header{
+    padding:22px 18px 16px;
+    border-bottom:1px solid var(--line);
+    background:linear-gradient(180deg, rgba(255,176,32,0.06), transparent);
+    position:sticky; top:0; z-index:10;
+    backdrop-filter:blur(10px);
+  }
+  header .eyebrow{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:11px; letter-spacing:.14em; text-transform:uppercase;
+    color:var(--accent); margin-bottom:6px;
+  }
+  header h1{
+    font-family:'Kanit',sans-serif; font-weight:600; font-size:20px; margin:0;
+    letter-spacing:.01em;
+  }
+  .tester-bar{
+    display:flex; align-items:center; justify-content:space-between;
+    font-size:12px; color:var(--text-dim); margin-top:8px;
+  }
+  .tester-bar .who{color:var(--accent-2); font-weight:600;}
+  .tester-bar a, .tester-bar .link{cursor:pointer; text-decoration:underline; text-underline-offset:2px; color:inherit;}
+  main{max-width:640px; margin:0 auto; padding:16px 16px 60px;}
+  .history-item{
+    border:1px solid var(--line-soft); border-radius:10px; padding:12px 14px;
+    margin-bottom:10px; cursor:pointer; background:var(--bg-panel); text-decoration:none; display:block;
+  }
+  .history-item:hover{border-color:var(--accent);}
+  .history-item .title{font-size:14px; font-weight:600; color:var(--text);}
+  .history-item .meta{font-size:12px; color:var(--text-dim); margin-top:4px;}
+  .empty, .err, .loading{color:var(--text-dim); font-size:13px; padding:40px 0; text-align:center;}
+  .err{color:var(--danger);}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="eyebrow">SONGDEE GPS · เทสช่าง</div>
+  <h1>ประวัติรายงาน</h1>
+  <div class="tester-bar" id="testerBar" style="display:none">
+    <span>ผู้ทดสอบ: <span class="who" id="testerName"></span></span>
+    <span>
+      <a href="index.html">+ รายงานใหม่</a>
+      <span class="link" onclick="doLogout()">ออกจากระบบ</span>
+    </span>
+  </div>
+</header>
+
+<main>
+  <div id="list" class="loading">กำลังตรวจสอบสิทธิ์...</div>
+</main>
+
+<script>
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyB7rlrX4YvmDzPgV2n76Dg2eiy84bVmeVw",
+  authDomain: "songdee-stock.firebaseapp.com",
+  projectId: "songdee-stock",
+  storageBucket: "songdee-stock.firebasestorage.app",
+  messagingSenderId: "702521617982",
+  appId: "1:702521617982:web:dcb3c77e44d208a679ab6f"
+};
+firebase.initializeApp(FIREBASE_CONFIG);
+const _auth = firebase.auth();
+const _db = firebase.firestore();
+
+const TEMPLATE_LABELS = { upgrade:"อัปเกรด", new_install:"ติดตั้งใหม่", repair:"ซ่อม" };
+
+function escapeHtmlLite(s){
+  return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function doLogout(){
+  _auth.signOut().then(()=>{ location.href = 'index.html'; });
+}
+
+_auth.onAuthStateChanged(async user=>{
+  const listEl = document.getElementById('list');
+  if(!user){
+    // Login lives on index.html — bounce back there instead of duplicating the form.
+    location.href = 'index.html';
+    return;
+  }
+  try{
+    const roleSnap = await _db.collection('roles').doc(user.uid).get();
+    const role = roleSnap.exists ? roleSnap.data() : null;
+    if(!role || !role.techName){
+      listEl.innerHTML = '<div class="err">บัญชีนี้ยังไม่ได้กำหนดชื่อช่าง กรุณาให้แอดมินตั้งค่าในระบบ Stock ก่อน</div>';
+      return;
+    }
+    document.getElementById('testerName').textContent = role.techName;
+    document.getElementById('testerBar').style.display = 'flex';
+
+    listEl.textContent = 'กำลังโหลด...';
+    const snap = await _db.collection('qc_reports')
+      .where('techUid', '==', user.uid)
+      .orderBy('createdAt', 'desc')
+      .limit(100)
+      .get();
+    renderList(snap.docs.map(d=>({id:d.id, ...d.data()})));
+  }catch(e){
+    listEl.innerHTML = `<div class="err">โหลดประวัติไม่สำเร็จ: ${escapeHtmlLite(e.message)}</div>`;
+  }
+});
+
+function renderList(list){
+  const listEl = document.getElementById('list');
+  if(!list.length){
+    listEl.innerHTML = '<div class="empty">ยังไม่มีรายงาน</div>';
+    return;
+  }
+  listEl.innerHTML = '';
+  listEl.className = '';
+  list.forEach(doc=>{
+    const dateStr = doc.date ? doc.date.split('-').reverse().join('/') : '(ไม่ระบุวันที่)';
+    const tplLabel = TEMPLATE_LABELS[doc.tpl] || doc.tpl || '';
+    const a = document.createElement('a');
+    a.className = 'history-item';
+    a.href = `index.html?report=${encodeURIComponent(doc.id)}`;
+    a.innerHTML = `<div class="title">${escapeHtmlLite(dateStr)} ${escapeHtmlLite(tplLabel)} ${escapeHtmlLite(doc.customer||'')}</div><div class="meta">ทะเบียน: ${escapeHtmlLite(doc.plate||'-')}</div>`;
+    listEl.appendChild(a);
+  });
+}
+</script>
+
+</body>
+</html>
