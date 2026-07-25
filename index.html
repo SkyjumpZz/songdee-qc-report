@@ -4,9 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.0.0">
+<meta name="app-version" content="1.1.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <style>
   :root{
     --bg:#0b1220;
@@ -186,18 +189,66 @@
     font-size:11.5px; color:var(--text-dim); text-align:right; margin-top:-4px; margin-bottom:10px;
     cursor:pointer; text-decoration:underline; text-underline-offset:2px;
   }
+  .login-overlay{
+    position:fixed; inset:0; z-index:300; background:var(--bg);
+    display:flex; align-items:center; justify-content:center; padding:20px;
+  }
+  .login-overlay.hide{display:none;}
+  .login-card{
+    width:100%; max-width:360px; background:var(--bg-panel); border:1px solid var(--line);
+    border-radius:14px; padding:24px;
+  }
+  .login-card h1{
+    font-family:'Kanit',sans-serif; font-weight:600; font-size:18px; margin:0 0 4px;
+  }
+  .login-card .sub{font-size:12.5px; color:var(--text-dim); margin-bottom:18px;}
+  .login-error{
+    font-size:12.5px; color:var(--danger); margin-top:10px; min-height:1em;
+  }
+  .login-card .btn-primary{width:100%; margin-top:14px;}
+  .login-card .btn-primary:disabled{opacity:.6;}
+  .app-hidden{display:none !important;}
+  .tester-bar{
+    display:flex; align-items:center; justify-content:space-between;
+    font-size:12px; color:var(--text-dim); margin-top:8px;
+  }
+  .tester-bar .who{color:var(--accent-2); font-weight:600;}
+  .tester-bar .logout{cursor:pointer; text-decoration:underline; text-underline-offset:2px;}
+  .stock-lock-banner{
+    font-size:12px; border-radius:9px; padding:9px 11px; margin-bottom:10px;
+    border:1px solid var(--line-soft); background:var(--bg-panel-2); color:var(--text-dim);
+  }
+  .stock-lock-banner.locked{border-color:var(--accent-2); color:var(--accent-2);}
+  .stock-lock-banner.warn{border-color:var(--amber); color:var(--amber);}
 </style>
 </head>
 <body>
 
 <div class="update-banner" id="updateBanner">มีเวอร์ชันใหม่ กำลังโหลดหน้าล่าสุดให้...</div>
 
+<div class="login-overlay" id="loginOverlay">
+  <div class="login-card">
+    <h1>เข้าสู่ระบบ</h1>
+    <div class="sub">SONGDEE GPS · รายงานตรวจสอบงานช่าง</div>
+    <label>อีเมล</label>
+    <input type="text" id="loginEmail" autocomplete="username" placeholder="เช่น somchai@songdeegps.com">
+    <label>รหัสผ่าน</label>
+    <input type="password" id="loginPassword" autocomplete="current-password" placeholder="รหัสผ่าน">
+    <button class="btn-primary" id="loginBtn" onclick="doLogin()">เข้าสู่ระบบ</button>
+    <div class="login-error" id="loginError"></div>
+  </div>
+</div>
+
 <header>
   <div class="eyebrow">SONGDEE GPS · เทสช่าง</div>
   <h1>รายงานตรวจสอบงานช่าง <span id="versionTag" class="version-tag"></span></h1>
+  <div class="tester-bar app-hidden" id="testerBar">
+    <span>ผู้ทดสอบ: <span class="who" id="testerName"></span></span>
+    <span class="logout" onclick="doLogout()">ออกจากระบบ</span>
+  </div>
 </header>
 
-<main>
+<main class="app-hidden" id="appMain">
 
   <div class="card">
     <div class="card-title"><span class="dot"></span>ประเภทงาน</div>
@@ -228,8 +279,9 @@
 
   <div class="card" id="installedCard">
     <div class="card-title"><span class="dot"></span>ติดตั้ง</div>
+    <div class="stock-lock-banner" id="stockLockBanner"></div>
     <div id="installedRows"></div>
-    <button class="btn-add" onclick="addItemRow('installed')">+ เพิ่มรายการที่ติดตั้ง</button>
+    <button class="btn-add" id="addInstalledBtn" onclick="addItemRow('installed')">+ เพิ่มรายการที่ติดตั้ง</button>
   </div>
 
   <div class="card" id="stickerCard">
@@ -250,7 +302,7 @@
 
 </main>
 
-<div class="actionbar">
+<div class="actionbar app-hidden" id="actionBar">
   <div class="actionbar-inner">
     <button class="btn-secondary" onclick="copyText()">คัดลอกข้อความ</button>
     <button class="btn-primary" id="sendBtn" onclick="sendToLine()">ส่งเข้า LINE →</button>
@@ -266,6 +318,153 @@
 // real domain there once it's hosted (see songdee-line-proxy source).
 const LINE_ENDPOINT = "https://songdee-line-proxy.songdeegps.workers.dev";
 const LINE_API_KEY = "d124c1ea1175a07fcbf0358d733e0c57d822df836ff3f1004dfa5285fb28d69f";
+
+// ---------------------------------------------------------------
+// Firebase Auth + Firestore — same "songdee-stock" project used by the
+// Stock System, so a technician's login here is the same account/role
+// an admin already set up over there (roles collection, uid -> techName).
+// This app never creates accounts — that's still done from the Stock
+// System's User Management screen.
+// ---------------------------------------------------------------
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyB7rlrX4YvmDzPgV2n76Dg2eiy84bVmeVw",
+  authDomain: "songdee-stock.firebaseapp.com",
+  projectId: "songdee-stock",
+  storageBucket: "songdee-stock.firebasestorage.app",
+  messagingSenderId: "702521617982",
+  appId: "1:702521617982:web:dcb3c77e44d208a679ab6f"
+};
+firebase.initializeApp(FIREBASE_CONFIG);
+const _auth = firebase.auth();
+const _db = firebase.firestore();
+
+let tester = { uid: null, techName: null };
+
+async function doLogin(){
+  const email = document.getElementById('loginEmail').value.trim();
+  const password = document.getElementById('loginPassword').value;
+  const btn = document.getElementById('loginBtn');
+  const err = document.getElementById('loginError');
+  err.textContent = '';
+  if(!email || !password){ err.textContent = 'กรอกอีเมลและรหัสผ่านให้ครบ'; return; }
+  btn.disabled = true; btn.textContent = 'กำลังเข้าสู่ระบบ...';
+  try{
+    await _auth.signInWithEmailAndPassword(email, password);
+  }catch(e){
+    const map = {
+      'auth/invalid-email':'อีเมลไม่ถูกต้อง',
+      'auth/user-not-found':'ไม่พบบัญชีนี้',
+      'auth/wrong-password':'รหัสผ่านไม่ถูกต้อง',
+      'auth/invalid-credential':'อีเมลหรือรหัสผ่านไม่ถูกต้อง',
+      'auth/too-many-requests':'ลองผิดหลายครั้งเกินไป กรุณารอสักครู่'
+    };
+    err.textContent = map[e.code] || ('เข้าสู่ระบบไม่สำเร็จ: ' + e.message);
+  }
+  btn.disabled = false; btn.textContent = 'เข้าสู่ระบบ';
+}
+
+function doLogout(){
+  _auth.signOut();
+}
+
+_auth.onAuthStateChanged(async user=>{
+  const overlay = document.getElementById('loginOverlay');
+  const appMain = document.getElementById('appMain');
+  const actionBar = document.getElementById('actionBar');
+  const testerBar = document.getElementById('testerBar');
+  if(!user){
+    tester = { uid:null, techName:null };
+    stockLock = null;
+    overlay.classList.remove('hide');
+    appMain.classList.add('app-hidden');
+    actionBar.classList.add('app-hidden');
+    testerBar.classList.add('app-hidden');
+    return;
+  }
+  const err = document.getElementById('loginError');
+  try{
+    const roleSnap = await _db.collection('roles').doc(user.uid).get();
+    const role = roleSnap.exists ? roleSnap.data() : null;
+    if(!role || !role.techName){
+      err.textContent = 'บัญชีนี้ยังไม่ได้กำหนดชื่อช่าง (techName) กรุณาให้แอดมินตั้งค่าในระบบ Stock ก่อน';
+      await _auth.signOut();
+      return;
+    }
+    tester = { uid: user.uid, techName: role.techName };
+    document.getElementById('testerName').textContent = role.techName;
+    overlay.classList.add('hide');
+    appMain.classList.remove('app-hidden');
+    actionBar.classList.remove('app-hidden');
+    testerBar.classList.remove('app-hidden');
+    updatePreview();
+    scheduleStockLockCheck();
+  }catch(e){
+    err.textContent = 'โหลดข้อมูลสิทธิ์ไม่สำเร็จ: ' + e.message;
+    await _auth.signOut();
+  }
+});
+
+// ---------------------------------------------------------------
+// Stock lock — after a technician is logged in and types a ทะเบียน,
+// look up the matching ใบเบิก (withdrawal doc) from the Stock System
+// (collection "sd", keys "sd:doc:*", each doc's `v` is a JSON blob with
+// techName/plate/items) and restrict the "ติดตั้ง" picker to only the
+// items actually withdrawn on that doc, capped at the withdrawn qty.
+// Matched by plate + techName of the logged-in user (confirmed approach).
+// ---------------------------------------------------------------
+let stockLock = null; // { noStock, items: {name: qty} } or null
+let _stockLockTimer = null;
+
+function scheduleStockLockCheck(){
+  clearTimeout(_stockLockTimer);
+  _stockLockTimer = setTimeout(checkStockLock, 500);
+}
+
+async function checkStockLock(){
+  const banner = document.getElementById('stockLockBanner');
+  const plate = (state.plate || '').trim();
+  if(!tester.techName || !plate){
+    stockLock = null;
+    banner.textContent = '';
+    banner.className = 'stock-lock-banner';
+    renderItemRows('installed');
+    updatePreview();
+    return;
+  }
+  banner.textContent = 'กำลังตรวจสอบใบเบิก...';
+  banner.className = 'stock-lock-banner';
+  try{
+    const snap = await _db.collection('sd')
+      .where('k', '>=', 'sd:doc:')
+      .where('k', '<', 'sd:doc:' + String.fromCharCode(0xf8ff))
+      .get();
+    const docs = snap.docs
+      .map(d=>{ try{ return JSON.parse(d.data().v); }catch{ return null; } })
+      .filter(d=> d && d.plate && d.techName)
+      .filter(d=> d.plate.trim() === plate && d.techName === tester.techName)
+      .sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
+    const match = docs[0];
+    if(match){
+      const items = {};
+      Object.entries(match.items||{}).forEach(([name,it])=>{
+        if(it && it.qty > 0) items[name] = it.qty;
+      });
+      stockLock = { noStock: match.noStock || '(ไม่มีเลขที่)', items };
+      banner.textContent = `ล็อกรายการติดตั้งตามใบเบิก ${stockLock.noStock} (${Object.keys(items).length} รายการ)`;
+      banner.className = 'stock-lock-banner locked';
+    } else {
+      stockLock = null;
+      banner.textContent = 'ไม่พบใบเบิกที่ตรงกับทะเบียนนี้และชื่อช่างที่ login — เลือกอุปกรณ์แบบอิสระได้';
+      banner.className = 'stock-lock-banner warn';
+    }
+  }catch(e){
+    stockLock = null;
+    banner.textContent = 'ตรวจสอบใบเบิกไม่สำเร็จ: ' + e.message + ' — เลือกอุปกรณ์แบบอิสระได้';
+    banner.className = 'stock-lock-banner warn';
+  }
+  renderItemRows('installed');
+  updatePreview();
+}
 
 // ---------------------------------------------------------------
 // Mock product list — swap this array for a live fetch from the
@@ -376,6 +575,8 @@ function removeItemRow(kind, idx){
 }
 function renderItemRows(kind){
   const container = document.getElementById(kind === 'removed' ? 'removedRows' : 'installedRows');
+  const locked = kind === 'installed' && stockLock;
+  const options = locked ? Object.keys(stockLock.items) : PRODUCTS;
   container.innerHTML = '';
   state[kind].forEach((row, idx)=>{
     const div = document.createElement('div');
@@ -385,17 +586,27 @@ function renderItemRows(kind){
     sel.required = true;
     const blank = document.createElement('option');
     blank.value=''; blank.textContent='-- เลือกอุปกรณ์ --'; sel.appendChild(blank);
-    PRODUCTS.forEach(p=>{
+    options.forEach(p=>{
       const o = document.createElement('option');
-      o.value=p; o.textContent=p;
+      o.value=p; o.textContent = locked ? `${p} (เบิก ${stockLock.items[p]})` : p;
       if(p===row.product) o.selected=true;
       sel.appendChild(o);
     });
-    sel.onchange = ()=>{ row.product = sel.value; updatePreview(); renderItemRows(kind); };
+    sel.onchange = ()=>{ row.product = sel.value; row.qty = locked ? (stockLock.items[row.product]||1) : row.qty; updatePreview(); renderItemRows(kind); };
 
     const qty = document.createElement('input');
-    qty.type='text'; qty.className='qty'; qty.value=row.qty; qty.placeholder='จำนวน';
-    qty.oninput = ()=>{ row.qty = qty.value; updatePreview(); };
+    qty.type = locked ? 'number' : 'text';
+    if(locked){ qty.min = 0; qty.max = stockLock.items[row.product] || 0; }
+    qty.className='qty'; qty.value=row.qty; qty.placeholder='จำนวน';
+    qty.oninput = ()=>{
+      let v = qty.value;
+      if(locked){
+        const max = stockLock.items[row.product] || 0;
+        v = Math.max(0, Math.min(parseInt(v)||0, max));
+        qty.value = v;
+      }
+      row.qty = v; updatePreview();
+    };
 
     const rm = document.createElement('button');
     rm.className='btn-remove'; rm.textContent='×'; rm.type='button';
@@ -404,7 +615,7 @@ function renderItemRows(kind){
     div.appendChild(sel); div.appendChild(qty); div.appendChild(rm);
     container.appendChild(div);
 
-    if(row.product === "อื่นๆ (พิมพ์เอง)"){
+    if(!locked && row.product === "อื่นๆ (พิมพ์เอง)"){
       const custom = document.createElement('input');
       custom.type='text'; custom.placeholder='พิมพ์ชื่ออุปกรณ์'; custom.value=row.custom;
       custom.style.marginBottom='8px';
@@ -412,6 +623,10 @@ function renderItemRows(kind){
       container.appendChild(custom);
     }
   });
+  const addBtn = document.getElementById('addInstalledBtn');
+  if(kind === 'installed' && addBtn){
+    addBtn.disabled = locked && state.installed.length >= options.length;
+  }
 }
 
 function renderStickers(){
@@ -476,6 +691,7 @@ function buildMessage(){
   const lines = [];
   lines.push(`${dateStr} ${TEMPLATES[state.tpl].label} ${state.plate || '(ยังไม่ระบุทะเบียน/ชื่อลูกค้า)'}`);
   if(state.phone) lines.push(`ทะเบียน  (${state.phone})`);
+  lines.push(`ผู้ทดสอบ: ${tester.techName || '-'}`);
   lines.push('');
 
   const removedLines = state.removed.map(itemLine).filter(Boolean);
@@ -535,7 +751,7 @@ function updatePreview(){
 }
 
 document.getElementById('jobDate').addEventListener('input', e=>{ state.date = e.target.value; updatePreview(); });
-document.getElementById('jobPlate').addEventListener('input', e=>{ state.plate = e.target.value; updatePreview(); });
+document.getElementById('jobPlate').addEventListener('input', e=>{ state.plate = e.target.value; updatePreview(); scheduleStockLockCheck(); });
 document.getElementById('jobPhone').addEventListener('input', e=>{ state.phone = e.target.value; updatePreview(); });
 
 function showToast(msg){
