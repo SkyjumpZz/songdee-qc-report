@@ -817,7 +817,6 @@ function buildMessage(){
   if(state.customer) lines.push(`ชื่อลูกค้า: ${state.customer}`);
   if(state.fleet) lines.push(`Fleet: ${state.fleet}`);
   lines.push(`ทะเบียน: ${state.plate || '(ยังไม่ระบุ)'}`);
-  lines.push(`ผู้ทดสอบ: ${tester.techName || '-'}`);
   lines.push('');
 
   const problemLines = state.problems.map(problemLine).filter(Boolean);
@@ -845,6 +844,9 @@ function buildMessage(){
     lines.push(`🔺${item.text}`);
     lines.push(`: ${done ? CHECK_PASS_LABEL[item.type] : '(ยังไม่ตรวจสอบ)'}`);
   });
+
+  lines.push('');
+  lines.push(`ผู้ทดสอบ: ${tester.techName || '-'}`);
 
   return lines.join('\n');
 }
