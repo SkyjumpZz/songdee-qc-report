@@ -273,6 +273,10 @@
 
   <div class="card">
     <div class="card-title"><span class="dot"></span>ข้อมูลงาน</div>
+    <label>งานที่ได้รับมอบหมาย (จาก Admin)</label>
+    <select id="jobAssignSelect">
+      <option value="">-- เลือกงาน หรือกรอกเอง --</option>
+    </select>
     <div class="row2">
       <div>
         <label>วันที่<span class="req">*</span></label>
@@ -399,6 +403,8 @@ _auth.onAuthStateChanged(async user=>{
   if(!user){
     tester = { uid:null, techName:null };
     stockLock = null;
+    assignments = [];
+    renderAssignmentSelect();
     overlay.classList.remove('hide');
     appMain.classList.add('app-hidden');
     actionBar.classList.add('app-hidden');
@@ -422,6 +428,7 @@ _auth.onAuthStateChanged(async user=>{
     testerBar.classList.remove('app-hidden');
     updatePreview();
     scheduleStockLockCheck();
+    loadAssignments();
   }catch(e){
     err.textContent = 'โหลดข้อมูลสิทธิ์ไม่สำเร็จ: ' + e.message;
     await _auth.signOut();
@@ -488,6 +495,64 @@ async function checkStockLock(){
   }
   renderFixRows();
   updatePreview();
+}
+
+// ---------------------------------------------------------------
+// Job assignments — read-only lookup into the Admin web app's own
+// "assignments" collection (same songdee-stock Firebase project). Admin
+// assigns jobs there with customer/vehicle/assignedToName; here we just
+// list the logged-in technician's own assignments so ชื่อลูกค้า/ทะเบียน
+// can be picked instead of typed, cutting down typos. Selecting one
+// auto-fills both fields (and still lets them be edited manually after).
+// ---------------------------------------------------------------
+let assignments = [];
+
+async function loadAssignments(){
+  if(!tester.techName) return;
+  try{
+    const snap = await _db.collection('assignments')
+      .where('assignedToName', '==', tester.techName)
+      .get();
+    assignments = snap.docs
+      .map(d=>({id:d.id, ...d.data()}))
+      .filter(a=> a.status !== 'cancelled')
+      .sort((a,b)=>{
+        const ta = typeof a.createdAt === 'number' ? a.createdAt : 0;
+        const tb = typeof b.createdAt === 'number' ? b.createdAt : 0;
+        return tb - ta;
+      });
+  }catch(e){
+    console.error('[Assignments] load failed', e);
+    assignments = [];
+  }
+  renderAssignmentSelect();
+}
+
+function renderAssignmentSelect(){
+  const sel = document.getElementById('jobAssignSelect');
+  sel.innerHTML = '';
+  const blank = document.createElement('option');
+  blank.value = ''; blank.textContent = '-- เลือกงาน หรือกรอกเอง --';
+  sel.appendChild(blank);
+  assignments.forEach(a=>{
+    const o = document.createElement('option');
+    o.value = a.id;
+    const custLabel = a.customer || '(ไม่ระบุลูกค้า)';
+    o.textContent = `${custLabel} · ${a.vehicle || '(ไม่ระบุทะเบียน)'}`;
+    sel.appendChild(o);
+  });
+}
+
+function onAssignmentSelect(id){
+  if(!id) return;
+  const a = assignments.find(x=>x.id===id);
+  if(!a) return;
+  state.customer = a.customer || '';
+  state.plate = a.vehicle || '';
+  document.getElementById('jobCustomer').value = state.customer;
+  document.getElementById('jobPlate').value = state.plate;
+  updatePreview();
+  scheduleStockLockCheck();
 }
 
 // ---------------------------------------------------------------
@@ -882,6 +947,7 @@ document.getElementById('jobDate').addEventListener('input', e=>{ state.date = e
 document.getElementById('jobCustomer').addEventListener('input', e=>{ state.customer = e.target.value; updatePreview(); });
 document.getElementById('jobFleet').addEventListener('input', e=>{ state.fleet = e.target.value; updatePreview(); });
 document.getElementById('jobPlate').addEventListener('input', e=>{ state.plate = e.target.value; updatePreview(); scheduleStockLockCheck(); });
+document.getElementById('jobAssignSelect').addEventListener('change', e=>{ onAssignmentSelect(e.target.value); });
 
 function showToast(msg){
   const t = document.getElementById('toast');
