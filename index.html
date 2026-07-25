@@ -141,9 +141,9 @@
   }
   .check-toggle input{width:16px; height:16px; accent-color:var(--accent-2);}
   .check-toggle.checked{border-color:var(--accent-2); color:var(--accent-2); background:rgba(61,220,151,0.08);}
-  .problem-entry{margin-bottom:10px;}
   .problem-row{
-    display:grid; grid-template-columns:1fr 1.3fr auto; gap:8px; align-items:end;
+    display:grid; grid-template-columns:1fr auto; gap:8px; align-items:end;
+    margin-bottom:8px;
   }
   .fix-entry{
     margin-bottom:14px; padding-bottom:12px; border-bottom:1px dashed var(--line-soft);
@@ -562,7 +562,7 @@ function onAssignmentSelect(id){
   document.getElementById('jobCustomer').value = state.customer;
   document.getElementById('jobPlate').value = state.plate;
   if(a.problem){
-    if(!state.problems.length) state.problems.push({equipment:'', symptom:'', custom:''});
+    if(!state.problems.length) state.problems.push({symptom:''});
     state.problems[0].symptom = a.problem;
     renderProblemRows();
   }
@@ -674,7 +674,7 @@ function renderTabs(){
 }
 
 function addProblemRow(){
-  state.problems.push({equipment:"", symptom:"", custom:""});
+  state.problems.push({symptom:""});
   renderProblemRows();
   updatePreview();
 }
@@ -687,22 +687,8 @@ function renderProblemRows(){
   const container = document.getElementById('problemRows');
   container.innerHTML = '';
   state.problems.forEach((row, idx)=>{
-    const wrap = document.createElement('div');
-    wrap.className = 'problem-entry';
-
     const line = document.createElement('div');
     line.className = 'problem-row';
-
-    const sel = document.createElement('select');
-    const blank = document.createElement('option');
-    blank.value=''; blank.textContent='-- อุปกรณ์ --'; sel.appendChild(blank);
-    PRODUCTS.forEach(p=>{
-      const o = document.createElement('option');
-      o.value=p; o.textContent=p;
-      if(p===row.equipment) o.selected=true;
-      sel.appendChild(o);
-    });
-    sel.onchange = ()=>{ row.equipment = sel.value; updatePreview(); renderProblemRows(); };
 
     const symptom = document.createElement('input');
     symptom.type='text'; symptom.placeholder='อาการ/รายละเอียดปัญหา'; symptom.value=row.symptom;
@@ -712,18 +698,8 @@ function renderProblemRows(){
     rm.className='btn-remove'; rm.textContent='×'; rm.type='button';
     rm.onclick = ()=> removeProblemRow(idx);
 
-    line.appendChild(sel); line.appendChild(symptom); line.appendChild(rm);
-    wrap.appendChild(line);
-
-    if(row.equipment === "อื่นๆ (พิมพ์เอง)"){
-      const custom = document.createElement('input');
-      custom.type='text'; custom.placeholder='พิมพ์ชื่ออุปกรณ์'; custom.value=row.custom;
-      custom.style.marginTop='6px';
-      custom.oninput = ()=>{ row.custom = custom.value; updatePreview(); };
-      wrap.appendChild(custom);
-    }
-
-    container.appendChild(wrap);
+    line.appendChild(symptom); line.appendChild(rm);
+    container.appendChild(line);
   });
 }
 
@@ -875,10 +851,8 @@ function renderChecklist(){
 }
 
 function problemLine(row){
-  const name = row.equipment === "อื่นๆ (พิมพ์เอง)" ? (row.custom || "") : row.equipment;
-  const parts = [name, row.symptom].filter(Boolean);
-  if(!parts.length) return null;
-  return `- ${parts.join(': ')}`;
+  if(!row.symptom) return null;
+  return `- ${row.symptom}`;
 }
 
 function fixLine(row){
@@ -1037,7 +1011,7 @@ document.addEventListener('visibilitychange', ()=>{
 });
 
 // seed one empty row each so the form isn't empty on load
-state.problems.push({equipment:'', symptom:'', custom:''});
+state.problems.push({symptom:''});
 state.fixes.push({product:'', qty:1, custom:'', oldModel:'', oldModelCustom:''});
 renderAll();
 </script>
