@@ -133,8 +133,24 @@
     display:flex; gap:7px; align-items:flex-start; line-height:1.4;
   }
   .check-item .lbl .mark{color:var(--amber); flex-shrink:0;}
-  .status-select{margin-top:0;}
-  .status-select.bad{border-color:var(--danger) !important; background:rgba(255,92,92,0.06);}
+  .check-toggle{
+    display:flex; align-items:center; gap:8px;
+    background:var(--bg-panel-2); border:1px solid var(--line);
+    border-radius:9px; padding:11px 12px; cursor:pointer;
+    font-size:14px; color:var(--text-dim);
+  }
+  .check-toggle input{width:16px; height:16px; accent-color:var(--accent-2);}
+  .check-toggle.checked{border-color:var(--accent-2); color:var(--accent-2); background:rgba(61,220,151,0.08);}
+  .problem-entry{margin-bottom:10px;}
+  .problem-row{
+    display:grid; grid-template-columns:1fr 1.3fr auto; gap:8px; align-items:end;
+  }
+  .fix-entry{
+    margin-bottom:14px; padding-bottom:12px; border-bottom:1px dashed var(--line-soft);
+  }
+  .fix-entry:last-child{border-bottom:none; margin-bottom:0; padding-bottom:0;}
+  .old-model-row{margin-top:8px;}
+  .old-model-row label{font-size:11.5px; margin:0 0 5px;}
   .sticker-grid{display:grid; gap:9px;}
   .sticker-row{
     display:grid; grid-template-columns:1fr 1fr; gap:10px; align-items:center;
@@ -279,17 +295,17 @@
     </div>
   </div>
 
-  <div class="card" id="removedCard">
-    <div class="card-title"><span class="dot"></span>ถอด</div>
-    <div id="removedRows"></div>
-    <button class="btn-add" onclick="addItemRow('removed')">+ เพิ่มรายการที่ถอด</button>
+  <div class="card" id="problemsCard">
+    <div class="card-title"><span class="dot"></span>ปัญหา</div>
+    <div id="problemRows"></div>
+    <button class="btn-add" onclick="addProblemRow()">+ เพิ่มปัญหา</button>
   </div>
 
-  <div class="card" id="installedCard">
-    <div class="card-title"><span class="dot"></span>ติดตั้ง</div>
+  <div class="card" id="fixesCard">
+    <div class="card-title"><span class="dot"></span>แก้ไข</div>
     <div class="stock-lock-banner" id="stockLockBanner"></div>
-    <div id="installedRows"></div>
-    <button class="btn-add" id="addInstalledBtn" onclick="addItemRow('installed')">+ เพิ่มรายการที่ติดตั้ง</button>
+    <div id="fixRows"></div>
+    <button class="btn-add" id="addFixBtn" onclick="addFixRow()">+ เพิ่มรายการแก้ไข</button>
   </div>
 
   <div class="card" id="stickerCard">
@@ -435,7 +451,7 @@ async function checkStockLock(){
     stockLock = null;
     banner.textContent = '';
     banner.className = 'stock-lock-banner';
-    renderItemRows('installed');
+    renderFixRows();
     updatePreview();
     return;
   }
@@ -470,7 +486,7 @@ async function checkStockLock(){
     banner.textContent = 'ตรวจสอบใบเบิกไม่สำเร็จ: ' + e.message + ' — เลือกอุปกรณ์แบบอิสระได้';
     banner.className = 'stock-lock-banner warn';
   }
-  renderItemRows('installed');
+  renderFixRows();
   updatePreview();
 }
 
@@ -488,15 +504,21 @@ const PRODUCTS = [
 ];
 
 const STATUS_OPTS = {
-  lock: ["-- เลือกผล --","ล็อคแน่นเรียบร้อย","ล็อคไม่แน่น ต้องแก้ไข","ไม่มีจุดล็อค"],
-  mirror: ["-- เลือกผล --","ไม่มีกล้อง Mirror","มีกล้อง Mirror ปรับมุมเรียบร้อย","มีกล้อง Mirror มุมไม่ตรง ต้องแก้ไข"],
-  config: ["-- เลือกผล --","Config ถูกต้อง","Config ผิดพลาด ต้องแก้ไข"],
-  apn: ["-- เลือกผล --","ตั้งค่าเรียบร้อย","ตั้งค่าไม่สำเร็จ"],
-  cable: ["-- เลือกผล --","ล็อคเรียบร้อย / เก็บสายเรียบร้อย","ล็อคไม่แน่น ต้องแก้ไข"],
-  signal: ["-- เลือกผล --","สัญญาณปกติ ทดสอบผ่าน","สัญญาณไม่เสถียร ต้องติดตาม"],
-  camera: ["-- เลือกผล --","ภาพชัดเจน ทดสอบผ่าน","ภาพไม่ชัด / มีปัญหา"],
-  symptom: ["-- เลือกผล --","แก้ไขตามอาการที่แจ้งเรียบร้อย","แก้ไขได้บางส่วน ต้องนัดติดตาม"],
-  sticker: ["-- เลือกผล --","มีติดเรียบร้อย","ไม่มีสติ๊กเกอร์","สติ๊กเกอร์ชำรุด"]
+  sticker: ["-- เลือกผล --","ติดแล้ว","ลูกค้าไม่ให้ติด"]
+};
+
+// Checklist items are pass/fail-free — a single checkbox confirms the check
+// was done. This is the label shown once checked (no "ต้องแก้ไข" option
+// anymore; a failed check belongs in the ปัญหา section instead).
+const CHECK_PASS_LABEL = {
+  lock: "ล็อคแน่นเรียบร้อย",
+  mirror: "มีกล้อง Mirror ปรับมุมเรียบร้อย",
+  config: "Config ถูกต้อง",
+  apn: "ตั้งค่าเรียบร้อย",
+  cable: "ล็อคเรียบร้อย / เก็บสายเรียบร้อย",
+  signal: "สัญญาณปกติ ทดสอบผ่าน",
+  camera: "ภาพชัดเจน ทดสอบผ่าน",
+  symptom: "แก้ไขตามอาการที่แจ้งเรียบร้อย"
 };
 
 // Checklist templates per job type. "อัปเกรด" matches the reference report format.
@@ -550,8 +572,8 @@ let state = {
   customer: "",
   fleet: "",
   plate: "",
-  removed: [],
-  installed: [],
+  problems: [],
+  fixes: [],
   stickers: {},
   checklist: {},
 };
@@ -571,25 +593,81 @@ function renderTabs(){
   });
 }
 
-function addItemRow(kind, prefill){
-  const list = state[kind];
-  list.push({product: prefill||"", qty:1, custom:""});
-  renderItemRows(kind);
+function addProblemRow(){
+  state.problems.push({equipment:"", symptom:"", custom:""});
+  renderProblemRows();
   updatePreview();
 }
-function removeItemRow(kind, idx){
-  state[kind].splice(idx,1);
-  renderItemRows(kind);
+function removeProblemRow(idx){
+  state.problems.splice(idx,1);
+  renderProblemRows();
   updatePreview();
 }
-function renderItemRows(kind){
-  const container = document.getElementById(kind === 'removed' ? 'removedRows' : 'installedRows');
-  const locked = kind === 'installed' && stockLock;
+function renderProblemRows(){
+  const container = document.getElementById('problemRows');
+  container.innerHTML = '';
+  state.problems.forEach((row, idx)=>{
+    const wrap = document.createElement('div');
+    wrap.className = 'problem-entry';
+
+    const line = document.createElement('div');
+    line.className = 'problem-row';
+
+    const sel = document.createElement('select');
+    const blank = document.createElement('option');
+    blank.value=''; blank.textContent='-- อุปกรณ์ --'; sel.appendChild(blank);
+    PRODUCTS.forEach(p=>{
+      const o = document.createElement('option');
+      o.value=p; o.textContent=p;
+      if(p===row.equipment) o.selected=true;
+      sel.appendChild(o);
+    });
+    sel.onchange = ()=>{ row.equipment = sel.value; updatePreview(); renderProblemRows(); };
+
+    const symptom = document.createElement('input');
+    symptom.type='text'; symptom.placeholder='อาการ/รายละเอียดปัญหา'; symptom.value=row.symptom;
+    symptom.oninput = ()=>{ row.symptom = symptom.value; updatePreview(); };
+
+    const rm = document.createElement('button');
+    rm.className='btn-remove'; rm.textContent='×'; rm.type='button';
+    rm.onclick = ()=> removeProblemRow(idx);
+
+    line.appendChild(sel); line.appendChild(symptom); line.appendChild(rm);
+    wrap.appendChild(line);
+
+    if(row.equipment === "อื่นๆ (พิมพ์เอง)"){
+      const custom = document.createElement('input');
+      custom.type='text'; custom.placeholder='พิมพ์ชื่ออุปกรณ์'; custom.value=row.custom;
+      custom.style.marginTop='6px';
+      custom.oninput = ()=>{ row.custom = custom.value; updatePreview(); };
+      wrap.appendChild(custom);
+    }
+
+    container.appendChild(wrap);
+  });
+}
+
+function addFixRow(){
+  state.fixes.push({product:"", qty:1, custom:"", oldModel:"", oldModelCustom:""});
+  renderFixRows();
+  updatePreview();
+}
+function removeFixRow(idx){
+  state.fixes.splice(idx,1);
+  renderFixRows();
+  updatePreview();
+}
+function renderFixRows(){
+  const container = document.getElementById('fixRows');
+  const locked = !!stockLock;
   const options = locked ? Object.keys(stockLock.items) : PRODUCTS;
   container.innerHTML = '';
-  state[kind].forEach((row, idx)=>{
-    const div = document.createElement('div');
-    div.className = 'item-row';
+  state.fixes.forEach((row, idx)=>{
+    const wrap = document.createElement('div');
+    wrap.className = 'fix-entry';
+
+    const line = document.createElement('div');
+    line.className = 'item-row';
 
     const sel = document.createElement('select');
     sel.required = true;
@@ -601,7 +679,7 @@ function renderItemRows(kind){
       if(p===row.product) o.selected=true;
       sel.appendChild(o);
     });
-    sel.onchange = ()=>{ row.product = sel.value; row.qty = locked ? (stockLock.items[row.product]||1) : row.qty; updatePreview(); renderItemRows(kind); };
+    sel.onchange = ()=>{ row.product = sel.value; row.qty = locked ? (stockLock.items[row.product]||1) : row.qty; updatePreview(); renderFixRows(); };
 
     const qty = document.createElement('input');
     qty.type = locked ? 'number' : 'text';
@@ -619,22 +697,49 @@ function renderItemRows(kind){
 
     const rm = document.createElement('button');
     rm.className='btn-remove'; rm.textContent='×'; rm.type='button';
-    rm.onclick = ()=> removeItemRow(kind, idx);
+    rm.onclick = ()=> removeFixRow(idx);
 
-    div.appendChild(sel); div.appendChild(qty); div.appendChild(rm);
-    container.appendChild(div);
+    line.appendChild(sel); line.appendChild(qty); line.appendChild(rm);
+    wrap.appendChild(line);
 
     if(!locked && row.product === "อื่นๆ (พิมพ์เอง)"){
       const custom = document.createElement('input');
       custom.type='text'; custom.placeholder='พิมพ์ชื่ออุปกรณ์'; custom.value=row.custom;
-      custom.style.marginBottom='8px';
+      custom.style.marginTop='6px';
       custom.oninput = ()=>{ row.custom = custom.value; updatePreview(); };
-      container.appendChild(custom);
+      wrap.appendChild(custom);
     }
+
+    const oldWrap = document.createElement('div');
+    oldWrap.className = 'old-model-row';
+    const oldLabel = document.createElement('label');
+    oldLabel.textContent = 'รุ่นเก่าที่เปลี่ยน (ถ้ามี)';
+    const oldSel = document.createElement('select');
+    const oldBlank = document.createElement('option');
+    oldBlank.value=''; oldBlank.textContent='-- ไม่มีการเปลี่ยนอุปกรณ์ --'; oldSel.appendChild(oldBlank);
+    PRODUCTS.forEach(p=>{
+      const o = document.createElement('option');
+      o.value=p; o.textContent=p;
+      if(p===row.oldModel) o.selected=true;
+      oldSel.appendChild(o);
+    });
+    oldSel.onchange = ()=>{ row.oldModel = oldSel.value; updatePreview(); renderFixRows(); };
+    oldWrap.appendChild(oldLabel); oldWrap.appendChild(oldSel);
+
+    if(row.oldModel === "อื่นๆ (พิมพ์เอง)"){
+      const oldCustom = document.createElement('input');
+      oldCustom.type='text'; oldCustom.placeholder='พิมพ์ชื่อรุ่นเก่า'; oldCustom.value=row.oldModelCustom;
+      oldCustom.style.marginTop='6px';
+      oldCustom.oninput = ()=>{ row.oldModelCustom = oldCustom.value; updatePreview(); };
+      oldWrap.appendChild(oldCustom);
+    }
+
+    wrap.appendChild(oldWrap);
+    container.appendChild(wrap);
   });
-  const addBtn = document.getElementById('addInstalledBtn');
-  if(kind === 'installed' && addBtn){
-    addBtn.disabled = locked && state.installed.length >= options.length;
+  const addBtn = document.getElementById('addFixBtn');
+  if(addBtn){
+    addBtn.disabled = locked && state.fixes.length >= options.length;
   }
 }
 
@@ -669,30 +774,40 @@ function renderChecklist(){
     const lbl = document.createElement('div');
     lbl.className = 'lbl';
     lbl.innerHTML = `<span class="mark">🔺</span><span>${item.text}</span>`;
-    const sel = document.createElement('select');
-    sel.className = 'status-select';
-    sel.required = true;
-    STATUS_OPTS[item.type].forEach(opt=>{
-      const o = document.createElement('option');
-      o.value = opt; o.textContent = opt;
-      if(state.checklist[item.key] === opt) o.selected = true;
-      sel.appendChild(o);
-    });
-    sel.onchange = ()=>{
-      state.checklist[item.key] = sel.value;
-      sel.classList.toggle('bad', /ต้องแก้ไข|ไม่สำเร็จ|ไม่ชัด|ไม่เสถียร|ชำรุด|บางส่วน/.test(sel.value));
+
+    const toggle = document.createElement('label');
+    toggle.className = 'check-toggle' + (state.checklist[item.key] ? ' checked' : '');
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.checked = !!state.checklist[item.key];
+    const txt = document.createElement('span');
+    txt.textContent = CHECK_PASS_LABEL[item.type];
+    cb.onchange = ()=>{
+      state.checklist[item.key] = cb.checked;
+      toggle.classList.toggle('checked', cb.checked);
       updatePreview();
     };
-    box.appendChild(lbl); box.appendChild(sel);
+    toggle.appendChild(cb); toggle.appendChild(txt);
+
+    box.appendChild(lbl); box.appendChild(toggle);
     wrap.appendChild(box);
   });
 }
 
-function itemLine(row){
-  const name = row.product === "อื่นๆ (พิมพ์เอง)" ? (row.custom || "-") : row.product;
+function problemLine(row){
+  const name = row.equipment === "อื่นๆ (พิมพ์เอง)" ? (row.custom || "") : row.equipment;
+  const parts = [name, row.symptom].filter(Boolean);
+  if(!parts.length) return null;
+  return `- ${parts.join(': ')}`;
+}
+
+function fixLine(row){
+  const name = row.product === "อื่นๆ (พิมพ์เอง)" ? (row.custom || "") : row.product;
   if(!name) return null;
   const qty = row.qty ? ` x${row.qty}` : '';
-  return `- ${name}${qty}`;
+  const oldName = row.oldModel === "อื่นๆ (พิมพ์เอง)" ? (row.oldModelCustom || "") : row.oldModel;
+  const oldPart = oldName ? ` (เปลี่ยนจาก ${oldName})` : '';
+  return `- ${name}${qty}${oldPart}`;
 }
 
 function buildMessage(){
@@ -705,16 +820,16 @@ function buildMessage(){
   lines.push(`ผู้ทดสอบ: ${tester.techName || '-'}`);
   lines.push('');
 
-  const removedLines = state.removed.map(itemLine).filter(Boolean);
-  if(removedLines.length){
-    lines.push('ถอด');
-    lines.push(...removedLines);
+  const problemLines = state.problems.map(problemLine).filter(Boolean);
+  if(problemLines.length){
+    lines.push('ปัญหา');
+    lines.push(...problemLines);
     lines.push('');
   }
-  const installedLines = state.installed.map(itemLine).filter(Boolean);
-  if(installedLines.length){
-    lines.push('ติดตั้ง');
-    lines.push(...installedLines);
+  const fixLines = state.fixes.map(fixLine).filter(Boolean);
+  if(fixLines.length){
+    lines.push('แก้ไข');
+    lines.push(...fixLines);
     lines.push('');
   }
 
@@ -726,9 +841,9 @@ function buildMessage(){
   lines.push('');
 
   TEMPLATES[state.tpl].checklist.forEach(item=>{
-    const v = state.checklist[item.key];
+    const done = !!state.checklist[item.key];
     lines.push(`🔺${item.text}`);
-    lines.push(`: ${v && v !== STATUS_OPTS[item.type][0] ? v : '(ยังไม่เลือก)'}`);
+    lines.push(`: ${done ? CHECK_PASS_LABEL[item.type] : '(ยังไม่ตรวจสอบ)'}`);
   });
 
   return lines.join('\n');
@@ -742,7 +857,7 @@ function getMissingFields(){
     if(!state.stickers[s.key] || state.stickers[s.key] === STATUS_OPTS.sticker[0]) missing.push(s.text);
   });
   TEMPLATES[state.tpl].checklist.forEach(item=>{
-    if(!state.checklist[item.key] || state.checklist[item.key] === STATUS_OPTS[item.type][0]) missing.push(item.text);
+    if(!state.checklist[item.key]) missing.push(item.text);
   });
   return missing;
 }
@@ -804,8 +919,8 @@ async function sendToLine(){
 
 function renderAll(){
   renderTabs();
-  renderItemRows('removed');
-  renderItemRows('installed');
+  renderProblemRows();
+  renderFixRows();
   renderStickers();
   renderChecklist();
   updatePreview();
@@ -839,8 +954,8 @@ document.addEventListener('visibilitychange', ()=>{
 });
 
 // seed one empty row each so the form isn't empty on load
-state.removed.push({product:'', qty:1, custom:''});
-state.installed.push({product:'', qty:1, custom:''});
+state.problems.push({equipment:'', symptom:'', custom:''});
+state.fixes.push({product:'', qty:1, custom:'', oldModel:'', oldModelCustom:''});
 renderAll();
 </script>
 
