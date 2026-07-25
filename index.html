@@ -704,7 +704,7 @@ function renderProblemRows(){
 }
 
 function addFixRow(){
-  state.fixes.push({product:"", qty:1, custom:"", oldModel:"", oldModelCustom:"", description:""});
+  state.fixes.push({product:"", qty:1, custom:"", oldModel:"", oldModelCustom:""});
   renderFixRows();
   updatePreview();
 }
@@ -792,18 +792,6 @@ function renderFixRows(){
 
     wrap.appendChild(oldWrap);
 
-    const descWrap = document.createElement('div');
-    descWrap.className = 'old-model-row';
-    const descLabel = document.createElement('label');
-    descLabel.textContent = 'รายละเอียดการแก้ไข (เขียนเต็มประโยค ถ้าต้องการ)';
-    const desc = document.createElement('textarea');
-    desc.rows = 2;
-    desc.placeholder = 'เช่น ทำการเปลี่ยนตัวบันทึก Sandisk-Ultra-128-SD เป็น SD Card 32 GB ตัวบันทึกทำงานปกติ';
-    desc.value = row.description || '';
-    desc.oninput = ()=>{ row.description = desc.value; updatePreview(); };
-    descWrap.appendChild(descLabel); descWrap.appendChild(desc);
-    wrap.appendChild(descWrap);
-
     container.appendChild(wrap);
   });
   const addBtn = document.getElementById('addFixBtn');
@@ -869,13 +857,15 @@ function problemLine(row){
 }
 
 function fixLine(row){
-  if(row.description) return `- ${row.description}`;
   const name = row.product === "อื่นๆ (พิมพ์เอง)" ? (row.custom || "") : row.product;
-  if(!name) return null;
-  const qty = row.qty ? ` x${row.qty}` : '';
   const oldName = row.oldModel === "อื่นๆ (พิมพ์เอง)" ? (row.oldModelCustom || "") : row.oldModel;
-  const oldPart = oldName ? ` (เปลี่ยนจาก ${oldName})` : '';
-  return `- ${name}${qty}${oldPart}`;
+  if(oldName && name) return `- ทำการเปลี่ยน ${oldName} เป็น ${name}`;
+  if(name){
+    const qty = row.qty ? ` x${row.qty}` : '';
+    return `- ทำการติดตั้ง ${name}${qty}`;
+  }
+  if(oldName) return `- ทำการถอด ${oldName}`;
+  return null;
 }
 
 // Compact ถอด/ติดตั้ง summary derived from the same fix rows (oldModel =
@@ -1049,7 +1039,7 @@ document.addEventListener('visibilitychange', ()=>{
 
 // seed one empty row each so the form isn't empty on load
 state.problems.push({symptom:''});
-state.fixes.push({product:'', qty:1, custom:'', oldModel:'', oldModelCustom:'', description:''});
+state.fixes.push({product:'', qty:1, custom:'', oldModel:'', oldModelCustom:''});
 renderAll();
 </script>
 
