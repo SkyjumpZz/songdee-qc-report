@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.5.1">
+<meta name="app-version" content="1.5.2">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -167,6 +167,15 @@
   .tpl-tabs button.active{
     background:rgba(255,176,32,0.12); border-color:var(--accent); color:var(--accent);
   }
+  .page-tabs{display:flex; gap:6px; margin-top:10px;}
+  .page-tabs a, .page-tabs span.tab{
+    flex:1; padding:9px 8px; border-radius:9px; border:1px solid var(--line);
+    background:var(--bg-panel-2); color:var(--text-dim); font-family:'Kanit',sans-serif;
+    font-size:13px; font-weight:500; text-align:center; text-decoration:none; cursor:pointer;
+  }
+  .page-tabs .active{
+    background:rgba(255,176,32,0.12); border-color:var(--accent); color:var(--accent); cursor:default;
+  }
   .preview{
     font-family:'IBM Plex Sans Thai', sans-serif;
     font-size:13.5px; line-height:1.85; white-space:pre-wrap;
@@ -266,10 +275,13 @@
   <div class="tester-bar app-hidden" id="testerBar">
     <span>ผู้ทดสอบ: <span class="who" id="testerName"></span></span>
     <span>
-      <a class="logout" href="history.html">ประวัติ</a>
       <span class="logout" onclick="startNewReport()">+ รายงานใหม่</span>
       <span class="logout" onclick="doLogout()">ออกจากระบบ</span>
     </span>
+  </div>
+  <div class="page-tabs app-hidden" id="pageTabs">
+    <span class="tab active">ฟอร์ม</span>
+    <a href="history.html">ประวัติ</a>
   </div>
 </header>
 
@@ -414,6 +426,7 @@ _auth.onAuthStateChanged(async user=>{
   const appMain = document.getElementById('appMain');
   const actionBar = document.getElementById('actionBar');
   const testerBar = document.getElementById('testerBar');
+  const pageTabs = document.getElementById('pageTabs');
   if(!user){
     tester = { uid:null, techName:null };
     stockLock = null;
@@ -424,6 +437,7 @@ _auth.onAuthStateChanged(async user=>{
     appMain.classList.add('app-hidden');
     actionBar.classList.add('app-hidden');
     testerBar.classList.add('app-hidden');
+    pageTabs.classList.add('app-hidden');
     return;
   }
   const err = document.getElementById('loginError');
@@ -441,6 +455,7 @@ _auth.onAuthStateChanged(async user=>{
     appMain.classList.remove('app-hidden');
     actionBar.classList.remove('app-hidden');
     testerBar.classList.remove('app-hidden');
+    pageTabs.classList.remove('app-hidden');
     updatePreview();
     scheduleStockLockCheck();
     loadAssignments();
