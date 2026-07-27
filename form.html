@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.7.0">
+<meta name="app-version" content="1.7.1">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -292,7 +292,8 @@
       </div>
       <div>
         <label>ทะเบียน<span class="req">*</span></label>
-        <input type="text" id="jobPlate" placeholder="เช่น 1กก-1234">
+        <input type="text" id="jobPlate" placeholder="เช่น 1กก-1234" list="plateList" autocomplete="off">
+        <datalist id="plateList"></datalist>
       </div>
     </div>
   </div>
@@ -400,6 +401,7 @@ _auth.onAuthStateChanged(async user=>{
     scheduleStockLockCheck();
     loadAssignments();
     loadReportFromUrlIfAny();
+    loadPlateSuggestions();
   }catch(e){
     alert('โหลดข้อมูลสิทธิ์ไม่สำเร็จ: ' + e.message);
     await _auth.signOut();
@@ -497,6 +499,26 @@ async function loadVehicleOldModels(){
     vehicleOldModels = [];
   }
   renderFixRows();
+}
+
+// ทะเบียน autocomplete — suggests known plates from the same sheet while
+// typing (still free text, not a hard lock, so a vehicle not yet in the
+// sheet can still be entered). Loaded once per session, not per keystroke.
+async function loadPlateSuggestions(){
+  try{
+    const res = await fetch('https://songdee-vehicle-lookup.songdeegps.workers.dev/plates');
+    const data = await res.json();
+    const plates = Array.isArray(data.plates) ? data.plates : [];
+    const list = document.getElementById('plateList');
+    list.innerHTML = '';
+    plates.forEach(p=>{
+      const o = document.createElement('option');
+      o.value = p;
+      list.appendChild(o);
+    });
+  }catch(e){
+    console.error('[Plate suggestions]', e);
+  }
 }
 
 // ---------------------------------------------------------------
