@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.6.0">
+<meta name="app-version" content="1.6.1">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -975,26 +975,28 @@ function buildLineCard(){
   fields.push({label:'ทะเบียน', value: state.plate || '-'});
   fields.push({label:'ผู้ทดสอบ', value: tester.techName || '-'});
 
-  const items = [];
+  const sections = [];
   const problemLines = state.problems.map(problemLine).filter(Boolean);
   if(problemLines.length){
-    items.push('❗ ปัญหา');
-    items.push(...problemLines.map(l=>'  ' + l.replace(/^- /,'• ')));
+    sections.push({ heading:'❗ ปัญหา', lines: problemLines.map(l=>l.replace(/^- /,'• ')) });
   }
   const fixLines = state.fixes.map(fixLine).filter(Boolean);
   if(fixLines.length){
-    items.push('🔧 แก้ไข');
-    items.push(...fixLines.map(l=>'  ' + l.replace(/^- /,'• ')));
+    sections.push({ heading:'🔧 แก้ไข', lines: fixLines.map(l=>l.replace(/^- /,'• ')) });
   }
-  items.push('🔹 สติ๊กเกอร์ 3 จุด');
-  STICKERS.forEach(s=>{
-    const v = state.stickers[s.key];
-    items.push(`  • ${s.text}: ${v && v !== STATUS_OPTS.sticker[0] ? v : '(ยังไม่เลือก)'}`);
+  sections.push({
+    heading: '🔹 สติ๊กเกอร์ 3 จุด',
+    lines: STICKERS.map(s=>{
+      const v = state.stickers[s.key];
+      return `• ${s.text}: ${v && v !== STATUS_OPTS.sticker[0] ? v : '(ยังไม่เลือก)'}`;
+    })
   });
-  items.push('✅ รายการตรวจสอบ');
-  TEMPLATES[state.tpl].checklist.forEach(item=>{
-    const done = !!state.checklist[item.key];
-    items.push(`  • ${item.text}: ${done ? CHECK_PASS_LABEL[item.type] : '(ยังไม่ตรวจสอบ)'}`);
+  sections.push({
+    heading: '✅ รายการตรวจสอบ',
+    lines: TEMPLATES[state.tpl].checklist.map(item=>{
+      const done = !!state.checklist[item.key];
+      return `• ${item.text}: ${done ? CHECK_PASS_LABEL[item.type] : '(ยังไม่ตรวจสอบ)'}`;
+    })
   });
 
   return {
@@ -1002,7 +1004,7 @@ function buildLineCard(){
     color: '#3ddc97',
     badge: `📋 ${dateStr}`,
     fields,
-    items
+    sections
   };
 }
 
