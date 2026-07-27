@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.7.1">
+<meta name="app-version" content="1.8.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -992,6 +992,38 @@ function fixLine(row){
   return null;
 }
 
+// Sheet write-back — only for fix rows where รุ่นเก่า was picked from the
+// "จากประวัติทะเบียนนี้" group, because only then do we know which sheet
+// column to overwrite (the label carries its source column). Rows using a
+// generic PRODUCTS oldModel are skipped — we can't tell which cell they map
+// to. New value written = the newly installed product name.
+function buildSheetUpdates(){
+  const updates = [];
+  state.fixes.forEach(row=>{
+    const src = vehicleOldModels.find(m=> m.label === row.oldModel);
+    if(!src) return;
+    const newName = row.product === "อื่นๆ (พิมพ์เอง)" ? (row.custom || "") : row.product;
+    if(!newName) return;
+    updates.push({ column: src.column, value: newName });
+  });
+  return updates;
+}
+
+async function pushSheetUpdates(){
+  const updates = buildSheetUpdates();
+  if(!updates.length) return null; // nothing maps to a known sheet cell
+  const plate = (state.plate || '').trim();
+  if(!plate) return null;
+  const res = await fetch('https://songdee-vehicle-lookup.songdeegps.workers.dev/update', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ plate, updates })
+  });
+  const data = await res.json();
+  if(!res.ok || !data.ok) throw new Error(data.error || ('HTTP ' + res.status));
+  return data;
+}
+
 function buildMessage(){
   const dateStr = state.date ? state.date.split('-').reverse().join('/') : '(ยังไม่ระบุวันที่)';
   const lines = [];
@@ -1131,7 +1163,20 @@ async function sendToLine(){
   let saveError = null;
   try{ await saveReport(); }
   catch(e){ saveError = e; console.error('[Report save]', e); }
-  const saveSuffix = saveError ? ` (บันทึกลง database ไม่สำเร็จ: ${saveError.message})` : '';
+  let saveSuffix = saveError ? ` (บันทึกลง database ไม่สำเร็จ: ${saveError.message})` : '';
+
+  // Update the MDVR Tracking sheet for any equipment swapped from the
+  // vehicle-history picker. Failure here is non-fatal — the report still
+  // sends; we just note it in the toast.
+  try{
+    const sheetRes = await pushSheetUpdates();
+    if(sheetRes && sheetRes.updated && sheetRes.updated.length){
+      saveSuffix += ` · อัปเดตชีต ${sheetRes.updated.length} รายการ ✓`;
+    }
+  }catch(e){
+    console.error('[Sheet update]', e);
+    saveSuffix += ` (อัปเดตชีตไม่สำเร็จ: ${e.message})`;
+  }
 
   if(!endpoint){
     navigator.clipboard.writeText(text).catch(()=>{});
