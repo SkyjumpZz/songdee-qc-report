@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.6.1">
+<meta name="app-version" content="1.6.2">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -146,10 +146,12 @@
     margin-bottom:8px;
   }
   .fix-entry{
-    margin-bottom:14px; padding-bottom:12px; border-bottom:1px dashed var(--line-soft);
+    border:1px solid var(--line-soft); border-radius:10px;
+    padding:12px; margin-bottom:10px; background:var(--bg-panel-2);
   }
-  .fix-entry:last-child{border-bottom:none; margin-bottom:0; padding-bottom:0;}
-  .old-model-row{margin-top:8px;}
+  .fix-entry:last-child{margin-bottom:0;}
+  .fix-entry .item-row{margin-bottom:0;}
+  .old-model-row{margin-top:10px; padding-top:10px; border-top:1px solid var(--line);}
   .old-model-row label{font-size:11.5px; margin:0 0 5px;}
   .sticker-grid{display:grid; gap:9px;}
   .sticker-row{
@@ -970,6 +972,7 @@ function buildLineCard(){
   const dateStr = state.date ? state.date.split('-').reverse().join('/') : '(ยังไม่ระบุวันที่)';
 
   const fields = [];
+  fields.push({label:'วันที่', value: dateStr});
   if(state.customer) fields.push({label:'ลูกค้า', value: state.customer});
   if(state.fleet) fields.push({label:'Fleet', value: state.fleet});
   fields.push({label:'ทะเบียน', value: state.plate || '-'});
