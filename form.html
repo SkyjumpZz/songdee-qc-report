@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.8.0">
+<meta name="app-version" content="1.9.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -246,6 +246,7 @@
   <div class="tester-bar app-hidden" id="testerBar">
     <span>ผู้ทดสอบ: <span class="who" id="testerName"></span></span>
     <span>
+      <span class="logout" onclick="startNextVehicle()">+ ทะเบียนถัดไป</span>
       <span class="logout" onclick="startNewReport()">+ รายงานใหม่</span>
       <span class="logout" onclick="doLogout()">ออกจากระบบ</span>
     </span>
@@ -670,6 +671,32 @@ function startNewReport(){
   banner.textContent = '';
   banner.className = 'stock-lock-banner';
   renderAll();
+}
+
+// For a customer visit covering several vehicles: keep วันที่/ลูกค้า/Fleet
+// and the job type tab, but reset everything specific to one ทะเบียน
+// (plate, ปัญหา/แก้ไข/สติ๊กเกอร์/checklist, stock-lock, old-model lookup)
+// so the next vehicle's report starts clean without retyping customer info.
+function startNextVehicle(){
+  const keepDate = state.date;
+  const keepCustomer = state.customer;
+  const keepFleet = state.fleet;
+  const keepTpl = state.tpl;
+  currentReportId = null;
+  state = defaultState();
+  state.date = keepDate;
+  state.customer = keepCustomer;
+  state.fleet = keepFleet;
+  state.tpl = keepTpl;
+  document.getElementById('editingBanner').classList.add('app-hidden');
+  syncFormInputsFromState();
+  stockLock = null;
+  vehicleOldModels = [];
+  const banner = document.getElementById('stockLockBanner');
+  banner.textContent = '';
+  banner.className = 'stock-lock-banner';
+  renderAll();
+  showToast('เริ่มทะเบียนถัดไป (ลูกค้าเดิม) — กรอกทะเบียนใหม่ได้เลย');
 }
 
 // ---------------------------------------------------------------
