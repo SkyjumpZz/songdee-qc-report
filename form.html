@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.6.2">
+<meta name="app-version" content="1.7.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -421,7 +421,7 @@ let _stockLockTimer = null;
 
 function scheduleStockLockCheck(){
   clearTimeout(_stockLockTimer);
-  _stockLockTimer = setTimeout(checkStockLock, 500);
+  _stockLockTimer = setTimeout(()=>{ checkStockLock(); loadVehicleOldModels(); }, 500);
 }
 
 async function checkStockLock(){
@@ -467,6 +467,36 @@ async function checkStockLock(){
   }
   renderFixRows();
   updatePreview();
+}
+
+// ---------------------------------------------------------------
+// Vehicle old-model lookup — songdee-vehicle-lookup (a small dedicated
+// Worker, not shared with any other app) reads the "MDVR Tracking"
+// Google Sheet server-side (Google's CSV export has no CORS headers, so
+// a browser can't fetch it directly) and returns this ทะเบียน's
+// currently-recorded equipment (MDVR model, Ch1-Ch9 cameras, SD cards,
+// sensors/accessories) as options for "รุ่นเก่าที่เปลี่ยน" — much more
+// accurate than picking blind from the generic PRODUCTS catalog.
+// ---------------------------------------------------------------
+const VEHICLE_LOOKUP_ENDPOINT = 'https://songdee-vehicle-lookup.songdeegps.workers.dev/vehicle';
+let vehicleOldModels = [];
+
+async function loadVehicleOldModels(){
+  const plate = (state.plate || '').trim();
+  if(!plate){
+    vehicleOldModels = [];
+    renderFixRows();
+    return;
+  }
+  try{
+    const res = await fetch(`${VEHICLE_LOOKUP_ENDPOINT}?plate=${encodeURIComponent(plate)}`);
+    const data = await res.json();
+    vehicleOldModels = Array.isArray(data.items) ? data.items : [];
+  }catch(e){
+    console.error('[Vehicle lookup]', e);
+    vehicleOldModels = [];
+  }
+  renderFixRows();
 }
 
 // ---------------------------------------------------------------
@@ -613,6 +643,7 @@ function startNewReport(){
   document.getElementById('editingBanner').classList.add('app-hidden');
   syncFormInputsFromState();
   stockLock = null;
+  vehicleOldModels = [];
   const banner = document.getElementById('stockLockBanner');
   banner.textContent = '';
   banner.className = 'stock-lock-banner';
@@ -830,12 +861,26 @@ function renderFixRows(){
     const oldSel = document.createElement('select');
     const oldBlank = document.createElement('option');
     oldBlank.value=''; oldBlank.textContent='-- ไม่มีการเปลี่ยนอุปกรณ์ --'; oldSel.appendChild(oldBlank);
+    if(vehicleOldModels.length){
+      const vehGroup = document.createElement('optgroup');
+      vehGroup.label = `จากประวัติทะเบียนนี้ (${state.plate})`;
+      vehicleOldModels.forEach(m=>{
+        const o = document.createElement('option');
+        o.value=m.label; o.textContent=m.label;
+        if(m.label===row.oldModel) o.selected=true;
+        vehGroup.appendChild(o);
+      });
+      oldSel.appendChild(vehGroup);
+    }
+    const genGroup = document.createElement('optgroup');
+    genGroup.label = 'อุปกรณ์ทั่วไป';
     PRODUCTS.forEach(p=>{
       const o = document.createElement('option');
       o.value=p; o.textContent=p;
       if(p===row.oldModel) o.selected=true;
-      oldSel.appendChild(o);
+      genGroup.appendChild(o);
     });
+    oldSel.appendChild(genGroup);
     oldSel.onchange = ()=>{ row.oldModel = oldSel.value; updatePreview(); renderFixRows(); };
     oldWrap.appendChild(oldLabel); oldWrap.appendChild(oldSel);
 
