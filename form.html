@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.9.0">
+<meta name="app-version" content="1.10.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -730,6 +730,16 @@ const CHECK_PASS_LABEL = {
   symptom: "แก้ไขตามอาการที่แจ้งเรียบร้อย"
 };
 
+// Which sections apply per job type:
+// - ติดตั้งใหม่: only the equipment installed — no ปัญหา, no รุ่นเก่าที่เปลี่ยน
+//   (there's nothing old to log; it's a brand-new install).
+// - อัปเกรด: logs the old equipment being replaced, but no ปัญหา section
+//   (an upgrade isn't fixing a reported issue).
+// - ซ่อม: logs ปัญหา, and รุ่นเก่าที่เปลี่ยน is optional (may or may not
+//   involve swapping a part).
+function tplHasProblems(tpl){ return tpl === "repair"; }
+function tplHasOldModel(tpl){ return tpl !== "new_install"; }
+
 // Checklist templates per job type. "อัปเกรด" matches the reference report format.
 const TEMPLATES = {
   upgrade: {
@@ -805,9 +815,16 @@ function renderTabs(){
     const b = document.createElement('button');
     b.textContent = t.label;
     b.className = key === state.tpl ? 'active' : '';
-    b.onclick = ()=>{ state.tpl = key; state.checklist = {}; renderAll(); };
+    b.onclick = ()=>{
+      state.tpl = key;
+      state.checklist = {};
+      if(!tplHasProblems(key)) state.problems = [{symptom:""}];
+      if(!tplHasOldModel(key)) state.fixes.forEach(row=>{ row.oldModel = ''; row.oldModelCustom = ''; });
+      renderAll();
+    };
     wrap.appendChild(b);
   });
+  document.getElementById('problemsCard').classList.toggle('app-hidden', !tplHasProblems(state.tpl));
 }
 
 function addProblemRow(){
@@ -903,45 +920,47 @@ function renderFixRows(){
       wrap.appendChild(custom);
     }
 
-    const oldWrap = document.createElement('div');
-    oldWrap.className = 'old-model-row';
-    const oldLabel = document.createElement('label');
-    oldLabel.textContent = 'รุ่นเก่าที่เปลี่ยน (ถ้ามี)';
-    const oldSel = document.createElement('select');
-    const oldBlank = document.createElement('option');
-    oldBlank.value=''; oldBlank.textContent='-- ไม่มีการเปลี่ยนอุปกรณ์ --'; oldSel.appendChild(oldBlank);
-    if(vehicleOldModels.length){
-      const vehGroup = document.createElement('optgroup');
-      vehGroup.label = `จากประวัติทะเบียนนี้ (${state.plate})`;
-      vehicleOldModels.forEach(m=>{
+    if(tplHasOldModel(state.tpl)){
+      const oldWrap = document.createElement('div');
+      oldWrap.className = 'old-model-row';
+      const oldLabel = document.createElement('label');
+      oldLabel.textContent = 'รุ่นเก่าที่เปลี่ยน (ถ้ามี)';
+      const oldSel = document.createElement('select');
+      const oldBlank = document.createElement('option');
+      oldBlank.value=''; oldBlank.textContent='-- ไม่มีการเปลี่ยนอุปกรณ์ --'; oldSel.appendChild(oldBlank);
+      if(vehicleOldModels.length){
+        const vehGroup = document.createElement('optgroup');
+        vehGroup.label = `จากประวัติทะเบียนนี้ (${state.plate})`;
+        vehicleOldModels.forEach(m=>{
+          const o = document.createElement('option');
+          o.value=m.label; o.textContent=m.label;
+          if(m.label===row.oldModel) o.selected=true;
+          vehGroup.appendChild(o);
+        });
+        oldSel.appendChild(vehGroup);
+      }
+      const genGroup = document.createElement('optgroup');
+      genGroup.label = 'อุปกรณ์ทั่วไป';
+      PRODUCTS.forEach(p=>{
         const o = document.createElement('option');
-        o.value=m.label; o.textContent=m.label;
-        if(m.label===row.oldModel) o.selected=true;
-        vehGroup.appendChild(o);
+        o.value=p; o.textContent=p;
+        if(p===row.oldModel) o.selected=true;
+        genGroup.appendChild(o);
       });
-      oldSel.appendChild(vehGroup);
-    }
-    const genGroup = document.createElement('optgroup');
-    genGroup.label = 'อุปกรณ์ทั่วไป';
-    PRODUCTS.forEach(p=>{
-      const o = document.createElement('option');
-      o.value=p; o.textContent=p;
-      if(p===row.oldModel) o.selected=true;
-      genGroup.appendChild(o);
-    });
-    oldSel.appendChild(genGroup);
-    oldSel.onchange = ()=>{ row.oldModel = oldSel.value; updatePreview(); renderFixRows(); };
-    oldWrap.appendChild(oldLabel); oldWrap.appendChild(oldSel);
+      oldSel.appendChild(genGroup);
+      oldSel.onchange = ()=>{ row.oldModel = oldSel.value; updatePreview(); renderFixRows(); };
+      oldWrap.appendChild(oldLabel); oldWrap.appendChild(oldSel);
 
-    if(row.oldModel === "อื่นๆ (พิมพ์เอง)"){
-      const oldCustom = document.createElement('input');
-      oldCustom.type='text'; oldCustom.placeholder='พิมพ์ชื่อรุ่นเก่า'; oldCustom.value=row.oldModelCustom;
-      oldCustom.style.marginTop='6px';
-      oldCustom.oninput = ()=>{ row.oldModelCustom = oldCustom.value; updatePreview(); };
-      oldWrap.appendChild(oldCustom);
-    }
+      if(row.oldModel === "อื่นๆ (พิมพ์เอง)"){
+        const oldCustom = document.createElement('input');
+        oldCustom.type='text'; oldCustom.placeholder='พิมพ์ชื่อรุ่นเก่า'; oldCustom.value=row.oldModelCustom;
+        oldCustom.style.marginTop='6px';
+        oldCustom.oninput = ()=>{ row.oldModelCustom = oldCustom.value; updatePreview(); };
+        oldWrap.appendChild(oldCustom);
+      }
 
-    wrap.appendChild(oldWrap);
+      wrap.appendChild(oldWrap);
+    }
 
     container.appendChild(wrap);
   });
