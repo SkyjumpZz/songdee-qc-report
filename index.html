@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>Dashboard · SONGDEE GPS</title>
-<meta name="app-version" content="1.6.0">
+<meta name="app-version" content="1.6.1">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -258,14 +258,15 @@ async function loadDashboard(){
   listEl.textContent = 'กำลังโหลด...';
   const todayStr = new Date().toISOString().slice(0,10);
   try{
-    const [totalSnap, todaySnap, recentSnap] = await Promise.all([
-      _db.collection('qc_reports').count().get(),
-      _db.collection('qc_reports').where('date', '==', todayStr).count().get(),
-      _db.collection('qc_reports').orderBy('createdAt', 'desc').limit(20).get()
-    ]);
-    document.getElementById('statTotal').textContent = totalSnap.data().count;
-    document.getElementById('statToday').textContent = todaySnap.data().count;
-    renderList(recentSnap.docs.map(d=>({id:d.id, ...d.data()})));
+    // firebase-firestore-compat doesn't expose count() aggregate queries here,
+    // and where()+orderBy() on different fields needs a composite index we
+    // don't have — fetch one ordered page (no where clause) and derive both
+    // stats from it client-side instead.
+    const snap = await _db.collection('qc_reports').orderBy('createdAt', 'desc').limit(1000).get();
+    const all = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    document.getElementById('statTotal').textContent = all.length;
+    document.getElementById('statToday').textContent = all.filter(d=>d.date===todayStr).length;
+    renderList(all.slice(0, 20));
   }catch(e){
     listEl.className = 'err';
     listEl.textContent = 'โหลด Dashboard ไม่สำเร็จ: ' + e.message;

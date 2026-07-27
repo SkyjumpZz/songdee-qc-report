@@ -140,12 +140,16 @@ _auth.onAuthStateChanged(async user=>{
     document.getElementById('pageTabs').style.display = 'flex';
 
     listEl.textContent = 'กำลังโหลด...';
+    // where()+orderBy() on different fields needs a composite index we don't
+    // have — filter by techUid only, sort client-side instead.
     const snap = await _db.collection('qc_reports')
       .where('techUid', '==', user.uid)
-      .orderBy('createdAt', 'desc')
-      .limit(100)
+      .limit(200)
       .get();
-    renderList(snap.docs.map(d=>({id:d.id, ...d.data()})));
+    const list = snap.docs
+      .map(d=>({id:d.id, ...d.data()}))
+      .sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
+    renderList(list);
   }catch(e){
     listEl.innerHTML = `<div class="err">โหลดประวัติไม่สำเร็จ: ${escapeHtmlLite(e.message)}</div>`;
   }
