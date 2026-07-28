@@ -1228,10 +1228,15 @@ async function pushDeviceSwaps(){
   return results;
 }
 
-// ISSUE Tracking close — only fires when a matching open ticket was found
-// for this plate and the tech left "ปิด Issue นี้เมื่อส่งรายงาน" checked.
+// ISSUE Tracking close — only fires when a matching open ticket was found,
+// the tech left "ปิด Issue นี้เมื่อส่งรายงาน" checked, AND the issueBanner
+// was actually visible (tplHasProblems — issueBanner lives in problemsCard,
+// which is hidden for อัปเกรด/ติดตั้งใหม่). Without that last check this
+// would silently close an unrelated open ticket the tech never saw, just
+// because it happened to match the plate — openIssue/closeIssueChecked are
+// set from the plate lookup regardless of which job-type tab is active.
 async function pushIssueClose(){
-  if(!openIssue || !closeIssueChecked) return null;
+  if(!openIssue || !closeIssueChecked || !tplHasProblems(state.tpl)) return null;
   const dateStr = state.date ? state.date.split('-').reverse().join('/') : '';
   const fixLines = state.fixes.map(fixLine).filter(Boolean);
   const res = await fetch('https://songdee-vehicle-lookup.songdeegps.workers.dev/issue-close', {
