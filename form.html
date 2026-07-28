@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.10.0">
+<meta name="app-version" content="1.11.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -301,6 +301,7 @@
 
   <div class="card" id="problemsCard">
     <div class="card-title"><span class="dot"></span>ปัญหา</div>
+    <div class="stock-lock-banner app-hidden" id="issueBanner"></div>
     <div id="problemRows"></div>
     <button class="btn-add" onclick="addProblemRow()">+ เพิ่มปัญหา</button>
   </div>
@@ -424,7 +425,7 @@ let _stockLockTimer = null;
 
 function scheduleStockLockCheck(){
   clearTimeout(_stockLockTimer);
-  _stockLockTimer = setTimeout(()=>{ checkStockLock(); loadVehicleOldModels(); }, 500);
+  _stockLockTimer = setTimeout(()=>{ checkStockLock(); loadVehicleOldModels(); loadDeviceLookup(); loadOpenIssue(); }, 500);
 }
 
 async function checkStockLock(){
@@ -500,6 +501,81 @@ async function loadVehicleOldModels(){
     vehicleOldModels = [];
   }
   renderFixRows();
+}
+
+// AI Box / ADAS / DMS currently installed on this plate, so the "SN เดิม"
+// field can be pre-filled instead of the tech having to go find it —
+// still editable in case the sheet is stale or the plate has none on file.
+const DEVICES_ENDPOINT = 'https://songdee-vehicle-lookup.songdeegps.workers.dev/devices';
+let deviceLookup = {};
+
+async function loadDeviceLookup(){
+  const plate = (state.plate || '').trim();
+  if(!plate){
+    deviceLookup = {};
+    renderFixRows();
+    return;
+  }
+  try{
+    const res = await fetch(`${DEVICES_ENDPOINT}?plate=${encodeURIComponent(plate)}`);
+    deviceLookup = await res.json();
+  }catch(e){
+    console.error('[Device lookup]', e);
+    deviceLookup = {};
+  }
+  renderFixRows();
+}
+
+// ISSUE Tracking — admin only carries ทะเบียน+ปัญหา into a tech's job, no
+// shared ticket ID, so we look up the latest still-open ticket for this
+// plate the same way and offer to close it (FIXED DATE/DETAILS/TECHNICIAN)
+// when the report is sent, instead of admin having to close it by hand.
+const ISSUE_ENDPOINT = 'https://songdee-vehicle-lookup.songdeegps.workers.dev/issue';
+const ISSUE_CLOSE_ENDPOINT = 'https://songdee-vehicle-lookup.songdeegps.workers.dev/issue-close';
+let openIssue = null; // {found, ticketNo, feedback} or null
+let closeIssueChecked = true;
+
+async function loadOpenIssue(){
+  const plate = (state.plate || '').trim();
+  const banner = document.getElementById('issueBanner');
+  if(!plate){
+    openIssue = null;
+    banner.classList.add('app-hidden');
+    return;
+  }
+  try{
+    const res = await fetch(`${ISSUE_ENDPOINT}?plate=${encodeURIComponent(plate)}`);
+    const data = await res.json();
+    openIssue = data && data.found ? data : null;
+  }catch(e){
+    console.error('[Issue lookup]', e);
+    openIssue = null;
+  }
+  renderIssueBanner();
+}
+
+function renderIssueBanner(){
+  const banner = document.getElementById('issueBanner');
+  if(!openIssue){
+    banner.classList.add('app-hidden');
+    banner.innerHTML = '';
+    return;
+  }
+  banner.classList.remove('app-hidden');
+  banner.className = 'stock-lock-banner warn';
+  banner.innerHTML = '';
+  const text = document.createElement('div');
+  text.textContent = `พบ Issue ที่ยังไม่ปิด: ${openIssue.ticketNo || '(ไม่มีเลขที่)'} — ${openIssue.feedback || ''}`;
+  const toggle = document.createElement('label');
+  toggle.style.cssText = 'display:flex;align-items:center;gap:6px;margin-top:6px;cursor:pointer;';
+  const cb = document.createElement('input');
+  cb.type = 'checkbox';
+  cb.checked = closeIssueChecked;
+  cb.onchange = ()=>{ closeIssueChecked = cb.checked; };
+  const lbl = document.createElement('span');
+  lbl.textContent = 'ปิด Issue นี้เมื่อส่งรายงาน';
+  toggle.appendChild(cb); toggle.appendChild(lbl);
+  banner.appendChild(text); banner.appendChild(toggle);
 }
 
 // ทะเบียน autocomplete — suggests known plates from the same sheet while
@@ -630,7 +706,7 @@ function loadReportIntoForm(doc){
     fleet: doc.fleet || '',
     plate: doc.plate || '',
     problems: (doc.problems && doc.problems.length) ? doc.problems : [{symptom:''}],
-    fixes: (doc.fixes && doc.fixes.length) ? doc.fixes : [{product:'', qty:1, custom:'', oldModel:'', oldModelCustom:''}],
+    fixes: (doc.fixes && doc.fixes.length) ? doc.fixes : [{product:'', qty:1, custom:'', oldModel:'', oldModelCustom:'', newSN:'', oldSN:''}],
     stickers: doc.stickers || {},
     checklist: doc.checklist || {},
   };
@@ -667,9 +743,13 @@ function startNewReport(){
   syncFormInputsFromState();
   stockLock = null;
   vehicleOldModels = [];
+  deviceLookup = {};
+  openIssue = null;
+  closeIssueChecked = true;
   const banner = document.getElementById('stockLockBanner');
   banner.textContent = '';
   banner.className = 'stock-lock-banner';
+  renderIssueBanner();
   renderAll();
 }
 
@@ -692,9 +772,13 @@ function startNextVehicle(){
   syncFormInputsFromState();
   stockLock = null;
   vehicleOldModels = [];
+  deviceLookup = {};
+  openIssue = null;
+  closeIssueChecked = true;
   const banner = document.getElementById('stockLockBanner');
   banner.textContent = '';
   banner.className = 'stock-lock-banner';
+  renderIssueBanner();
   renderAll();
   showToast('เริ่มทะเบียนถัดไป (ลูกค้าเดิม) — กรอกทะเบียนใหม่ได้เลย');
 }
@@ -709,8 +793,20 @@ const PRODUCTS = [
   "Motor", "โมดูล 3G/GPS", "Intercom", "สายกล้องเก่า", "ME41-04 V.3 AI",
   "กล้อง AI", "สาย 5 เมตร (4 เส้น)", "สาย 10 เมตร (2 เส้น)", "ซิมการ์ด",
   "DMS V.3", "ฐานรองกล้อง", "เสาอากาศ GPS", "เสาอากาศ 3G", "สายไฟหลัก MDVR",
+  "AI Box", "ADAS",
   "อื่นๆ (พิมพ์เอง)"
 ];
+
+// Products tracked by serial number in their own Ai Box Tracking-spreadsheet
+// tabs (unlike everything else in PRODUCTS, which is just a named part with
+// no per-unit identity) — maps to songdee-vehicle-lookup's /devices and
+// /device-swap `type` values. Selecting one of these shows an SN field so
+// the swap can move the right physical unit in the sheet.
+const DEVICE_TYPE_BY_PRODUCT = {
+  "AI Box": "aibox",
+  "ADAS": "adas",
+  "DMS V.3": "dms",
+};
 
 const STATUS_OPTS = {
   sticker: ["-- เลือกผล --","ติดเรียบร้อย","ลูกค้าไม่ให้ติด"]
@@ -793,7 +889,7 @@ function defaultState(){
     fleet: "",
     plate: "",
     problems: [{symptom:""}],
-    fixes: [{product:"", qty:1, custom:"", oldModel:"", oldModelCustom:""}],
+    fixes: [{product:"", qty:1, custom:"", oldModel:"", oldModelCustom:"", newSN:"", oldSN:""}],
     stickers: {},
     checklist: {},
   };
@@ -858,7 +954,7 @@ function renderProblemRows(){
 }
 
 function addFixRow(){
-  state.fixes.push({product:"", qty:1, custom:"", oldModel:"", oldModelCustom:""});
+  state.fixes.push({product:"", qty:1, custom:"", oldModel:"", oldModelCustom:"", newSN:"", oldSN:""});
   renderFixRows();
   updatePreview();
 }
@@ -920,6 +1016,14 @@ function renderFixRows(){
       wrap.appendChild(custom);
     }
 
+    if(DEVICE_TYPE_BY_PRODUCT[row.product]){
+      const newSN = document.createElement('input');
+      newSN.type='text'; newSN.placeholder='SN เครื่องใหม่ (จาก Ai Box/ADAS/DMS Tracking)';
+      newSN.value = row.newSN || ''; newSN.style.marginTop='6px';
+      newSN.oninput = ()=>{ row.newSN = newSN.value; updatePreview(); };
+      wrap.appendChild(newSN);
+    }
+
     if(tplHasOldModel(state.tpl)){
       const oldWrap = document.createElement('div');
       oldWrap.className = 'old-model-row';
@@ -948,7 +1052,12 @@ function renderFixRows(){
         genGroup.appendChild(o);
       });
       oldSel.appendChild(genGroup);
-      oldSel.onchange = ()=>{ row.oldModel = oldSel.value; updatePreview(); renderFixRows(); };
+      oldSel.onchange = ()=>{
+        row.oldModel = oldSel.value;
+        const type = DEVICE_TYPE_BY_PRODUCT[row.oldModel];
+        if(type && !row.oldSN && deviceLookup[type]) row.oldSN = deviceLookup[type].sn || '';
+        updatePreview(); renderFixRows();
+      };
       oldWrap.appendChild(oldLabel); oldWrap.appendChild(oldSel);
 
       if(row.oldModel === "อื่นๆ (พิมพ์เอง)"){
@@ -957,6 +1066,14 @@ function renderFixRows(){
         oldCustom.style.marginTop='6px';
         oldCustom.oninput = ()=>{ row.oldModelCustom = oldCustom.value; updatePreview(); };
         oldWrap.appendChild(oldCustom);
+      }
+
+      if(DEVICE_TYPE_BY_PRODUCT[row.oldModel]){
+        const oldSN = document.createElement('input');
+        oldSN.type='text'; oldSN.placeholder='SN เครื่องเดิม (auto จากประวัติทะเบียนถ้ามี)';
+        oldSN.value = row.oldSN || ''; oldSN.style.marginTop='6px';
+        oldSN.oninput = ()=>{ row.oldSN = oldSN.value; updatePreview(); };
+        oldWrap.appendChild(oldSN);
       }
 
       wrap.appendChild(oldWrap);
@@ -1029,12 +1146,14 @@ function problemLine(row){
 function fixLine(row){
   const name = row.product === "อื่นๆ (พิมพ์เอง)" ? (row.custom || "") : row.product;
   const oldName = row.oldModel === "อื่นๆ (พิมพ์เอง)" ? (row.oldModelCustom || "") : row.oldModel;
-  if(oldName && name) return `- ทำการเปลี่ยน ${oldName} เป็น ${name}`;
+  const newTag = (DEVICE_TYPE_BY_PRODUCT[row.product] && row.newSN) ? ` (SN: ${row.newSN})` : '';
+  const oldTag = (DEVICE_TYPE_BY_PRODUCT[row.oldModel] && row.oldSN) ? ` (SN เดิม: ${row.oldSN})` : '';
+  if(oldName && name) return `- ทำการเปลี่ยน ${oldName}${oldTag} เป็น ${name}${newTag}`;
   if(name){
     const qty = row.qty ? ` x${row.qty}` : '';
-    return `- ทำการติดตั้ง ${name}${qty}`;
+    return `- ทำการติดตั้ง ${name}${qty}${newTag}`;
   }
-  if(oldName) return `- ทำการถอด ${oldName}`;
+  if(oldName) return `- ทำการถอด ${oldName}${oldTag}`;
   return null;
 }
 
@@ -1064,6 +1183,69 @@ async function pushSheetUpdates(){
     method:'POST',
     headers:{'Content-Type':'application/json'},
     body: JSON.stringify({ plate, updates })
+  });
+  const data = await res.json();
+  if(!res.ok || !data.ok) throw new Error(data.error || ('HTTP ' + res.status));
+  return data;
+}
+
+// AI Box/ADAS/DMS swap write-back — one payload per fix row that touches
+// a serial-tracked product (via product and/or oldModel), moving the
+// device(s) between plates in the Ai Box Tracking spreadsheet.
+function buildDeviceSwaps(){
+  const dateStr = state.date ? state.date.split('-').reverse().join('/') : '';
+  const swaps = [];
+  state.fixes.forEach(row=>{
+    const newType = DEVICE_TYPE_BY_PRODUCT[row.product];
+    const oldType = DEVICE_TYPE_BY_PRODUCT[row.oldModel];
+    const type = newType || oldType;
+    if(!type) return;
+    const oldSN = (oldType === type) ? (row.oldSN || '').trim() : '';
+    const newSN = (newType === type) ? (row.newSN || '').trim() : '';
+    if(!oldSN && !newSN) return;
+    swaps.push({
+      type, plate: state.plate, customer: state.customer,
+      technician: tester.techName, date: dateStr, oldSN, newSN,
+    });
+  });
+  return swaps;
+}
+
+async function pushDeviceSwaps(){
+  const swaps = buildDeviceSwaps();
+  if(!swaps.length) return null;
+  const results = [];
+  for(const payload of swaps){
+    const res = await fetch('https://songdee-vehicle-lookup.songdeegps.workers.dev/device-swap', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if(!res.ok || !data.ok) throw new Error(data.error || ('HTTP ' + res.status));
+    results.push(data);
+  }
+  return results;
+}
+
+// ISSUE Tracking close — only fires when a matching open ticket was found,
+// the tech left "ปิด Issue นี้เมื่อส่งรายงาน" checked, AND the issueBanner
+// was actually visible (tplHasProblems — issueBanner lives in problemsCard,
+// which is hidden for อัปเกรด/ติดตั้งใหม่). Without that last check this
+// would silently close an unrelated open ticket the tech never saw, just
+// because it happened to match the plate — openIssue/closeIssueChecked are
+// set from the plate lookup regardless of which job-type tab is active.
+async function pushIssueClose(){
+  if(!openIssue || !closeIssueChecked || !tplHasProblems(state.tpl)) return null;
+  const dateStr = state.date ? state.date.split('-').reverse().join('/') : '';
+  const fixLines = state.fixes.map(fixLine).filter(Boolean);
+  const res = await fetch('https://songdee-vehicle-lookup.songdeegps.workers.dev/issue-close', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({
+      plate: state.plate, ticketNo: openIssue.ticketNo,
+      fixedDetails: fixLines.join('\n'), technician: tester.techName, date: dateStr,
+    })
   });
   const data = await res.json();
   if(!res.ok || !data.ok) throw new Error(data.error || ('HTTP ' + res.status));
@@ -1222,6 +1404,29 @@ async function sendToLine(){
   }catch(e){
     console.error('[Sheet update]', e);
     saveSuffix += ` (อัปเดตชีตไม่สำเร็จ: ${e.message})`;
+  }
+
+  // Move any AI Box/ADAS/DMS unit swapped this visit in the Ai Box Tracking
+  // spreadsheet. Also non-fatal — the report still sends either way.
+  try{
+    const swapRes = await pushDeviceSwaps();
+    if(swapRes && swapRes.length){
+      saveSuffix += ` · อัปเดต Ai Box/ADAS/DMS ${swapRes.length} รายการ ✓`;
+    }
+  }catch(e){
+    console.error('[Device swap]', e);
+    saveSuffix += ` (อัปเดต Ai Box/ADAS/DMS ไม่สำเร็จ: ${e.message})`;
+  }
+
+  // Close the matching ISSUE Tracking ticket, if the tech left it checked.
+  try{
+    const issueRes = await pushIssueClose();
+    if(issueRes){
+      saveSuffix += ` · ปิด Issue ${issueRes.ticketNo || ''} ✓`;
+    }
+  }catch(e){
+    console.error('[Issue close]', e);
+    saveSuffix += ` (ปิด Issue ไม่สำเร็จ: ${e.message})`;
   }
 
   if(!endpoint){
