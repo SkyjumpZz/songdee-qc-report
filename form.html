@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.11.1">
+<meta name="app-version" content="1.12.1">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -307,7 +307,7 @@
   </div>
 
   <div class="card" id="fixesCard">
-    <div class="card-title"><span class="dot"></span>แก้ไข</div>
+    <div class="card-title"><span class="dot"></span><span id="fixesCardTitle">แก้ไข</span></div>
     <div class="stock-lock-banner" id="stockLockBanner"></div>
     <div id="fixRows"></div>
     <button class="btn-add" id="addFixBtn" onclick="addFixRow()">+ เพิ่มรายการแก้ไข</button>
@@ -836,6 +836,20 @@ const CHECK_PASS_LABEL = {
 function tplHasProblems(tpl){ return tpl === "repair"; }
 function tplHasOldModel(tpl){ return tpl !== "new_install"; }
 
+// The "แก้ไข" card holds a different kind of entry per job type (pure
+// install vs a remove+install swap vs an actual repair fix) — label it
+// accordingly instead of always saying "แก้ไข".
+const FIXES_CARD_LABEL = {
+  new_install: "อุปกรณ์ที่ติดตั้ง",
+  upgrade: "ถอด/ติดตั้ง",
+  repair: "แก้ไข",
+};
+const FIXES_ADD_BTN_LABEL = {
+  new_install: "+ เพิ่มอุปกรณ์ที่ติดตั้ง",
+  upgrade: "+ เพิ่มรายการถอด/ติดตั้ง",
+  repair: "+ เพิ่มรายการแก้ไข",
+};
+
 // Checklist templates per job type. "อัปเกรด" matches the reference report format.
 const TEMPLATES = {
   upgrade: {
@@ -921,6 +935,8 @@ function renderTabs(){
     wrap.appendChild(b);
   });
   document.getElementById('problemsCard').classList.toggle('app-hidden', !tplHasProblems(state.tpl));
+  document.getElementById('fixesCardTitle').textContent = FIXES_CARD_LABEL[state.tpl] || 'แก้ไข';
+  document.getElementById('addFixBtn').textContent = FIXES_ADD_BTN_LABEL[state.tpl] || '+ เพิ่มรายการแก้ไข';
 }
 
 function addProblemRow(){
