@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.12.1">
+<meta name="app-version" content="1.13.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -309,6 +309,7 @@
   <div class="card" id="fixesCard">
     <div class="card-title"><span class="dot"></span><span id="fixesCardTitle">แก้ไข</span></div>
     <div class="stock-lock-banner" id="stockLockBanner"></div>
+    <div class="stock-lock-banner app-hidden" id="vehicleEquipmentBanner"></div>
     <div id="fixRows"></div>
     <button class="btn-add" id="addFixBtn" onclick="addFixRow()">+ เพิ่มรายการแก้ไข</button>
   </div>
@@ -490,6 +491,7 @@ async function loadVehicleOldModels(){
   if(!plate){
     vehicleOldModels = [];
     renderFixRows();
+    renderVehicleEquipmentBanner();
     return;
   }
   try{
@@ -501,6 +503,24 @@ async function loadVehicleOldModels(){
     vehicleOldModels = [];
   }
   renderFixRows();
+  renderVehicleEquipmentBanner();
+}
+
+// Reference list of everything the vehicle currently has on file, shown
+// as soon as ทะเบียน is typed — so a tech doing an อัปเกรด/ซ่อม can see
+// what's on the vehicle right away instead of having to open each แถว's
+// "รุ่นเก่าที่เปลี่ยน" dropdown just to browse what's there. Same source
+// (vehicleOldModels) that dropdown already uses; this is purely a
+// read-only summary, doesn't affect what gets submitted.
+function renderVehicleEquipmentBanner(){
+  const banner = document.getElementById('vehicleEquipmentBanner');
+  if(!tplHasOldModel(state.tpl) || !vehicleOldModels.length){
+    banner.classList.add('app-hidden');
+    banner.textContent = '';
+    return;
+  }
+  banner.classList.remove('app-hidden');
+  banner.textContent = `อุปกรณ์ที่รถนี้มีอยู่ตอนนี้ (จากประวัติทะเบียนนี้): ${vehicleOldModels.map(m=>m.label).join(' · ')}`;
 }
 
 // AI Box / ADAS / DMS currently installed on this plate, so the "SN เดิม"
@@ -937,6 +957,7 @@ function renderTabs(){
   document.getElementById('problemsCard').classList.toggle('app-hidden', !tplHasProblems(state.tpl));
   document.getElementById('fixesCardTitle').textContent = FIXES_CARD_LABEL[state.tpl] || 'แก้ไข';
   document.getElementById('addFixBtn').textContent = FIXES_ADD_BTN_LABEL[state.tpl] || '+ เพิ่มรายการแก้ไข';
+  renderVehicleEquipmentBanner();
 }
 
 function addProblemRow(){
