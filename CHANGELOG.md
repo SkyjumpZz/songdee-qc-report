@@ -164,7 +164,27 @@ the `--env preview` flag is on the command before running it.
 
 ## Status as of last update
 
-- Production (`songdeetest`, `main` branch): **v1.10.0**.
-- `fix/tpl-stale-data-bug` branch: **v1.10.1**, deployed to
-  `songdeetest-preview` only, not yet merged/deployed to production —
-  pending confirmation.
+- Production (`songdeetest`, `main` branch): **v1.12.1**.
+- Includes, on top of the original v1.10.0 tpl-section-visibility split:
+  a separate session's **AI Box/ADAS/DMS serial-number tracking +
+  ISSUE Tracking auto-close** (v1.11.0, pushed to `main` directly from
+  another machine while this session was mid-conversation — see git
+  history around commit `379182a`/`1494cfd`/`fa0591d` for details); a
+  **stale-data fix** (v1.11.1→1.12.1, superseded the abandoned
+  `fix/tpl-stale-data-bug` branch — use `fix/tpl-stale-data-bug-v2`'s
+  history instead) making `fixLine()`/`buildSheetUpdates()`/
+  `buildDeviceSwaps()`/the ปัญหา section in `buildMessage()`/
+  `buildLineCard()` all re-check the *current* tpl, not just whether
+  data exists — same bug class as the pushIssueClose incident, just in
+  more places; and the **FIXES_CARD_LABEL** wording change (v1.12.0)
+  labeling the "แก้ไข" card/button per job type instead of one word for
+  all three.
+- `fix/tpl-stale-data-bug` (v1 — **stale/abandoned**, do not merge):
+  built before the other session's v1.11.0 landed; superseded by
+  `fix/tpl-stale-data-bug-v2`, which is the one actually in `main` now.
+- Verified with a Node-based unit test (loads form.html's inline
+  `<script>` into a `vm` context with a stubbed DOM/firebase, then calls
+  `fixLine`/`buildSheetUpdates`/`buildDeviceSwaps`/`buildMessage`/
+  `buildLineCard` directly against crafted `state`) rather than a live
+  browser login — useful pattern for next time a fix needs proving
+  without a real session.
