@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.13.1">
+<meta name="app-version" content="1.13.2">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -1233,7 +1233,13 @@ async function pushSheetUpdates(){
 // a serial-tracked product (via product and/or oldModel), moving the
 // device(s) between plates in the Ai Box Tracking spreadsheet.
 function buildDeviceSwaps(){
-  const dateStr = state.date ? state.date.split('-').reverse().join('/') : '';
+  // ISO (YYYY-MM-DD), not reformatted — this feeds swapDevice()'s
+  // "Installed Date" write, which has a DATE_IS_VALID data validation rule
+  // on it. ISO parses as a real date regardless of the spreadsheet's
+  // locale; a reformatted DD/MM/YYYY string risks being read as MM/DD (or
+  // rejected outright) depending on locale, silently failing that
+  // validation even though the API write itself reports success.
+  const dateStr = state.date || '';
   // ติดตั้งใหม่ doesn't log an old model — new-device installs are still
   // valid there (newType/newSN), but ignore any stale oldModel/oldSN left
   // over in state from before the tpl-based section split.
@@ -1281,7 +1287,9 @@ async function pushDeviceSwaps(){
 // set from the plate lookup regardless of which job-type tab is active.
 async function pushIssueClose(){
   if(!openIssue || !closeIssueChecked || !tplHasProblems(state.tpl)) return null;
-  const dateStr = state.date ? state.date.split('-').reverse().join('/') : '';
+  // ISO (YYYY-MM-DD) — feeds closeIssue()'s FIXED DATE write, which has a
+  // DATE_IS_VALID rule; see buildDeviceSwaps()'s comment on the same issue.
+  const dateStr = state.date || '';
   const fixLines = state.fixes.map(fixLine).filter(Boolean);
   const res = await fetch('https://songdee-vehicle-lookup.songdeegps.workers.dev/issue-close', {
     method:'POST',
