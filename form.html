@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.13.0">
+<meta name="app-version" content="1.13.1">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -1069,6 +1069,11 @@ function renderFixRows(){
       const oldSel = document.createElement('select');
       const oldBlank = document.createElement('option');
       oldBlank.value=''; oldBlank.textContent='-- ไม่มีการเปลี่ยนอุปกรณ์ --'; oldSel.appendChild(oldBlank);
+      // Only ever sourced from this vehicle's actual recorded equipment —
+      // no generic PRODUCTS catalog fallback group. If nothing's on file
+      // for this plate yet, the only option is "ไม่มีการเปลี่ยนอุปกรณ์";
+      // we don't want techs picking a guessed/generic old model that
+      // isn't really what's on the vehicle.
       if(vehicleOldModels.length){
         const vehGroup = document.createElement('optgroup');
         vehGroup.label = `จากประวัติทะเบียนนี้ (${state.plate})`;
@@ -1080,15 +1085,6 @@ function renderFixRows(){
         });
         oldSel.appendChild(vehGroup);
       }
-      const genGroup = document.createElement('optgroup');
-      genGroup.label = 'อุปกรณ์ทั่วไป';
-      PRODUCTS.forEach(p=>{
-        const o = document.createElement('option');
-        o.value=p; o.textContent=p;
-        if(p===row.oldModel) o.selected=true;
-        genGroup.appendChild(o);
-      });
-      oldSel.appendChild(genGroup);
       oldSel.onchange = ()=>{
         row.oldModel = oldSel.value;
         const type = DEVICE_TYPE_BY_PRODUCT[row.oldModel];
