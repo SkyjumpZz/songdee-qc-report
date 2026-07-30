@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.11.0">
+<meta name="app-version" content="1.11.1">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -1145,9 +1145,15 @@ function problemLine(row){
 
 function fixLine(row){
   const name = row.product === "อื่นๆ (พิมพ์เอง)" ? (row.custom || "") : row.product;
-  const oldName = row.oldModel === "อื่นๆ (พิมพ์เอง)" ? (row.oldModelCustom || "") : row.oldModel;
+  // Ignore oldModel/oldSN for job types that don't show that field — a
+  // report loaded from before the tpl-based section split (or edited
+  // across a tpl switch) can still have it set in state even though the
+  // UI hides it for this job type.
+  const oldName = tplHasOldModel(state.tpl)
+    ? (row.oldModel === "อื่นๆ (พิมพ์เอง)" ? (row.oldModelCustom || "") : row.oldModel)
+    : "";
   const newTag = (DEVICE_TYPE_BY_PRODUCT[row.product] && row.newSN) ? ` (SN: ${row.newSN})` : '';
-  const oldTag = (DEVICE_TYPE_BY_PRODUCT[row.oldModel] && row.oldSN) ? ` (SN เดิม: ${row.oldSN})` : '';
+  const oldTag = (tplHasOldModel(state.tpl) && DEVICE_TYPE_BY_PRODUCT[row.oldModel] && row.oldSN) ? ` (SN เดิม: ${row.oldSN})` : '';
   if(oldName && name) return `- ทำการเปลี่ยน ${oldName}${oldTag} เป็น ${name}${newTag}`;
   if(name){
     const qty = row.qty ? ` x${row.qty}` : '';
@@ -1163,6 +1169,7 @@ function fixLine(row){
 // generic PRODUCTS oldModel are skipped — we can't tell which cell they map
 // to. New value written = the newly installed product name.
 function buildSheetUpdates(){
+  if(!tplHasOldModel(state.tpl)) return []; // this job type doesn't log an old model to swap
   const updates = [];
   state.fixes.forEach(row=>{
     const src = vehicleOldModels.find(m=> m.label === row.oldModel);
@@ -1194,10 +1201,14 @@ async function pushSheetUpdates(){
 // device(s) between plates in the Ai Box Tracking spreadsheet.
 function buildDeviceSwaps(){
   const dateStr = state.date ? state.date.split('-').reverse().join('/') : '';
+  // ติดตั้งใหม่ doesn't log an old model — new-device installs are still
+  // valid there (newType/newSN), but ignore any stale oldModel/oldSN left
+  // over in state from before the tpl-based section split.
+  const allowOld = tplHasOldModel(state.tpl);
   const swaps = [];
   state.fixes.forEach(row=>{
     const newType = DEVICE_TYPE_BY_PRODUCT[row.product];
-    const oldType = DEVICE_TYPE_BY_PRODUCT[row.oldModel];
+    const oldType = allowOld ? DEVICE_TYPE_BY_PRODUCT[row.oldModel] : undefined;
     const type = newType || oldType;
     if(!type) return;
     const oldSN = (oldType === type) ? (row.oldSN || '').trim() : '';
@@ -1260,7 +1271,7 @@ function buildMessage(){
   lines.push(`ทะเบียน: ${state.plate || '(ยังไม่ระบุ)'}`);
   lines.push('');
 
-  const problemLines = state.problems.map(problemLine).filter(Boolean);
+  const problemLines = tplHasProblems(state.tpl) ? state.problems.map(problemLine).filter(Boolean) : [];
   if(problemLines.length){
     lines.push('ปัญหา');
     lines.push(...problemLines);
@@ -1306,7 +1317,7 @@ function buildLineCard(){
   fields.push({label:'ผู้ทดสอบ', value: tester.techName || '-'});
 
   const sections = [];
-  const problemLines = state.problems.map(problemLine).filter(Boolean);
+  const problemLines = tplHasProblems(state.tpl) ? state.problems.map(problemLine).filter(Boolean) : [];
   if(problemLines.length){
     sections.push({ heading:'❗ ปัญหา', lines: problemLines.map(l=>l.replace(/^- /,'• ')) });
   }
