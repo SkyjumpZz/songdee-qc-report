@@ -42,6 +42,49 @@ machines/sessions (not just in chat history).
     the one production endpoint before/after deploying (it's a
     read-only lookup, no write-path risk).
 
+## ISSUE Tracking write-back — found and fixed a real bug via testing
+
+Testing `pushIssueClose()` (closes a matching open ISSUES-All ticket
+when a report is sent — feature built by the other session, see
+`6007f4f` in songdee-vehicle-lookup) surfaced a real, live bug:
+**closing a ticket silently failed to register from the app's own
+point of view**, because ISSUES-All's FIXED DATE column has a
+`DATE_IS_VALID` data validation rule that `writeCell()`'s default
+`RAW` value-input mode doesn't satisfy — the write succeeds (200 OK)
+but the cell fails that validation, and this app's own gviz-based reads
+then still see the ticket as open. Full root-cause and fix are in
+songdee-vehicle-lookup's own CHANGELOG.md (commit `1a145c5`); the
+matching client-side half of the fix is here (commit `44cd80b`,
+v1.13.2): `buildDeviceSwaps()`/`pushIssueClose()` now send the date as
+ISO (`YYYY-MM-DD`) instead of reformatting to `DD/MM/YYYY`, which is
+locale-ambiguous for Sheets' date parser.
+
+**How this was tested without a disposable test account**: appending a
+fake test row to ISSUES-All was tried first but blocked — the sheet
+protects column A (Ticket No) for all rows, which blocks inserting any
+new row at all via the service account (confirmed via a read-only
+`protectedRanges` check, not just trial and error). Fell back to the
+same "safe round-trip" technique used for the original MDVR write-back:
+picked an already-closed historical ticket (`SDML/000001`, closed since
+2020) and wrote its own existing values back through the real
+`/issue-close` endpoint, verifying before/after via a fresh read. The
+*first* attempt (via a shell `curl` command with Thai text inline)
+corrupted the row — separately from the DATE_IS_VALID bug, Windows
+shell argument encoding mangled the Thai `FEEDBACK DETAILS`/`FIXED
+DETAILS` text. Both issues were caught immediately (this app's own
+`/issue` endpoint started reporting the closed ticket as open again)
+and fixed within the same session — restored via a direct Node script
+(no shell argument involved) rather than shell commands with
+non-ASCII text embedded.
+
+**Lesson for next time**: prefer a Node/JS script over inline shell
+commands whenever a test payload contains non-ASCII (Thai) text — do
+not trust curl's `-d` with Thai characters as an argument on Windows.
+Also: a `200 OK` from the Sheets API does not guarantee a column's own
+data validation was satisfied — check for validation rules on a target
+column (`spreadsheets.get` with `includeGridData`, read-only) before
+assuming a write "took" in every sense a downstream reader cares about.
+
 ## App structure (3 pages, one Cloudflare Worker `songdeetest`)
 
 - `index.html` — **Dashboard**, the landing page. Owns the login form.
@@ -191,7 +234,7 @@ the `--env preview` flag is on the command before running it.
 
 ## Status as of last update
 
-- Production (`songdeetest`, `main` branch): **v1.13.1**.
+- Production (`songdeetest`, `main` branch): **v1.13.2**.
 - Includes, on top of the original v1.10.0 tpl-section-visibility split:
   a separate session's **AI Box/ADAS/DMS serial-number tracking +
   ISSUE Tracking auto-close** (v1.11.0, pushed to `main` directly from
