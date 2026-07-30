@@ -59,6 +59,14 @@ v1.13.2): `buildDeviceSwaps()`/`pushIssueClose()` now send the date as
 ISO (`YYYY-MM-DD`) instead of reformatting to `DD/MM/YYYY`, which is
 locale-ambiguous for Sheets' date parser.
 
+While testing, also confirmed (directly with the project owner, not
+assumed from data — every sample ISSUES-All row, open or closed, showed
+`COMPLIANCE=YES`, so it couldn't be inferred from the sheet alone) that
+`COMPLIANCE` means "was this problem fixed" (YES) vs "still has a
+problem" (NO/Unknown/Wait approve). `closeIssue()` (songdee-vehicle-lookup,
+commit `58ad610`) now also writes `COMPLIANCE=YES` when closing a
+ticket — no change needed on this side, purely a server-side addition.
+
 **How this was tested without a disposable test account**: appending a
 fake test row to ISSUES-All was tried first but blocked — the sheet
 protects column A (Ticket No) for all rows, which blocks inserting any
