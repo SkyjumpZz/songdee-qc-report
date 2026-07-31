@@ -55,21 +55,31 @@
   .tester-bar .who{color:var(--accent-2); font-weight:600;}
   .tester-bar a, .tester-bar .link{cursor:pointer; text-decoration:underline; text-underline-offset:2px; color:inherit;}
   main{max-width:640px; margin:0 auto; padding:16px 16px 60px;}
+  .date-group-title{
+    font-size:12px; font-weight:600; color:var(--accent); letter-spacing:.03em;
+    margin:16px 0 8px;
+  }
+  .date-group-title:first-child{margin-top:0;}
   .history-item{
     border:1px solid var(--line-soft); border-radius:10px; padding:12px 14px;
     margin-bottom:10px; cursor:pointer; background:var(--bg-panel); text-decoration:none; display:block;
+    box-shadow:0 2px 8px rgba(0,0,0,0.12);
+    transition:border-color .15s ease, transform .1s ease;
   }
-  .history-item:hover{border-color:var(--accent);}
+  .history-item:hover{border-color:var(--accent); transform:translateY(-1px);}
   .history-item .title{font-size:14px; font-weight:600; color:var(--text);}
   .history-item .meta{font-size:12px; color:var(--text-dim); margin-top:4px;}
   .empty, .err, .loading{color:var(--text-dim); font-size:13px; padding:40px 0; text-align:center;}
+  .empty .icon{font-size:28px; display:block; margin-bottom:10px; opacity:.6;}
   .err{color:var(--danger);}
   .page-tabs{display:flex; gap:6px; margin-top:10px;}
   .page-tabs a, .page-tabs span.tab{
     flex:1; padding:9px 8px; border-radius:9px; border:1px solid var(--line);
     background:var(--bg-panel-2); color:var(--text-dim); font-family:'Kanit',sans-serif;
     font-size:13px; font-weight:500; text-align:center; text-decoration:none; cursor:pointer;
+    transition:border-color .15s ease, color .15s ease, background-color .15s ease;
   }
+  .page-tabs a:hover{border-color:var(--accent); color:var(--accent);}
   .page-tabs .active{
     background:rgba(255,176,32,0.12); border-color:var(--accent); color:var(--accent); cursor:default;
   }
@@ -155,15 +165,37 @@ _auth.onAuthStateChanged(async user=>{
   }
 });
 
+// Groups by วันนี้/เมื่อวาน/ก่อนหน้านี้ so scanning your own report history
+// doesn't read as one flat wall — same treatment as the Dashboard list.
+function dateGroupLabel(dateISO){
+  if(!dateISO) return 'ไม่ระบุวันที่';
+  const today = new Date(); today.setHours(0,0,0,0);
+  const yesterday = new Date(today); yesterday.setDate(today.getDate()-1);
+  const d = new Date(dateISO + 'T00:00:00');
+  if(d.getTime() === today.getTime()) return 'วันนี้';
+  if(d.getTime() === yesterday.getTime()) return 'เมื่อวาน';
+  return 'ก่อนหน้านี้';
+}
+
 function renderList(list){
   const listEl = document.getElementById('list');
   if(!list.length){
-    listEl.innerHTML = '<div class="empty">ยังไม่มีรายงาน</div>';
+    listEl.className = 'empty';
+    listEl.innerHTML = '<span class="icon">📋</span>ยังไม่มีรายงาน';
     return;
   }
   listEl.innerHTML = '';
   listEl.className = '';
+  let lastGroup = null;
   list.forEach(doc=>{
+    const group = dateGroupLabel(doc.date);
+    if(group !== lastGroup){
+      const h = document.createElement('div');
+      h.className = 'date-group-title';
+      h.textContent = group;
+      listEl.appendChild(h);
+      lastGroup = group;
+    }
     const dateStr = doc.date ? doc.date.split('-').reverse().join('/') : '(ไม่ระบุวันที่)';
     const tplLabel = TEMPLATE_LABELS[doc.tpl] || doc.tpl || '';
     const a = document.createElement('a');
