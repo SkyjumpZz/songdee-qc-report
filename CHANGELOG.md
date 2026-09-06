@@ -19,7 +19,17 @@ machines/sessions (not just in chat history).
 - **songdee-line-proxy** (private) — shared Cloudflare Worker used by
   stock/admin/qc-report to push LINE Flex Message cards. We added a
   backward-compatible `sections` field to its `buildFlexCard()` (see
-  below) — existing `items`-based callers are unaffected.
+  below) — existing `items`-based callers are unaffected. Also gained
+  optional `imageUrl` (hero image) and `links` (multi-button footer)
+  fields for the photo-attachment feature below — both backward
+  compatible, existing callers (`items`/single `linkUrl`) unaffected.
+- **songdee-drive-proxy** (private) — shared Cloudflare Worker
+  (previously songdee-admin-only) that uploads a base64 image to Google
+  Drive via a Service Account and returns a public `viewUrl`. This
+  app's origin (`songdeetest`/`songdeetest-preview`) was added to its
+  `ALLOWED_ORIGINS`, and it gained an optional `category` field (used
+  here as `"qc-report"`) to keep this app's uploads in their own Drive
+  subfolder instead of mixing with Admin's.
 - **songdee-vehicle-lookup** (private) — dedicated Worker that reads
   the "MDVR Tracking" Google Sheet server-side (Google's CSV export
   sends no CORS headers, so a browser can't fetch it directly).
@@ -41,6 +51,50 @@ machines/sessions (not just in chat history).
     to test against, so changes here were verified via `curl` against
     the one production endpoint before/after deploying (it's a
     read-only lookup, no write-path risk).
+
+## Photo attachments (v1.14.0)
+
+Added an optional "แนบรูปภาพ" card (up to 6 photos/report) so a tech can
+attach evidence photos (equipment close-ups, before/after, serial
+plates, etc.) alongside the existing text fields.
+
+- Each picked photo is downscaled + re-encoded as JPEG client-side
+  (canvas, capped at 1440px on the long edge, quality 0.8) before
+  upload — a phone camera photo straight off the sensor is routinely
+  3-8MB, way more than needed for a reference photo and too big to
+  ship comfortably through the Drive proxy's JSON body.
+- On "ส่งเข้า LINE", any not-yet-uploaded photos are POSTed one at a
+  time (no concurrency, to avoid slamming the Drive API) to
+  **songdee-drive-proxy**'s `/upload` (`date`/`plate`/`category:
+  "qc-report"` passed through for Drive folder organization). Only the
+  returned `viewUrl` is ever kept — the base64 bytes are dropped from
+  memory right after a successful upload, and never written to
+  Firestore.
+  - Non-fatal like the existing sheet-update/device-swap/issue-close
+    calls in `sendToLine()`: a failed photo upload just drops that one
+    photo from the message/card/save and shows a count in the toast —
+    it doesn't block the rest of the report from sending.
+- The first successfully uploaded photo becomes the LINE Flex card's
+  hero image (`buildLineCard()`'s new `imageUrl`); any additional
+  photos become footer link buttons (`links`) — see the
+  songdee-line-proxy note above. `buildMessage()`'s plain-text preview
+  (and clipboard-copy fallback) also lists every uploaded photo's
+  `viewUrl` as a plain link, so the photos stay reachable even if the
+  Flex card doesn't render for some reason.
+- Persisted to `qc_reports` as `photos: [{name, driveUrl}, ...]` —
+  uploaded ones only, never local/base64 state — so reopening a report
+  from Dashboard/history restores the same viewUrls (re-attaching a
+  removed/re-picked photo just uploads fresh).
+- **Setup required before this actually works end-to-end**: the
+  `DRIVE_API_KEY` constant hardcoded in form.html (same
+  hardcoded-client-secret pattern `LINE_API_KEY` already uses — flagged
+  as a pre-existing issue below, not something new) must match
+  songdee-drive-proxy's `UPLOAD_API_KEY` GitHub Actions secret. A fresh
+  key was generated for this feature; whoever deploys next needs to set
+  it as that repo's `UPLOAD_API_KEY` secret (Settings → Secrets and
+  variables → Actions) before merging/deploying, or photo uploads will
+  fail with 401 (report sending itself still works — see "non-fatal"
+  above).
 
 ## ISSUE Tracking write-back — found and fixed a real bug via testing
 
@@ -167,7 +221,12 @@ All three share a Dashboard/ฟอร์ม/ประวัติ tab bar (`.pag
 - **LINE card**: `sendToLine()` posts a Flex Message card (title/badge/
   fields/sections) via songdee-line-proxy instead of a plain-text wall.
   Sections = ปัญหา/แก้ไข/สติ๊กเกอร์/checklist, each with its own heading
-  and separator so it doesn't read as one undifferentiated blob.
+  and separator so it doesn't read as one undifferentiated blob. Now
+  also carries an optional hero image + link buttons for attached
+  photos — see "Photo attachments" above.
+- **Photo attachments**: optional, up to 6 per report, uploaded to
+  Google Drive via songdee-drive-proxy on send. See "Photo attachments"
+  section above for the full writeup.
 - **Report persistence**: every "ส่งเข้า LINE" click also saves/updates
   a doc in Firestore `qc_reports` (own collection, not shared with
   songdee-stock/songdee-admin's report collections). `currentReportId`
@@ -175,13 +234,14 @@ All three share a Dashboard/ฟอร์ม/ประวัติ tab bar (`.pag
 - **"+ ทะเบียนถัดไป"** (`startNextVehicle()`): for a customer visit
   covering several vehicles, keeps วันที่/ลูกค้า/Fleet/ประเภทงาน but
   resets everything ทะเบียน-specific (plate, ปัญหา/แก้ไข/สติ๊กเกอร์/
-  checklist, stock-lock, old-model lookup) so the next vehicle's report
-  starts clean without retyping customer info. Each vehicle is still its
-  own independent "ส่งเข้า LINE" + `qc_reports` doc — deliberately **not**
-  grouped/batched, since testing happens one vehicle at a time and
-  sometimes by a different technician entirely (decided against adding
-  cross-report grouping on Dashboard/history — not worth it unless a
-  real need for progress-tracking across techs shows up later).
+  checklist, stock-lock, old-model lookup, attached photos) so the next
+  vehicle's report starts clean without retyping customer info. Each
+  vehicle is still its own independent "ส่งเข้า LINE" + `qc_reports`
+  doc — deliberately **not** grouped/batched, since testing happens one
+  vehicle at a time and sometimes by a different technician entirely
+  (decided against adding cross-report grouping on Dashboard/history —
+  not worth it unless a real need for progress-tracking across techs
+  shows up later).
 - **Job-type-dependent sections** (`tplHasProblems()`/`tplHasOldModel()`
   in form.html): ปัญหา and รุ่นเก่าที่เปลี่ยน aren't shown for every
   ประเภทงาน — only where they make sense:
@@ -211,6 +271,10 @@ All three share a Dashboard/ฟอร์ม/ประวัติ tab bar (`.pag
 - **LINE_API_KEY is a real bearer secret hardcoded in client JS** (pre-
   existing, not something we introduced). Flagged early; rotating it is
   outside this app's control (belongs to songdee-line-proxy's owner).
+  `DRIVE_API_KEY` (added for photo attachments) follows the same
+  existing pattern — same caveat applies, and it also needs a matching
+  value set on songdee-drive-proxy's side (see "Photo attachments"
+  above) before it actually works.
 - **Admin's technician names ≠ this app's techName.** Two separate
   identity systems; `ADMIN_NAME_MAP` in form.html bridges them by hand
   per confirmed person — add new entries there as more techs come online.
@@ -242,7 +306,11 @@ the `--env preview` flag is on the command before running it.
 
 ## Status as of last update
 
-- Production (`songdeetest`, `main` branch): **v1.13.2**.
+- Production (`songdeetest`, `main` branch): **v1.13.2** (this session
+  adds **v1.14.0**, photo attachments, on a feature branch — not yet
+  merged/deployed; see "Photo attachments" above for the
+  `UPLOAD_API_KEY` setup step that has to happen before it works
+  end-to-end).
 - Includes, on top of the original v1.10.0 tpl-section-visibility split:
   a separate session's **AI Box/ADAS/DMS serial-number tracking +
   ISSUE Tracking auto-close** (v1.11.0, pushed to `main` directly from
@@ -256,8 +324,9 @@ the `--env preview` flag is on the command before running it.
   data exists — same bug class as the pushIssueClose incident, just in
   more places; the **FIXES_CARD_LABEL** wording change (v1.12.0)
   labeling the "แก้ไข" card/button per job type instead of one word for
-  all three; and the **vehicle equipment banner + no-generic-fallback**
-  change (v1.13.0→1.13.1, see "Key features" above).
+  all three; the **vehicle equipment banner + no-generic-fallback**
+  change (v1.13.0→1.13.1, see "Key features" above); and now **photo
+  attachments** (v1.14.0, see above).
 - **songdee-vehicle-lookup** (separate repo/Worker, only one live URL
   shared by both `songdeetest` and `songdeetest-preview`): equipment
   columns trimmed/relabeled (3G Module/AI System dropped, MCR→
@@ -268,6 +337,10 @@ the `--env preview` flag is on the command before running it.
   another session's AI Box/ADAS/DMS/ISSUE Tracking work
   (`6007f4f`/`4fd758c`) was on `origin/master` but not yet pulled
   locally; fetched and fast-forwarded before making any changes.
+- **songdee-drive-proxy**: previously songdee-admin-only. Gained this
+  app's origins in `ALLOWED_ORIGINS` and an optional `category`
+  subfolder param for the v1.14.0 photo-attachments feature — see
+  "Photo attachments" above.
 - `fix/tpl-stale-data-bug` (v1 — **stale/abandoned**, do not merge):
   built before the other session's v1.11.0 landed; superseded by
   `fix/tpl-stale-data-bug-v2`, which is the one actually in `main` now.
@@ -278,9 +351,15 @@ the `--env preview` flag is on the command before running it.
   than a live browser login, plus a live browser click-through once the
   user logged in themselves on preview and production — useful pattern
   for next time a fix needs proving without Claude ever touching
-  credentials.
+  credentials. The photo-attachment functions (`compressPhotoFile`,
+  `uploadPhotoToDrive`, `buildLineCard`'s new `imageUrl`/`links`) were
+  syntax/logic-checked the same way (no live browser/camera available
+  in this session) — **still needs an actual live-browser pass** (pick
+  a real photo, confirm the compressed upload lands in Drive, confirm
+  the LINE card actually renders the hero image) before trusting it in
+  production.
 - **Reminder for whoever picks this up next (any machine)**: before
-  making changes here or in songdee-vehicle-lookup/songdee-line-proxy,
-  run `git fetch origin && git log --oneline <branch>..origin/<branch>`
-  first — this project has been edited from multiple machines in the
-  same stretch of time more than once already.
+  making changes here or in songdee-vehicle-lookup/songdee-line-proxy/
+  songdee-drive-proxy, run `git fetch origin && git log --oneline
+  <branch>..origin/<branch>` first — this project has been edited from
+  multiple machines in the same stretch of time more than once already.
