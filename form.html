@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.14.0">
+<meta name="app-version" content="1.14.1">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -1647,80 +1647,95 @@ function copyText(){
 
 async function sendToLine(){
   const endpoint = LINE_ENDPOINT.trim();
+  const sendBtn = document.getElementById('sendBtn');
 
-  // Upload any photos still pending first — buildMessage()/buildLineCard()
-  // and saveReport() below all read state.photos[].driveUrl, so this has
-  // to finish before them. Non-fatal: a failed upload just leaves that
-  // photo's driveUrl unset (dropped from the message/card/save), the rest
-  // of the report still sends.
-  let photoSuffix = '';
+  // Photo uploads (compress+POST to Drive per photo, sequential) can easily
+  // take several seconds with nothing else happening on screen — show
+  // immediate feedback and block a second tap instead of leaving the button
+  // looking unresponsive. Always re-enabled in the finally block below.
+  const pendingPhotoCount = state.photos.filter(p=> !p.driveUrl && p.base64).length;
+  if(pendingPhotoCount){
+    sendBtn.disabled = true;
+    showToast(`กำลังอัปโหลดรูป (${pendingPhotoCount} รูป)...`);
+  }
+
   try{
-    const uploaded = await uploadPendingPhotos();
-    if(uploaded.length) photoSuffix += ` · แนบรูป ${uploaded.length} รูป ✓`;
-  }catch(e){ console.error('[Photo upload]', e); }
-  const failedPhotos = state.photos.filter(p=> p.error).length;
-  if(failedPhotos) photoSuffix += ` (แนบรูปไม่สำเร็จ ${failedPhotos} รูป)`;
+    // Upload any photos still pending first — buildMessage()/buildLineCard()
+    // and saveReport() below all read state.photos[].driveUrl, so this has
+    // to finish before them. Non-fatal: a failed upload just leaves that
+    // photo's driveUrl unset (dropped from the message/card/save), the rest
+    // of the report still sends.
+    let photoSuffix = '';
+    try{
+      const uploaded = await uploadPendingPhotos();
+      if(uploaded.length) photoSuffix += ` · แนบรูป ${uploaded.length} รูป ✓`;
+    }catch(e){ console.error('[Photo upload]', e); }
+    const failedPhotos = state.photos.filter(p=> p.error).length;
+    if(failedPhotos) photoSuffix += ` (แนบรูปไม่สำเร็จ ${failedPhotos} รูป)`;
 
-  const text = buildMessage();
+    const text = buildMessage();
 
-  let saveError = null;
-  try{ await saveReport(); }
-  catch(e){ saveError = e; console.error('[Report save]', e); }
-  let saveSuffix = (saveError ? ` (บันทึกลง database ไม่สำเร็จ: ${saveError.message})` : '') + photoSuffix;
+    let saveError = null;
+    try{ await saveReport(); }
+    catch(e){ saveError = e; console.error('[Report save]', e); }
+    let saveSuffix = (saveError ? ` (บันทึกลง database ไม่สำเร็จ: ${saveError.message})` : '') + photoSuffix;
 
-  // Update the MDVR Tracking sheet for any equipment swapped from the
-  // vehicle-history picker. Failure here is non-fatal — the report still
-  // sends; we just note it in the toast.
-  try{
-    const sheetRes = await pushSheetUpdates();
-    if(sheetRes && sheetRes.updated && sheetRes.updated.length){
-      saveSuffix += ` · อัปเดตชีต ${sheetRes.updated.length} รายการ ✓`;
+    // Update the MDVR Tracking sheet for any equipment swapped from the
+    // vehicle-history picker. Failure here is non-fatal — the report still
+    // sends; we just note it in the toast.
+    try{
+      const sheetRes = await pushSheetUpdates();
+      if(sheetRes && sheetRes.updated && sheetRes.updated.length){
+        saveSuffix += ` · อัปเดตชีต ${sheetRes.updated.length} รายการ ✓`;
+      }
+    }catch(e){
+      console.error('[Sheet update]', e);
+      saveSuffix += ` (อัปเดตชีตไม่สำเร็จ: ${e.message})`;
     }
-  }catch(e){
-    console.error('[Sheet update]', e);
-    saveSuffix += ` (อัปเดตชีตไม่สำเร็จ: ${e.message})`;
-  }
 
-  // Move any AI Box/ADAS/DMS unit swapped this visit in the Ai Box Tracking
-  // spreadsheet. Also non-fatal — the report still sends either way.
-  try{
-    const swapRes = await pushDeviceSwaps();
-    if(swapRes && swapRes.length){
-      saveSuffix += ` · อัปเดต Ai Box/ADAS/DMS ${swapRes.length} รายการ ✓`;
+    // Move any AI Box/ADAS/DMS unit swapped this visit in the Ai Box Tracking
+    // spreadsheet. Also non-fatal — the report still sends either way.
+    try{
+      const swapRes = await pushDeviceSwaps();
+      if(swapRes && swapRes.length){
+        saveSuffix += ` · อัปเดต Ai Box/ADAS/DMS ${swapRes.length} รายการ ✓`;
+      }
+    }catch(e){
+      console.error('[Device swap]', e);
+      saveSuffix += ` (อัปเดต Ai Box/ADAS/DMS ไม่สำเร็จ: ${e.message})`;
     }
-  }catch(e){
-    console.error('[Device swap]', e);
-    saveSuffix += ` (อัปเดต Ai Box/ADAS/DMS ไม่สำเร็จ: ${e.message})`;
-  }
 
-  // Close the matching ISSUE Tracking ticket, if the tech left it checked.
-  try{
-    const issueRes = await pushIssueClose();
-    if(issueRes){
-      saveSuffix += ` · ปิด Issue ${issueRes.ticketNo || ''} ✓`;
+    // Close the matching ISSUE Tracking ticket, if the tech left it checked.
+    try{
+      const issueRes = await pushIssueClose();
+      if(issueRes){
+        saveSuffix += ` · ปิด Issue ${issueRes.ticketNo || ''} ✓`;
+      }
+    }catch(e){
+      console.error('[Issue close]', e);
+      saveSuffix += ` (ปิด Issue ไม่สำเร็จ: ${e.message})`;
     }
-  }catch(e){
-    console.error('[Issue close]', e);
-    saveSuffix += ` (ปิด Issue ไม่สำเร็จ: ${e.message})`;
-  }
 
-  if(!endpoint){
-    navigator.clipboard.writeText(text).catch(()=>{});
-    showToast('ยังไม่ได้ตั้งค่า endpoint — คัดลอกข้อความให้แล้ว' + saveSuffix);
-    return;
-  }
-  try{
-    showToast('กำลังส่ง...');
-    const res = await fetch(endpoint, {
-      method:'POST',
-      headers:{'Content-Type':'application/json', 'X-Api-Key': LINE_API_KEY},
-      body: JSON.stringify({ message: buildLineCard() })
-    });
-    if(res.ok){ showToast('ส่งเข้า LINE แล้ว ✓' + saveSuffix); }
-    else{ showToast('ส่งไม่สำเร็จ (' + res.status + ') — คัดลอกข้อความสำรองไว้แล้ว' + saveSuffix); navigator.clipboard.writeText(text).catch(()=>{}); }
-  }catch(err){
-    showToast('เชื่อมต่อ endpoint ไม่ได้ — คัดลอกข้อความสำรองไว้แล้ว' + saveSuffix);
-    navigator.clipboard.writeText(text).catch(()=>{});
+    if(!endpoint){
+      navigator.clipboard.writeText(text).catch(()=>{});
+      showToast('ยังไม่ได้ตั้งค่า endpoint — คัดลอกข้อความให้แล้ว' + saveSuffix);
+      return;
+    }
+    try{
+      showToast('กำลังส่ง...');
+      const res = await fetch(endpoint, {
+        method:'POST',
+        headers:{'Content-Type':'application/json', 'X-Api-Key': LINE_API_KEY},
+        body: JSON.stringify({ message: buildLineCard() })
+      });
+      if(res.ok){ showToast('ส่งเข้า LINE แล้ว ✓' + saveSuffix); }
+      else{ showToast('ส่งไม่สำเร็จ (' + res.status + ') — คัดลอกข้อความสำรองไว้แล้ว' + saveSuffix); navigator.clipboard.writeText(text).catch(()=>{}); }
+    }catch(err){
+      showToast('เชื่อมต่อ endpoint ไม่ได้ — คัดลอกข้อความสำรองไว้แล้ว' + saveSuffix);
+      navigator.clipboard.writeText(text).catch(()=>{});
+    }
+  }finally{
+    sendBtn.disabled = false;
   }
 }
 
