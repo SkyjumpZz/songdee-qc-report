@@ -379,7 +379,9 @@ const LINE_API_KEY = "d124c1ea1175a07fcbf0358d733e0c57d822df836ff3f1004dfa5285fb
 // Google Drive, then the returned public viewUrl is what actually gets
 // sent to LINE/Firestore — never the raw image bytes. This app's origin
 // was added to that Worker's ALLOWED_ORIGINS, and DRIVE_API_KEY here must
-// match the UPLOAD_API_KEY secret configured on songdee-drive-proxy.
+// match the UPLOAD_API_KEY_QC secret configured on songdee-drive-proxy —
+// a separate key from admin's existing UPLOAD_API_KEY, so this never
+// risks admin's own uploads if one key is rotated later.
 const DRIVE_ENDPOINT = "https://songdee-drive-proxy.songdeegps.workers.dev";
 const DRIVE_API_KEY = "d1532dd2c3e8c1bacd5fa27465ebe5bf80d52a0489f7ac3a555786f0d850535e";
 

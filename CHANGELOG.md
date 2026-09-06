@@ -89,9 +89,12 @@ plates, etc.) alongside the existing text fields.
   `DRIVE_API_KEY` constant hardcoded in form.html (same
   hardcoded-client-secret pattern `LINE_API_KEY` already uses — flagged
   as a pre-existing issue below, not something new) must match
-  songdee-drive-proxy's `UPLOAD_API_KEY` GitHub Actions secret. A fresh
-  key was generated for this feature; whoever deploys next needs to set
-  it as that repo's `UPLOAD_API_KEY` secret (Settings → Secrets and
+  songdee-drive-proxy's `UPLOAD_API_KEY_QC` GitHub Actions secret — a
+  **new, separate** secret from admin's existing `UPLOAD_API_KEY`
+  (songdee-drive-proxy's worker.js now accepts either), so setting this
+  up can never break songdee-admin's own uploads. A fresh key was
+  generated for this feature; whoever deploys next needs to add it as
+  that repo's `UPLOAD_API_KEY_QC` secret (Settings → Secrets and
   variables → Actions) before merging/deploying, or photo uploads will
   fail with 401 (report sending itself still works — see "non-fatal"
   above).
@@ -309,7 +312,7 @@ the `--env preview` flag is on the command before running it.
 - Production (`songdeetest`, `main` branch): **v1.13.2** (this session
   adds **v1.14.0**, photo attachments, on a feature branch — not yet
   merged/deployed; see "Photo attachments" above for the
-  `UPLOAD_API_KEY` setup step that has to happen before it works
+  `UPLOAD_API_KEY_QC` setup step that has to happen before it works
   end-to-end).
 - Includes, on top of the original v1.10.0 tpl-section-visibility split:
   a separate session's **AI Box/ADAS/DMS serial-number tracking +
