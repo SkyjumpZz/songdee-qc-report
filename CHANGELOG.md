@@ -307,6 +307,20 @@ plain `wrangler deploy` (deploys to `songdeetest`, production). Never
 deploy an untested/unmerged branch straight to production — double-check
 the `--env preview` flag is on the command before running it.
 
+**Now automated via GitHub Actions** (`.github/workflows/deploy.yml`,
+added since the owner doesn't run `wrangler` locally): merging to `main`
+auto-deploys to `songdeetest-preview` — no manual step needed to get a
+fresh preview. Production (`songdeetest`) still never deploys on its
+own; it only happens when someone manually runs the same workflow from
+the repo's Actions tab and picks "production" from the dropdown, after
+checking preview themselves. This preserves the "never deploy
+untested to production" rule above while removing the need for a local
+wrangler setup. Requires a `CLOUDFLARE_API_TOKEN` repo secret (same
+"Edit Cloudflare Workers" token type used by songdee-drive-proxy/
+songdee-line-proxy) — also added an explicit `account_id` to
+`wrangler.toml` since a non-interactive CI run can't prompt to pick an
+account the way a local `wrangler deploy` can.
+
 ## Status as of last update
 
 - Production (`songdeetest`, `main` branch): **v1.13.2** (this session
