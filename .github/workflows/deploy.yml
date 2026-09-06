@@ -1,0 +1,55 @@
+name: Deploy to Cloudflare Workers
+
+# Two-stage, matching this repo's documented manual workflow (see
+# CHANGELOG.md "Workflow used throughout this project") but automated:
+# - Every push to main deploys to songdeetest-preview automatically, so
+#   there's always a fresh preview to click-test without anyone running
+#   wrangler by hand.
+# - Production (songdeetest) never deploys on its own — it only happens
+#   when someone manually runs this workflow from the Actions tab and
+#   picks "production", after checking preview themselves. This keeps
+#   the "never deploy untested to production" rule the CHANGELOG calls
+#   out, without needing a local wrangler setup.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Where to deploy"
+        required: true
+        default: preview
+        type: choice
+        options:
+          - preview
+          - production
+
+jobs:
+  deploy-preview:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy to songdeetest-preview
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          command: deploy --env preview
+
+  deploy-manual:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy to songdeetest-preview
+        if: github.event.inputs.target == 'preview'
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          command: deploy --env preview
+      - name: Deploy to songdeetest (production)
+        if: github.event.inputs.target == 'production'
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          command: deploy
