@@ -187,10 +187,7 @@ function renderList(list){
     const tplLabel = TEMPLATE_LABELS[doc.tpl] || doc.tpl || '';
     const a = document.createElement('a');
     a.className = 'history-item';
-    // view=1 opens read-only (form.html locks itself, shows an "แก้ไข"
-    // button) — clicking a past report here is "let me see this", not
-    // "let me edit/resend it".
-    a.href = `form.html?report=${encodeURIComponent(doc.id)}&view=1`;
+    a.href = `form.html?report=${encodeURIComponent(doc.id)}`;
     a.innerHTML = `<div class="title">${escapeHtmlLite(dateStr)} ${escapeHtmlLite(tplLabel)} ${escapeHtmlLite(doc.customer||'')}</div><div class="meta">ทะเบียน: ${escapeHtmlLite(doc.plate||'-')}</div>`;
     listEl.appendChild(a);
   });
