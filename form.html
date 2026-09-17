@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.14.4">
+<meta name="app-version" content="1.14.5">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -1376,20 +1376,17 @@ async function uploadPhotoToDrive(photo){
 // อัปโหลดทีละรูป (ไม่ทำพร้อมกันหลายรูป กัน request ชนกัน) — รูปที่อัปโหลด
 // ไม่สำเร็จจะไม่ทำให้การส่งรายงานทั้งหมดล้มเหลว เหมือน pattern ของ
 // pushSheetUpdates()/pushDeviceSwaps() ที่เหลือ ที่ non-fatal เช่นกัน
-// อัปโหลดสูงสุด 2 รูปพร้อมกัน (แทนที่จะทีละรูปทั้งหมด) — เร็วขึ้นมากสำหรับ
-// รายงานที่แนบหลายรูป โดยไม่ยิง request พร้อมกันเยอะเกินไปจนเสี่ยงชน rate
-// limit ของ Drive API ทั้งชุด
-const PHOTO_UPLOAD_CONCURRENCY = 2;
-
+// อัปโหลดทีละรูป (ไม่ทำพร้อมกัน) — เคยลองทำพร้อมกัน 2 รูปแล้วเจอบั๊กจริง:
+// ถ้าโฟลเดอร์ปลายทาง (category/วันที่/ทะเบียน) ยังไม่เคยมีมาก่อน สอง request
+// ที่ยิงพร้อมกันจะเช็คเจอว่า "ยังไม่มี" พร้อมกันทั้งคู่ แล้วสร้างโฟลเดอร์ชื่อ
+// เดียวกันซ้ำกันคนละอัน (Google Drive ไม่ห้ามชื่อโฟลเดอร์ซ้ำ) — ทำทีละรูป
+// รูปที่ 2 เป็นต้นไปถึงจะการันตีว่าโฟลเดอร์จากรูปแรกถูกสร้างเสร็จแล้วแน่นอน
 async function uploadPendingPhotos(){
   const pending = state.photos.filter(p=> !p.driveUrl && p.base64);
   const uploaded = [];
-  for(let i=0; i<pending.length; i+=PHOTO_UPLOAD_CONCURRENCY){
-    const batch = pending.slice(i, i+PHOTO_UPLOAD_CONCURRENCY);
-    await Promise.all(batch.map(photo=>
-      uploadPhotoToDrive(photo).then(()=> uploaded.push(photo))
-        .catch(e=> console.error('[Photo upload]', photo.name, e))
-    ));
+  for(const photo of pending){
+    try{ await uploadPhotoToDrive(photo); uploaded.push(photo); }
+    catch(e){ console.error('[Photo upload]', photo.name, e); }
   }
   return uploaded;
 }
