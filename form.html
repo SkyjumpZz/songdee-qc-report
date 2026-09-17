@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.14.3">
+<meta name="app-version" content="1.14.4">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -1239,6 +1239,13 @@ const MAX_PHOTOS = 6;
 const PHOTO_MAX_DIMENSION = 1440;
 const PHOTO_JPEG_QUALITY = 0.8;
 
+// กันชื่อไฟล์ที่อัปโหลดขึ้น Drive มีอักขระที่ใช้เป็น path separator/สงวนไว้
+// (Drive เก็บชื่อ Unicode ได้เกือบทุกตัว แต่ทะเบียนที่พิมพ์ผิดเผลอใส่ / เข้ามา
+// จะทำให้ metadata.name ดูเหมือนมีโฟลเดอร์ย่อยได้ — ตัดออกให้ชัวร์)
+function sanitizeForFilename(s){
+  return String(s || '').trim().replace(/[\\/:*?"<>|]+/g, '').slice(0, 64);
+}
+
 function makePhotoId(){
   return (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : ('p' + Date.now() + Math.random().toString(16).slice(2));
 }
@@ -1344,7 +1351,9 @@ async function uploadPhotoToDrive(photo){
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Api-Key': DRIVE_API_KEY },
       body: JSON.stringify({
-        filename: `${(state.plate || 'ไม่ระบุทะเบียน').trim()}-${photo.id}.jpg`,
+        // วันที่_ทะเบียน_ลำดับรูป.jpg — อ่านออกว่าเป็นรูปของรายงานไหน แทนที่
+        // จะเป็น uuid สุ่มยาวๆ ที่ดูจากชื่อไฟล์แล้วบอกอะไรไม่ได้เลย
+        filename: `${state.date || 'ไม่ระบุวันที่'}_${sanitizeForFilename(state.plate) || 'ไม่ระบุทะเบียน'}_${state.photos.indexOf(photo) + 1}.jpg`,
         mimeType: photo.mimeType || 'image/jpeg',
         dataBase64: photo.base64,
         date: state.date,
