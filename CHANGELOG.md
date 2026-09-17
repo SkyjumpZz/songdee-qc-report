@@ -20,9 +20,12 @@ machines/sessions (not just in chat history).
   stock/admin/qc-report to push LINE Flex Message cards. We added a
   backward-compatible `sections` field to its `buildFlexCard()` (see
   below) — existing `items`-based callers are unaffected. Also gained
-  optional `imageUrl` (hero image) and `links` (multi-button footer)
-  fields for the photo-attachment feature below — both backward
-  compatible, existing callers (`items`/single `linkUrl`) unaffected.
+  optional `imageUrls` field for the photo-attachment feature below —
+  every photo renders as its own inline image at the bottom of the
+  card's body (not a Flex "hero" block, which is limited to one image
+  pinned above the header). Backward compatible: a singular `imageUrl`
+  still works as a 1-photo shortcut, existing `items`-based callers
+  are unaffected.
 - **songdee-drive-proxy** (private) — shared Cloudflare Worker
   (previously songdee-admin-only) that uploads a base64 image to Google
   Drive via a Service Account and returns a public `viewUrl`. This
@@ -63,8 +66,9 @@ plates, etc.) alongside the existing text fields.
   upload — a phone camera photo straight off the sensor is routinely
   3-8MB, way more than needed for a reference photo and too big to
   ship comfortably through the Drive proxy's JSON body.
-- On "ส่งเข้า LINE", any not-yet-uploaded photos are POSTed one at a
-  time (no concurrency, to avoid slamming the Drive API) to
+- On "ส่งเข้า LINE", any not-yet-uploaded photos are POSTed 2 at a time
+  (`PHOTO_UPLOAD_CONCURRENCY` — enough to meaningfully cut wall-clock
+  time for a multi-photo report without bursting the Drive API) to
   **songdee-drive-proxy**'s `/upload` (`date`/`plate`/`category:
   "qc-report"` passed through for Drive folder organization). Only the
   returned `viewUrl` is ever kept — the base64 bytes are dropped from
@@ -74,13 +78,13 @@ plates, etc.) alongside the existing text fields.
     calls in `sendToLine()`: a failed photo upload just drops that one
     photo from the message/card/save and shows a count in the toast —
     it doesn't block the rest of the report from sending.
-- The first successfully uploaded photo becomes the LINE Flex card's
-  hero image (`buildLineCard()`'s new `imageUrl`); any additional
-  photos become footer link buttons (`links`) — see the
-  songdee-line-proxy note above. `buildMessage()`'s plain-text preview
-  (and clipboard-copy fallback) also lists every uploaded photo's
-  `viewUrl` as a plain link, so the photos stay reachable even if the
-  Flex card doesn't render for some reason.
+- Every successfully uploaded photo becomes its own inline image at
+  the bottom of the LINE Flex card's body (`buildLineCard()`'s new
+  `imageUrls` array) — see the songdee-line-proxy note above.
+  `buildMessage()`'s plain-text preview (and clipboard-copy fallback)
+  also lists every uploaded photo's `viewUrl` as a plain link, so the
+  photos stay reachable even if the Flex card doesn't render for some
+  reason.
 - Persisted to `qc_reports` as `photos: [{name, driveUrl}, ...]` —
   uploaded ones only, never local/base64 state — so reopening a report
   from Dashboard/history restores the same viewUrls (re-attaching a
@@ -225,8 +229,8 @@ All three share a Dashboard/ฟอร์ม/ประวัติ tab bar (`.pag
   fields/sections) via songdee-line-proxy instead of a plain-text wall.
   Sections = ปัญหา/แก้ไข/สติ๊กเกอร์/checklist, each with its own heading
   and separator so it doesn't read as one undifferentiated blob. Now
-  also carries an optional hero image + link buttons for attached
-  photos — see "Photo attachments" above.
+  also carries every attached photo as its own inline image at the
+  bottom of the card — see "Photo attachments" above.
 - **Photo attachments**: optional, up to 6 per report, uploaded to
   Google Drive via songdee-drive-proxy on send. See "Photo attachments"
   section above for the full writeup.

@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.14.2">
+<meta name="app-version" content="1.14.3">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -1600,9 +1600,9 @@ function buildLineCard(){
     })
   });
 
-  // First uploaded photo becomes the card's hero image; the rest (if any)
-  // become footer link buttons — songdee-line-proxy's buildFlexCard()
-  // treats both as optional/backward-compatible.
+  // Every uploaded photo shows as a real inline image at the bottom of the
+  // card (songdee-line-proxy's buildFlexCard() stacks each imageUrls entry
+  // as its own image block) — no more "click a button to see photo 2+".
   const uploadedPhotos = state.photos.filter(p=> p.driveUrl);
 
   return {
@@ -1611,8 +1611,7 @@ function buildLineCard(){
     badge: `📋 ${dateStr}`,
     fields,
     sections,
-    imageUrl: uploadedPhotos.length ? uploadedPhotos[0].driveUrl : undefined,
-    links: uploadedPhotos.slice(1).map((p,i)=> ({ label: `📷 ดูรูปที่ ${i+2}`, url: p.driveUrl })),
+    imageUrls: uploadedPhotos.map(p=> p.driveUrl),
   };
 }
 
