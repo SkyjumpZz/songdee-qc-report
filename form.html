@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.15.0">
+<meta name="app-version" content="1.15.1">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -266,6 +266,20 @@
      creates those inputs. The banner itself sits outside #appMain so its
      own "แก้ไข" button stays clickable. */
   .view-only-locked{ pointer-events:none; }
+  /* Blocking clicks alone still left every edit affordance visible (✕
+     remove, + เพิ่ม..., an empty "งานที่ได้รับมอบหมาย" picker that never
+     reflects the loaded report) — reads as a cluttered, inert edit form
+     rather than a clean read-only view. Hide what nobody can use anyway. */
+  .view-only-locked .btn-add,
+  .view-only-locked .btn-remove,
+  .view-only-locked .photo-remove,
+  .view-only-locked .photo-hint,
+  .view-only-locked #jobAssignField{
+    display:none !important;
+  }
+  .view-only-locked select{
+    background-image:none; padding-right:12px;
+  }
   .view-only-banner{
     position:sticky; top:0; z-index:20;
     background:var(--accent); color:#231400;
@@ -319,10 +333,12 @@
 
   <div class="card">
     <div class="card-title"><span class="dot"></span>ข้อมูลงาน</div>
-    <label>งานที่ได้รับมอบหมาย (จาก Admin)</label>
-    <select id="jobAssignSelect">
-      <option value="">-- เลือกงาน หรือกรอกเอง --</option>
-    </select>
+    <div id="jobAssignField">
+      <label>งานที่ได้รับมอบหมาย (จาก Admin)</label>
+      <select id="jobAssignSelect">
+        <option value="">-- เลือกงาน หรือกรอกเอง --</option>
+      </select>
+    </div>
     <div class="row2">
       <div>
         <label>วันที่<span class="req">*</span></label>
