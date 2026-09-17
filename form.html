@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.15.4">
+<meta name="app-version" content="1.16.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -268,26 +268,43 @@
     border:1px solid var(--accent); border-radius:9px; padding:9px 11px; margin-bottom:10px;
     display:flex; align-items:center; justify-content:space-between; gap:8px;
   }
-  /* Opened from Dashboard/history "just to look" — blocks every input/button
-     inside the form (pointer-events:none) so nothing can be accidentally
-     edited or resent, without having to touch every render function that
-     creates those inputs. The banner itself sits outside #appMain so its
-     own "แก้ไข" button stays clickable. */
-  .view-only-locked{ pointer-events:none; }
-  /* Blocking clicks alone still left every edit affordance visible (✕
-     remove, + เพิ่ม..., an empty "งานที่ได้รับมอบหมาย" picker that never
-     reflects the loaded report) — reads as a cluttered, inert edit form
-     rather than a clean read-only view. Hide what nobody can use anyway. */
-  .view-only-locked .btn-add,
-  .view-only-locked .btn-remove,
-  .view-only-locked .photo-remove,
-  .view-only-locked .photo-hint,
-  .view-only-locked #jobAssignField{
-    display:none !important;
+  /* Opened from Dashboard/history "just to look" — instead of showing the
+     edit form locked (still reads as a cluttered, inert input form even
+     with pointer-events:none), swap #editForm out for a plain read
+     summary built by renderViewSummary(). The banner sits outside #appMain
+     so its own "แก้ไข" button stays clickable. */
+  .view-summary{}
+  .vs-card{
+    background:var(--bg-panel); border:1px solid var(--line); border-radius:14px;
+    padding:16px; margin-bottom:14px;
   }
-  .view-only-locked select{
-    background-image:none; padding-right:12px;
+  .vs-title{
+    display:flex; align-items:center; gap:8px;
+    font-family:'Kanit',sans-serif; font-weight:600; font-size:15px;
+    color:var(--text); margin-bottom:12px;
   }
+  .vs-title .dot{width:6px;height:6px;border-radius:50%;background:var(--accent);}
+  .vs-fields{display:grid; grid-template-columns:repeat(auto-fill, minmax(150px,1fr)); gap:12px 16px;}
+  .vs-field .lbl{font-size:11.5px; color:var(--text-dim); margin-bottom:3px;}
+  .vs-field .val{font-size:14px; font-weight:600; color:var(--text);}
+  .vs-list{list-style:none; margin:0; padding:0;}
+  .vs-list li{font-size:13.5px; color:var(--text); padding:8px 0; border-bottom:1px solid var(--line-soft);}
+  .vs-list li:last-child{border-bottom:none;}
+  .vs-check{
+    display:flex; align-items:center; justify-content:space-between;
+    font-size:13.5px; padding:8px 0; border-bottom:1px solid var(--line-soft); gap:10px;
+  }
+  .vs-check:last-child{border-bottom:none;}
+  .vs-check .status{font-weight:600; text-align:right;}
+  .vs-check .status.ok{color:var(--accent-2);}
+  .vs-check .status.missing{color:var(--text-dim); font-weight:400;}
+  .vs-empty{font-size:13px; color:var(--text-dim);}
+  .vs-photos{display:grid; grid-template-columns:repeat(auto-fill, minmax(200px,1fr)); gap:10px;}
+  .vs-photo{
+    display:block; border-radius:12px; overflow:hidden; border:1px solid var(--line);
+    background:var(--bg-panel-2); cursor:zoom-in;
+  }
+  .vs-photo img{width:100%; aspect-ratio:4/3; object-fit:cover; display:block;}
   .view-only-banner{
     position:sticky; top:0; z-index:20;
     background:var(--accent); color:#231400;
@@ -343,6 +360,10 @@
     <span id="editingBannerText"></span>
     <span class="logout" onclick="startNewReport()">ปิด</span>
   </div>
+
+  <div class="view-summary app-hidden" id="viewSummary"></div>
+
+  <div id="editForm">
 
   <div class="card">
     <div class="card-title"><span class="dot"></span>ประเภทงาน</div>
@@ -417,6 +438,8 @@
     <div class="card-title"><span class="dot"></span>ตัวอย่างข้อความที่จะส่ง</div>
     <div class="preview" id="preview"></div>
     <div class="missing-badge" id="missingBadge"></div>
+  </div>
+
   </div>
 
 </main>
@@ -852,17 +875,94 @@ function loadReportIntoForm(doc){
 // ให้ปลดล็อกเองถ้าต้องการแก้จริงๆ
 let viewOnly = false;
 
+function escapeHtml(s){
+  return String(s==null ? '' : s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+// Read-only summary shown instead of the (locked) edit form — plain fields
+// and lists rather than a form full of inert inputs/dropdowns, so ปัญหา,
+// แก้ไข, and the attached photos are easy to actually read at a glance.
+function renderViewSummary(){
+  const el = document.getElementById('viewSummary');
+  const dateStr = state.date ? state.date.split('-').reverse().join('/') : '(ไม่ระบุวันที่)';
+  const tplLabel = (TEMPLATES[state.tpl]||{}).label || state.tpl || '';
+
+  const fields = [
+    ['ประเภทงาน', tplLabel],
+    ['วันที่', dateStr],
+    ['ลูกค้า', state.customer || '-'],
+    ['Fleet', state.fleet || '-'],
+    ['ทะเบียน', state.plate || '-'],
+    ['ผู้ทดสอบ', tester.techName || '-'],
+  ];
+  const fieldsHtml = fields.map(([l,v])=>
+    `<div class="vs-field"><div class="lbl">${escapeHtml(l)}</div><div class="val">${escapeHtml(v)}</div></div>`
+  ).join('');
+
+  const listHtml = lines => lines.length
+    ? `<ul class="vs-list">${lines.map(l=>`<li>${escapeHtml(l.replace(/^- /,''))}</li>`).join('')}</ul>`
+    : `<div class="vs-empty">- ไม่มีรายการ -</div>`;
+
+  const problemLines = tplHasProblems(state.tpl) ? state.problems.map(problemLine).filter(Boolean) : [];
+  const fixLines = state.fixes.map(fixLine).filter(Boolean);
+
+  const stickerHtml = STICKERS.map(s=>{
+    const v = state.stickers[s.key];
+    const ok = v && v !== STATUS_OPTS.sticker[0];
+    return `<div class="vs-check"><span>${escapeHtml(s.text)}</span><span class="status ${ok?'ok':'missing'}">${ok ? escapeHtml(v) : 'ยังไม่เลือก'}</span></div>`;
+  }).join('');
+
+  const checklistHtml = (TEMPLATES[state.tpl].checklist||[]).map(item=>{
+    const done = !!state.checklist[item.key];
+    return `<div class="vs-check"><span>${escapeHtml(item.text)}</span><span class="status ${done?'ok':'missing'}">${done ? escapeHtml(CHECK_PASS_LABEL[item.type]) : 'ยังไม่ตรวจสอบ'}</span></div>`;
+  }).join('');
+
+  const photos = state.photos.filter(p=> p.driveUrl);
+  const photosHtml = photos.length
+    ? `<div class="vs-photos">${photos.map(p=>
+        `<a class="vs-photo" href="${escapeHtml(p.driveUrl)}" target="_blank" rel="noopener"><img src="${escapeHtml(p.driveUrl)}" loading="lazy" alt=""></a>`
+      ).join('')}</div>`
+    : `<div class="vs-empty">- ไม่มีรูปแนบ -</div>`;
+
+  el.innerHTML = `
+    <div class="vs-card">
+      <div class="vs-title"><span class="dot"></span>ข้อมูลงาน</div>
+      <div class="vs-fields">${fieldsHtml}</div>
+    </div>
+    ${tplHasProblems(state.tpl) ? `<div class="vs-card"><div class="vs-title"><span class="dot"></span>ปัญหา</div>${listHtml(problemLines)}</div>` : ''}
+    <div class="vs-card">
+      <div class="vs-title"><span class="dot"></span>${escapeHtml(FIXES_CARD_LABEL[state.tpl] || 'แก้ไข')}</div>
+      ${listHtml(fixLines)}
+    </div>
+    <div class="vs-card">
+      <div class="vs-title"><span class="dot"></span>สติ๊กเกอร์ 3 จุด</div>
+      ${stickerHtml}
+    </div>
+    <div class="vs-card">
+      <div class="vs-title"><span class="dot"></span>รายการตรวจสอบ</div>
+      ${checklistHtml}
+    </div>
+    <div class="vs-card">
+      <div class="vs-title"><span class="dot"></span>รูปภาพแนบ</div>
+      ${photosHtml}
+    </div>
+  `;
+}
+
 function applyViewOnlyLock(){
   document.getElementById('viewOnlyBanner').classList.remove('app-hidden');
   document.getElementById('editingBanner').classList.add('app-hidden');
-  document.getElementById('appMain').classList.add('view-only-locked');
+  document.getElementById('editForm').classList.add('app-hidden');
   document.getElementById('actionBar').classList.add('app-hidden');
+  renderViewSummary();
+  document.getElementById('viewSummary').classList.remove('app-hidden');
 }
 
 function exitViewOnly(){
   viewOnly = false;
   document.getElementById('viewOnlyBanner').classList.add('app-hidden');
-  document.getElementById('appMain').classList.remove('view-only-locked');
+  document.getElementById('viewSummary').classList.add('app-hidden');
+  document.getElementById('editForm').classList.remove('app-hidden');
   document.getElementById('actionBar').classList.remove('app-hidden');
 }
 
