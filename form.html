@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.14.5">
+<meta name="app-version" content="1.15.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -260,6 +260,22 @@
     border:1px solid var(--accent); border-radius:9px; padding:9px 11px; margin-bottom:10px;
     display:flex; align-items:center; justify-content:space-between; gap:8px;
   }
+  /* Opened from Dashboard/history "just to look" — blocks every input/button
+     inside the form (pointer-events:none) so nothing can be accidentally
+     edited or resent, without having to touch every render function that
+     creates those inputs. The banner itself sits outside #appMain so its
+     own "แก้ไข" button stays clickable. */
+  .view-only-locked{ pointer-events:none; }
+  .view-only-banner{
+    position:sticky; top:0; z-index:20;
+    background:var(--accent); color:#231400;
+    font-family:'Kanit',sans-serif; font-weight:600; font-size:13px;
+    padding:11px 16px; display:flex; align-items:center; justify-content:space-between; gap:10px;
+  }
+  .view-only-banner button{
+    background:#231400; color:#ffe9c2; border:none; border-radius:8px;
+    padding:7px 12px; font-family:inherit; font-weight:600; font-size:12.5px; cursor:pointer;
+  }
 </style>
 </head>
 <body>
@@ -283,6 +299,11 @@
     <a href="history.html">ประวัติ</a>
   </div>
 </header>
+
+<div class="view-only-banner app-hidden" id="viewOnlyBanner">
+  <span>🔒 กำลังดูอย่างเดียว — เปิดจาก Dashboard/ประวัติ</span>
+  <button type="button" onclick="exitViewOnly()">แก้ไขรายงานนี้</button>
+</div>
 
 <main class="app-hidden" id="appMain">
 
@@ -791,6 +812,26 @@ function loadReportIntoForm(doc){
   scheduleStockLockCheck();
 }
 
+// เปิดจาก Dashboard/history ด้วย ?report=<id>&view=1 ("ดูรายละเอียด") ต่างจาก
+// ?report=<id> เฉยๆ ("แก้ไข") — view=1 ล็อกฟอร์มทั้งหน้าไม่ให้กด/พิมพ์อะไรได้
+// เลย กันเผลอแก้ไข/กดส่งซ้ำรายงานเก่าที่แค่เปิดมาดู มีปุ่ม "แก้ไขรายงานนี้"
+// ให้ปลดล็อกเองถ้าต้องการแก้จริงๆ
+let viewOnly = false;
+
+function applyViewOnlyLock(){
+  document.getElementById('viewOnlyBanner').classList.remove('app-hidden');
+  document.getElementById('editingBanner').classList.add('app-hidden');
+  document.getElementById('appMain').classList.add('view-only-locked');
+  document.getElementById('actionBar').classList.add('app-hidden');
+}
+
+function exitViewOnly(){
+  viewOnly = false;
+  document.getElementById('viewOnlyBanner').classList.add('app-hidden');
+  document.getElementById('appMain').classList.remove('view-only-locked');
+  document.getElementById('actionBar').classList.remove('app-hidden');
+}
+
 // If opened as index.html?report=<id> (link from history.html), load
 // that report once logged in, then strip the param so a page refresh
 // doesn't keep reloading the same report over manual edits.
@@ -798,9 +839,13 @@ async function loadReportFromUrlIfAny(){
   const params = new URLSearchParams(location.search);
   const id = params.get('report');
   if(!id) return;
+  const wantsViewOnly = params.get('view') === '1';
   try{
     const snap = await _db.collection('qc_reports').doc(id).get();
-    if(snap.exists) loadReportIntoForm({id: snap.id, ...snap.data()});
+    if(snap.exists){
+      loadReportIntoForm({id: snap.id, ...snap.data()});
+      if(wantsViewOnly){ viewOnly = true; applyViewOnlyLock(); }
+    }
   }catch(e){
     console.error('[Report load from URL]', e);
     showToast('โหลดรายงานที่เลือกไม่สำเร็จ: ' + e.message);
@@ -809,6 +854,7 @@ async function loadReportFromUrlIfAny(){
 }
 
 function startNewReport(){
+  if(viewOnly) exitViewOnly();
   currentReportId = null;
   state = defaultState();
   document.getElementById('editingBanner').classList.add('app-hidden');
@@ -830,6 +876,7 @@ function startNewReport(){
 // (plate, ปัญหา/แก้ไข/สติ๊กเกอร์/checklist, stock-lock, old-model lookup)
 // so the next vehicle's report starts clean without retyping customer info.
 function startNextVehicle(){
+  if(viewOnly) exitViewOnly();
   const keepDate = state.date;
   const keepCustomer = state.customer;
   const keepFleet = state.fleet;
