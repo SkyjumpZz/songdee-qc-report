@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>Dashboard · SONGDEE GPS</title>
-<meta name="app-version" content="1.6.3">
+<meta name="app-version" content="1.6.4">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -135,6 +135,14 @@
   .history-item .meta{font-size:12px; color:var(--text-dim); margin-top:4px;}
   .empty, .err, .loading{color:var(--text-dim); font-size:13px; padding:40px 0; text-align:center;}
   .err{color:var(--danger);}
+  /* จอกว้าง: 640px แคบเกินไป ดูเหมือนแอพมือถือลอยกลางจอเปล่าๆ ขยายเนื้อหา
+     ให้กว้างขึ้น และจัดรายการรายงานเป็นหลายคอลัมน์แทนแถวเดียวยาวๆ */
+  @media (min-width:860px){
+    .header-inner, main{max-width:880px;}
+    .stat-row{max-width:480px;}
+    #list{display:grid; grid-template-columns:repeat(auto-fill, minmax(300px,1fr)); gap:10px;}
+    .history-item{margin-bottom:0;}
+  }
 </style>
 </head>
 <body>

@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.15.2">
+<meta name="app-version" content="1.15.3">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -297,6 +297,12 @@
   .view-only-banner button{
     background:#231400; color:#ffe9c2; border:none; border-radius:8px;
     padding:7px 12px; font-family:inherit; font-weight:600; font-size:12.5px; cursor:pointer;
+  }
+  /* จอกว้าง: 640px แคบเกินไป ดูเหมือนแอพมือถือลอยกลางจอเปล่าๆ
+     ขยายฟอร์มให้กว้างขึ้น และให้ตารางรูปมีคอลัมน์เยอะขึ้นตามพื้นที่ที่มี */
+  @media (min-width:860px){
+    .header-inner, main{max-width:760px;}
+    .photo-grid{grid-template-columns:repeat(4, 1fr);}
   }
 </style>
 </head>
