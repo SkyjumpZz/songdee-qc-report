@@ -33,11 +33,19 @@
     min-height:100vh;
   }
   header{
-    padding:22px 18px 16px;
     border-bottom:1px solid var(--line);
     background:linear-gradient(180deg, rgba(255,176,32,0.06), transparent);
     position:sticky; top:0; z-index:10;
     backdrop-filter:blur(10px);
+  }
+  /* บนจอกว้าง (เว็บ) main{max-width:640px} ทำให้เนื้อหาลอยแคบกลางจอ แต่ header
+     เดิมไม่มี max-width เลยยืดเต็มจอ - แถบบนกับเนื้อหาด้านล่างเลยไม่ตรงแนวกัน
+     ดูเหมือนวางผิดที่ ครอบเนื้อหา header ไว้ในเส้นกึ่งกลางความกว้างเท่า main
+     ให้ชิดแนวเดียวกัน (พื้นหลัง/เส้นขอบยังยืดเต็มจอเหมือนเดิม กระทบแค่จอกว้าง
+     มือถือหน้าจอแคบกว่า 640px อยู่แล้วไม่เห็นความต่างเลย) */
+  .header-inner{
+    max-width:640px; margin:0 auto;
+    padding:22px 18px 16px;
   }
   header .eyebrow{
     font-family:'IBM Plex Mono',monospace;
@@ -78,19 +86,21 @@
 <body>
 
 <header>
-  <div class="eyebrow">SONGDEE GPS · เทสช่าง</div>
-  <h1>ประวัติรายงาน</h1>
-  <div class="tester-bar" id="testerBar" style="display:none">
-    <span>ผู้ทดสอบ: <span class="who" id="testerName"></span></span>
-    <span>
-      <a href="form.html">+ รายงานใหม่</a>
-      <span class="link" onclick="doLogout()">ออกจากระบบ</span>
-    </span>
-  </div>
-  <div class="page-tabs" id="pageTabs" style="display:none">
-    <a href="index.html">Dashboard</a>
-    <a href="form.html">ฟอร์ม</a>
-    <span class="tab active">ประวัติ</span>
+  <div class="header-inner">
+    <div class="eyebrow">SONGDEE GPS · เทสช่าง</div>
+    <h1>ประวัติรายงาน</h1>
+    <div class="tester-bar" id="testerBar" style="display:none">
+      <span>ผู้ทดสอบ: <span class="who" id="testerName"></span></span>
+      <span>
+        <a href="form.html">+ รายงานใหม่</a>
+        <span class="link" onclick="doLogout()">ออกจากระบบ</span>
+      </span>
+    </div>
+    <div class="page-tabs" id="pageTabs" style="display:none">
+      <a href="index.html">Dashboard</a>
+      <a href="form.html">ฟอร์ม</a>
+      <span class="tab active">ประวัติ</span>
+    </div>
   </div>
 </header>
 

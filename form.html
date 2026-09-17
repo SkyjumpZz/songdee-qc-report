@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.15.1">
+<meta name="app-version" content="1.15.2">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -36,11 +36,19 @@
     padding-bottom:120px;
   }
   header{
-    padding:22px 18px 16px;
     border-bottom:1px solid var(--line);
     background:linear-gradient(180deg, rgba(255,176,32,0.06), transparent);
     position:sticky; top:0; z-index:10;
     backdrop-filter:blur(10px);
+  }
+  /* บนจอกว้าง (เว็บ) main{max-width:640px} ทำให้เนื้อหาลอยแคบกลางจอ แต่ header
+     เดิมไม่มี max-width เลยยืดเต็มจอ - แถบบนกับเนื้อหาด้านล่างเลยไม่ตรงแนวกัน
+     ดูเหมือนวางผิดที่ ครอบเนื้อหา header ไว้ในเส้นกึ่งกลางความกว้างเท่า main
+     ให้ชิดแนวเดียวกัน (พื้นหลัง/เส้นขอบยังยืดเต็มจอเหมือนเดิม กระทบแค่จอกว้าง
+     มือถือหน้าจอแคบกว่า 640px อยู่แล้วไม่เห็นความต่างเลย) */
+  .header-inner{
+    max-width:640px; margin:0 auto;
+    padding:22px 18px 16px;
   }
   header .eyebrow{
     font-family:'IBM Plex Mono',monospace;
@@ -297,20 +305,22 @@
 <div class="update-banner" id="updateBanner">มีเวอร์ชันใหม่ กำลังโหลดหน้าล่าสุดให้...</div>
 
 <header>
-  <div class="eyebrow">SONGDEE GPS · เทสช่าง</div>
-  <h1>รายงานตรวจสอบงานช่าง <span id="versionTag" class="version-tag"></span></h1>
-  <div class="tester-bar app-hidden" id="testerBar">
-    <span>ผู้ทดสอบ: <span class="who" id="testerName"></span></span>
-    <span>
-      <span class="logout" onclick="startNextVehicle()">+ ทะเบียนถัดไป</span>
-      <span class="logout" onclick="startNewReport()">+ รายงานใหม่</span>
-      <span class="logout" onclick="doLogout()">ออกจากระบบ</span>
-    </span>
-  </div>
-  <div class="page-tabs app-hidden" id="pageTabs">
-    <a href="index.html">Dashboard</a>
-    <span class="tab active">ฟอร์ม</span>
-    <a href="history.html">ประวัติ</a>
+  <div class="header-inner">
+    <div class="eyebrow">SONGDEE GPS · เทสช่าง</div>
+    <h1>รายงานตรวจสอบงานช่าง <span id="versionTag" class="version-tag"></span></h1>
+    <div class="tester-bar app-hidden" id="testerBar">
+      <span>ผู้ทดสอบ: <span class="who" id="testerName"></span></span>
+      <span>
+        <span class="logout" onclick="startNextVehicle()">+ ทะเบียนถัดไป</span>
+        <span class="logout" onclick="startNewReport()">+ รายงานใหม่</span>
+        <span class="logout" onclick="doLogout()">ออกจากระบบ</span>
+      </span>
+    </div>
+    <div class="page-tabs app-hidden" id="pageTabs">
+      <a href="index.html">Dashboard</a>
+      <span class="tab active">ฟอร์ม</span>
+      <a href="history.html">ประวัติ</a>
+    </div>
   </div>
 </header>
 
