@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.15.3">
+<meta name="app-version" content="1.15.4">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -301,7 +301,9 @@
   /* จอกว้าง: 640px แคบเกินไป ดูเหมือนแอพมือถือลอยกลางจอเปล่าๆ
      ขยายฟอร์มให้กว้างขึ้น และให้ตารางรูปมีคอลัมน์เยอะขึ้นตามพื้นที่ที่มี */
   @media (min-width:860px){
-    .header-inner, main{max-width:760px;}
+    /* min(...,vw) แทนเลขคงที่ - กว้างขึ้นตามจอจริงบ้าง (แต่ไม่กว้างเท่าหน้า
+       Dashboard/ประวัติ เพราะช่องกรอกข้อมูลยืดกว้างเกินไปจะดูแปลก) */
+    .header-inner, main{max-width:min(920px, 90vw);}
     .photo-grid{grid-template-columns:repeat(4, 1fr);}
   }
 </style>

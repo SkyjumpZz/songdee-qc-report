@@ -84,7 +84,9 @@
   /* จอกว้าง: 640px แคบเกินไป ดูเหมือนแอพมือถือลอยกลางจอเปล่าๆ ขยายเนื้อหา
      ให้กว้างขึ้น และจัดรายการรายงานเป็นหลายคอลัมน์แทนแถวเดียวยาวๆ */
   @media (min-width:860px){
-    .header-inner, main{max-width:880px;}
+    /* min(...,vw) แทนเลขคงที่ - กว้างขึ้นตามจอจริง ไม่ใช่หยุดโตที่ 880px
+       เฉยๆแล้วเหลือขอบว่างโล่งๆ ทั้งสองข้างบนจอที่ใหญ่กว่านั้นมาก */
+    .header-inner, main{max-width:min(1400px, 94vw);}
     #list{display:grid; grid-template-columns:repeat(auto-fill, minmax(300px,1fr)); gap:10px;}
     .history-item{margin-bottom:0;}
   }
