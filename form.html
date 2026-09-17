@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.14.1">
+<meta name="app-version" content="1.14.2">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -82,7 +82,7 @@
     font-weight:500;
   }
   label .req{color:var(--danger); margin-left:2px;}
-  input[type=text], input[type=date], input[type=tel], input[type=password], select, textarea{
+  input[type=text], input[type=date], input[type=tel], input[type=password], input[type=number], select, textarea{
     width:100%;
     background:var(--bg-panel-2);
     border:1px solid var(--line);
@@ -94,6 +94,15 @@
     appearance:none;
     -webkit-appearance:none;
   }
+  /* input[type=number] (the qty field once a ใบเบิก locks it) was falling
+     through to the browser's unstyled default — bright white box with a
+     native spinner, clashing hard with the dark theme every other field
+     uses. Hide the spinner too so it reads like the rest of the form. */
+  input[type=number]::-webkit-outer-spin-button,
+  input[type=number]::-webkit-inner-spin-button{
+    -webkit-appearance:none; margin:0;
+  }
+  input[type=number]{ -moz-appearance:textfield; }
   select{
     background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%238b9bb5' stroke-width='2'><path d='M6 9l6 6 6-6'/></svg>");
     background-repeat:no-repeat;
@@ -1358,12 +1367,20 @@ async function uploadPhotoToDrive(photo){
 // อัปโหลดทีละรูป (ไม่ทำพร้อมกันหลายรูป กัน request ชนกัน) — รูปที่อัปโหลด
 // ไม่สำเร็จจะไม่ทำให้การส่งรายงานทั้งหมดล้มเหลว เหมือน pattern ของ
 // pushSheetUpdates()/pushDeviceSwaps() ที่เหลือ ที่ non-fatal เช่นกัน
+// อัปโหลดสูงสุด 2 รูปพร้อมกัน (แทนที่จะทีละรูปทั้งหมด) — เร็วขึ้นมากสำหรับ
+// รายงานที่แนบหลายรูป โดยไม่ยิง request พร้อมกันเยอะเกินไปจนเสี่ยงชน rate
+// limit ของ Drive API ทั้งชุด
+const PHOTO_UPLOAD_CONCURRENCY = 2;
+
 async function uploadPendingPhotos(){
   const pending = state.photos.filter(p=> !p.driveUrl && p.base64);
   const uploaded = [];
-  for(const photo of pending){
-    try{ await uploadPhotoToDrive(photo); uploaded.push(photo); }
-    catch(e){ console.error('[Photo upload]', photo.name, e); }
+  for(let i=0; i<pending.length; i+=PHOTO_UPLOAD_CONCURRENCY){
+    const batch = pending.slice(i, i+PHOTO_UPLOAD_CONCURRENCY);
+    await Promise.all(batch.map(photo=>
+      uploadPhotoToDrive(photo).then(()=> uploaded.push(photo))
+        .catch(e=> console.error('[Photo upload]', photo.name, e))
+    ));
   }
   return uploaded;
 }
