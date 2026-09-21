@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>Dashboard · SONGDEE GPS</title>
-<meta name="app-version" content="1.6.6">
+<meta name="app-version" content="1.7.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -77,22 +77,6 @@
   .page-tabs .active{
     background:rgba(255,176,32,0.12); border-color:var(--accent); color:var(--accent); cursor:default;
   }
-  .login-overlay{
-    position:fixed; inset:0; z-index:300; background:var(--bg);
-    display:flex; align-items:center; justify-content:center; padding:20px;
-  }
-  .login-overlay.hide{display:none;}
-  .login-card{
-    width:100%; max-width:360px; background:var(--bg-panel); border:1px solid var(--line);
-    border-radius:14px; padding:24px;
-  }
-  .login-card h1{
-    font-family:'Kanit',sans-serif; font-weight:600; font-size:18px; margin:0 0 4px;
-  }
-  .login-card .sub{font-size:12.5px; color:var(--text-dim); margin-bottom:18px;}
-  .login-error{
-    font-size:12.5px; color:var(--danger); margin-top:10px; min-height:1em;
-  }
   label{
     display:block; font-size:12.5px; color:var(--text-dim); margin:10px 0 5px;
     font-weight:500;
@@ -117,6 +101,94 @@
     background:var(--accent-2); color:#06251a;
   }
   .btn-primary:disabled{opacity:.6; cursor:not-allowed;}
+
+  /* Split-screen login (photo/illustration panel + form panel), styled with
+     the app's own dark navy/amber palette instead of the light reference's
+     colors — logging in and then landing on the (dark) Dashboard would
+     otherwise jump jarringly between two unrelated themes. */
+  .login-overlay{
+    position:fixed; inset:0; z-index:300; background:var(--bg); overflow:auto;
+  }
+  .login-overlay.hide{display:none;}
+  .login-langbar{position:absolute; top:16px; right:18px; z-index:2;}
+  .lang-select{position:relative;}
+  .lang-trigger{
+    display:flex; align-items:center; gap:6px;
+    background:rgba(255,255,255,0.06); border:1px solid var(--line);
+    color:var(--text-dim); border-radius:9px; padding:7px 10px;
+    font-family:inherit; font-size:12.5px; cursor:pointer;
+  }
+  .lang-trigger:hover{color:var(--text); border-color:var(--accent);}
+  .lang-trigger svg{width:12px; height:12px;}
+  .lang-menu{
+    position:absolute; top:calc(100% + 6px); right:0; min-width:120px;
+    background:var(--bg-panel); border:1px solid var(--line); border-radius:9px;
+    overflow:hidden; box-shadow:0 8px 24px rgba(0,0,0,0.35);
+  }
+  .lang-menu div{padding:9px 12px; font-size:13px; color:var(--text-dim); cursor:pointer;}
+  .lang-menu div:hover{background:var(--bg-panel-2); color:var(--text);}
+
+  .login-split{min-height:100vh; display:flex;}
+  .login-visual{
+    display:none; position:relative; flex:1 1 46%; max-width:640px;
+    background:linear-gradient(160deg, #172845 0%, #0b1220 65%);
+    overflow:hidden;
+  }
+  .login-visual::after{
+    content:''; position:absolute; top:0; right:-1px; bottom:0; width:70px;
+    background:var(--accent); opacity:.85;
+    clip-path:polygon(100% 0, 100% 100%, 0 65%);
+  }
+  .login-visual-art{position:absolute; inset:0; width:100%; height:100%;}
+  .login-visual-text{position:absolute; left:44px; right:110px; bottom:48px;}
+  .login-visual-brand{
+    font-family:'Kanit',sans-serif; font-weight:700; font-size:22px;
+    letter-spacing:.04em; color:#fff; margin-bottom:8px;
+  }
+  .login-visual-tagline{font-size:13.5px; color:rgba(231,237,247,0.75); line-height:1.65;}
+
+  .login-panel{
+    flex:1; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; padding:48px 20px;
+  }
+  .login-card{width:100%; max-width:380px;}
+  .login-card h1{
+    font-family:'Kanit',sans-serif; font-weight:600; font-size:21px; margin:0 0 6px;
+  }
+  .login-card .sub{font-size:13px; color:var(--text-dim); margin-bottom:22px;}
+  .login-error{font-size:12.5px; color:var(--danger); margin-top:10px; min-height:1em;}
+
+  .input-wrap{position:relative;}
+  .input-wrap .input-icon{
+    position:absolute; left:12px; top:50%; transform:translateY(-50%);
+    width:16px; height:16px; color:var(--text-dim); pointer-events:none;
+  }
+  .input-wrap input{padding-left:36px;}
+  .input-wrap input[type=password]{padding-right:38px;}
+  .input-eye{
+    position:absolute; right:6px; top:50%; transform:translateY(-50%);
+    display:flex; align-items:center; justify-content:center;
+    background:none; border:none; color:var(--text-dim); cursor:pointer; padding:7px;
+  }
+  .input-eye:hover{color:var(--text);}
+  .input-eye svg{width:16px; height:16px;}
+  .input-eye .eye-off{display:none;}
+  .input-eye.showing .eye{display:none;}
+  .input-eye.showing .eye-off{display:block;}
+
+  .remember-row{
+    display:flex; align-items:center; gap:8px; margin:16px 0 0;
+    font-size:13px; color:var(--text-dim); font-weight:400; cursor:pointer;
+  }
+  .remember-row input{width:15px; height:15px; accent-color:var(--accent-2); cursor:pointer;}
+
+  .login-footer{
+    text-align:center; margin-top:26px; font-size:11px; color:var(--text-dim);
+    font-family:'IBM Plex Mono',monospace;
+  }
+  @media (min-width:860px){
+    .login-visual{display:block;}
+  }
   main{max-width:640px; margin:0 auto; padding:16px 16px 60px;}
   .stat-row{display:flex; gap:10px; margin-bottom:16px;}
   .stat-card{
@@ -150,15 +222,77 @@
 <body>
 
 <div class="login-overlay" id="loginOverlay">
-  <div class="login-card">
-    <h1>เข้าสู่ระบบ</h1>
-    <div class="sub">SONGDEE GPS · รายงานตรวจสอบงานช่าง</div>
-    <label>อีเมล</label>
-    <input type="text" id="loginEmail" autocomplete="username" placeholder="เช่น somchai@songdeegps.com">
-    <label>รหัสผ่าน</label>
-    <input type="password" id="loginPassword" autocomplete="current-password" placeholder="รหัสผ่าน">
-    <button class="btn-primary" id="loginBtn" onclick="doLogin()">เข้าสู่ระบบ</button>
-    <div class="login-error" id="loginError"></div>
+  <div class="login-langbar">
+    <div class="lang-select" id="langSelect">
+      <button type="button" class="lang-trigger" id="langTrigger" onclick="toggleLangMenu()">
+        <span id="langLabel">ไทย</span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+      </button>
+      <div class="lang-menu app-hidden" id="langMenu">
+        <div onclick="setLang('th')">ไทย</div>
+        <div onclick="setLang('en')">English</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="login-split">
+    <div class="login-visual">
+      <svg class="login-visual-art" viewBox="0 0 640 900" preserveAspectRatio="xMidYMid slice">
+        <defs>
+          <pattern id="loginDots" width="28" height="28" patternUnits="userSpaceOnUse">
+            <circle cx="2" cy="2" r="1.4" fill="#ffffff" opacity="0.08"></circle>
+          </pattern>
+        </defs>
+        <rect width="640" height="900" fill="url(#loginDots)"></rect>
+        <path d="M40 760 C 180 700, 220 560, 300 480 S 480 300, 560 160" fill="none" stroke="#ffb020" stroke-width="4" stroke-dasharray="2 14" stroke-linecap="round" opacity="0.75"></path>
+        <circle cx="560" cy="160" r="34" fill="#ffb020" opacity="0.15"></circle>
+        <circle cx="560" cy="160" r="20" fill="#ffb020" opacity="0.25"></circle>
+        <path d="M560 122 c17 0 30 13 30 30 c0 22-30 46-30 46 s-30-24-30-46 c0-17 13-30 30-30z" fill="#ffb020"></path>
+        <circle cx="560" cy="152" r="10" fill="#0b1220"></circle>
+        <g transform="translate(255,455)">
+          <rect x="0" y="6" width="46" height="22" rx="4" fill="#3ddc97"></rect>
+          <rect x="34" y="0" width="18" height="16" rx="3" fill="#3ddc97"></rect>
+          <circle cx="12" cy="30" r="6" fill="#0b1220" stroke="#3ddc97" stroke-width="2"></circle>
+          <circle cx="40" cy="30" r="6" fill="#0b1220" stroke="#3ddc97" stroke-width="2"></circle>
+        </g>
+      </svg>
+      <div class="login-visual-text">
+        <div class="login-visual-brand">SONGDEE GPS</div>
+        <div class="login-visual-tagline" data-i18n="tagline"></div>
+      </div>
+    </div>
+
+    <div class="login-panel">
+      <div class="login-card">
+        <h1 data-i18n="welcome"></h1>
+        <div class="sub" data-i18n="subtitle"></div>
+
+        <label data-i18n="emailLabel"></label>
+        <div class="input-wrap">
+          <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"></circle><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"></path></svg>
+          <input type="text" id="loginEmail" autocomplete="username" data-i18n-placeholder="emailPlaceholder">
+        </div>
+
+        <label data-i18n="passwordLabel"></label>
+        <div class="input-wrap">
+          <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"></rect><path d="M8 11V7a4 4 0 0 1 8 0v4"></path></svg>
+          <input type="password" id="loginPassword" autocomplete="current-password" data-i18n-placeholder="passwordPlaceholder">
+          <button type="button" class="input-eye" id="pwToggle" onclick="togglePasswordVisibility()">
+            <svg class="eye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+            <svg class="eye-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.94 10.94 0 0 1 12 19c-7 0-11-7-11-7a18.6 18.6 0 0 1 5.06-5.94M9.9 4.24A10.94 10.94 0 0 1 12 4c7 0 11 7 11 7a18.6 18.6 0 0 1-3.22 4.24M14.12 14.12a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
+          </button>
+        </div>
+
+        <label class="remember-row">
+          <input type="checkbox" id="rememberMe" checked>
+          <span data-i18n="remember"></span>
+        </label>
+
+        <button class="btn-primary" id="loginBtn" onclick="doLogin()" data-i18n="loginBtn"></button>
+        <div class="login-error" id="loginError"></div>
+      </div>
+      <div class="login-footer">v<span id="loginVersion"></span></div>
+    </div>
   </div>
 </div>
 
@@ -211,27 +345,110 @@ function escapeHtmlLite(s){
   return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
-async function doLogin(){
-  const email = document.getElementById('loginEmail').value.trim();
-  const password = document.getElementById('loginPassword').value;
-  const btn = document.getElementById('loginBtn');
-  const err = document.getElementById('loginError');
-  err.textContent = '';
-  if(!email || !password){ err.textContent = 'กรอกอีเมลและรหัสผ่านให้ครบ'; return; }
-  btn.disabled = true; btn.textContent = 'กำลังเข้าสู่ระบบ...';
-  try{
-    await _auth.signInWithEmailAndPassword(email, password);
-  }catch(e){
-    const map = {
+// Login screen text only (rest of the app stays Thai-only for now) — a
+// small, extendable dict rather than a full app-wide i18n system nobody
+// asked for.
+const I18N = {
+  th: {
+    tagline: 'ระบบตรวจสอบงานติดตั้ง GPS / MDVR สำหรับทีมช่าง',
+    welcome: 'ยินดีต้อนรับสู่ระบบ SONGDEE GPS',
+    subtitle: 'เข้าสู่ระบบเพื่อเริ่มบันทึกรายงานตรวจสอบงาน',
+    emailLabel: 'อีเมล',
+    emailPlaceholder: 'เช่น somchai@songdeegps.com',
+    passwordLabel: 'รหัสผ่าน',
+    passwordPlaceholder: 'รหัสผ่าน',
+    remember: 'จดจำฉันไว้',
+    loginBtn: 'เข้าสู่ระบบ',
+    loginBtnBusy: 'กำลังเข้าสู่ระบบ...',
+    errRequired: 'กรอกอีเมลและรหัสผ่านให้ครบ',
+    errRole: 'บัญชีนี้ยังไม่ได้กำหนดชื่อช่าง (techName) กรุณาให้แอดมินตั้งค่าในระบบ Stock ก่อน',
+    errRoleLoad: 'โหลดข้อมูลสิทธิ์ไม่สำเร็จ: ',
+    errGeneric: 'เข้าสู่ระบบไม่สำเร็จ: ',
+    errMap: {
       'auth/invalid-email':'อีเมลไม่ถูกต้อง',
       'auth/user-not-found':'ไม่พบบัญชีนี้',
       'auth/wrong-password':'รหัสผ่านไม่ถูกต้อง',
       'auth/invalid-credential':'อีเมลหรือรหัสผ่านไม่ถูกต้อง',
-      'auth/too-many-requests':'ลองผิดหลายครั้งเกินไป กรุณารอสักครู่'
-    };
-    err.textContent = map[e.code] || ('เข้าสู่ระบบไม่สำเร็จ: ' + e.message);
+      'auth/too-many-requests':'ลองผิดหลายครั้งเกินไป กรุณารอสักครู่',
+    },
+  },
+  en: {
+    tagline: 'GPS / MDVR installation QC system for field technicians',
+    welcome: 'Welcome to SONGDEE GPS',
+    subtitle: 'Log in to start recording your inspection reports',
+    emailLabel: 'Email',
+    emailPlaceholder: 'e.g. somchai@songdeegps.com',
+    passwordLabel: 'Password',
+    passwordPlaceholder: 'Password',
+    remember: 'Remember me',
+    loginBtn: 'Log in',
+    loginBtnBusy: 'Logging in...',
+    errRequired: 'Please enter both email and password',
+    errRole: 'This account has no technician name set yet — ask an admin to set it up in the Stock system first.',
+    errRoleLoad: 'Failed to load account permissions: ',
+    errGeneric: 'Login failed: ',
+    errMap: {
+      'auth/invalid-email':'Invalid email address',
+      'auth/user-not-found':'No account found',
+      'auth/wrong-password':'Incorrect password',
+      'auth/invalid-credential':'Incorrect email or password',
+      'auth/too-many-requests':'Too many attempts — please wait a moment',
+    },
+  },
+};
+let currentLang = localStorage.getItem('songdee_lang') === 'en' ? 'en' : 'th';
+
+function t(key){ return I18N[currentLang][key] ?? I18N.th[key] ?? key; }
+
+function applyLang(lang){
+  currentLang = lang === 'en' ? 'en' : 'th';
+  localStorage.setItem('songdee_lang', currentLang);
+  document.documentElement.lang = currentLang;
+  document.querySelectorAll('[data-i18n]').forEach(el=>{ el.textContent = t(el.getAttribute('data-i18n')); });
+  document.querySelectorAll('[data-i18n-placeholder]').forEach(el=>{ el.placeholder = t(el.getAttribute('data-i18n-placeholder')); });
+  document.getElementById('langLabel').textContent = currentLang === 'en' ? 'English' : 'ไทย';
+}
+
+function setLang(lang){
+  applyLang(lang);
+  document.getElementById('langMenu').classList.add('app-hidden');
+}
+
+function toggleLangMenu(){
+  document.getElementById('langMenu').classList.toggle('app-hidden');
+}
+
+document.addEventListener('click', e=>{
+  const wrap = document.getElementById('langSelect');
+  if(wrap && !wrap.contains(e.target)) document.getElementById('langMenu').classList.add('app-hidden');
+});
+
+function togglePasswordVisibility(){
+  const input = document.getElementById('loginPassword');
+  const btn = document.getElementById('pwToggle');
+  const showing = input.type === 'text';
+  input.type = showing ? 'password' : 'text';
+  btn.classList.toggle('showing', !showing);
+}
+
+applyLang(currentLang);
+
+async function doLogin(){
+  const email = document.getElementById('loginEmail').value.trim();
+  const password = document.getElementById('loginPassword').value;
+  const remember = document.getElementById('rememberMe').checked;
+  const btn = document.getElementById('loginBtn');
+  const err = document.getElementById('loginError');
+  err.textContent = '';
+  if(!email || !password){ err.textContent = t('errRequired'); return; }
+  btn.disabled = true; btn.textContent = t('loginBtnBusy');
+  try{
+    await _auth.setPersistence(remember ? firebase.auth.Auth.Persistence.LOCAL : firebase.auth.Auth.Persistence.SESSION);
+    await _auth.signInWithEmailAndPassword(email, password);
+  }catch(e){
+    err.textContent = t('errMap')[e.code] || (t('errGeneric') + e.message);
   }
-  btn.disabled = false; btn.textContent = 'เข้าสู่ระบบ';
+  btn.disabled = false; btn.textContent = t('loginBtn');
 }
 
 function doLogout(){
@@ -256,7 +473,7 @@ _auth.onAuthStateChanged(async user=>{
     const roleSnap = await _db.collection('roles').doc(user.uid).get();
     const role = roleSnap.exists ? roleSnap.data() : null;
     if(!role || !role.techName){
-      err.textContent = 'บัญชีนี้ยังไม่ได้กำหนดชื่อช่าง (techName) กรุณาให้แอดมินตั้งค่าในระบบ Stock ก่อน';
+      err.textContent = t('errRole');
       await _auth.signOut();
       return;
     }
@@ -267,7 +484,7 @@ _auth.onAuthStateChanged(async user=>{
     stats.classList.remove('app-hidden');
     await loadDashboard();
   }catch(e){
-    err.textContent = 'โหลดข้อมูลสิทธิ์ไม่สำเร็จ: ' + e.message;
+    err.textContent = t('errRoleLoad') + e.message;
     await _auth.signOut();
   }
 });
@@ -315,6 +532,7 @@ function renderList(list){
 
 const APP_VERSION = document.querySelector('meta[name="app-version"]').content;
 document.getElementById('versionTag').textContent = 'v' + APP_VERSION;
+document.getElementById('loginVersion').textContent = APP_VERSION;
 </script>
 
 </body>
