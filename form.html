@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.17.0">
+<meta name="app-version" content="1.17.1">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -1628,10 +1628,20 @@ function buildLineCard(){
     })
   });
 
-  // Every uploaded photo shows as a real inline image at the bottom of the
-  // card (songdee-line-proxy's buildFlexCard() stacks each imageUrls entry
-  // as its own image block) — no more "click a button to see photo 2+".
+  // Photos go out as separate native LINE image messages (tap to view/
+  // save/share like a normal photo) rather than embedded in the card — see
+  // buildImageMessages() in songdee-line-proxy. LINE caps a push at 5
+  // messages total (1 card + up to 4 photos), so only the first 4 photos
+  // actually reach LINE as images even if more were attached.
   const uploadedPhotos = state.photos.filter(p=> p.driveUrl);
+
+  // Also add each of those same photos as a footer link button, so there's
+  // a way to open/download the full-res Drive copy straight from the card
+  // text even without scrolling past the image bubbles.
+  const links = uploadedPhotos.slice(0, 4).map((p, i)=> ({
+    label: `📷 เปิดรูปที่ ${i + 1} ใน Drive`,
+    url: p.driveUrl,
+  }));
 
   return {
     title: `✅ รายงานตรวจสอบงานช่าง · ${TEMPLATES[state.tpl].label}`,
@@ -1640,6 +1650,7 @@ function buildLineCard(){
     fields,
     sections,
     imageUrls: uploadedPhotos.map(p=> p.driveUrl),
+    links,
   };
 }
 
