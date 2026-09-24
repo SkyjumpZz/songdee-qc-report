@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.17.1">
+<meta name="app-version" content="1.18.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -187,6 +187,12 @@
     overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
   }
   .photo-hint{font-size:11.5px; color:var(--text-dim); margin-top:6px;}
+  /* ลากไฟล์รูปมาวาง หรือ Ctrl+V วางจาก clipboard ได้ (ไม่ต้องผ่านตัวเลือกไฟล์
+     เสมอไป — สะดวกเวลา capture หน้าจอเล่นย้อนกล้อง MDVR แล้ววางตรงนี้เลย) */
+  #photoCard.dragover{
+    border-color:var(--accent); background:rgba(255,176,32,0.06);
+    box-shadow:0 0 0 2px rgba(255,176,32,0.18) inset;
+  }
   .sticker-grid{display:grid; gap:9px;}
   .sticker-row{
     display:grid; grid-template-columns:1fr 1fr; gap:10px; align-items:center;
@@ -1358,12 +1364,50 @@ function renderPhotos(){
     grid.appendChild(cell);
   });
   document.getElementById('addPhotoBtn').disabled = state.photos.length >= MAX_PHOTOS;
-  document.getElementById('photoHint').textContent = `${state.photos.length}/${MAX_PHOTOS} รูป (ไม่บังคับ)`;
+  document.getElementById('photoHint').textContent = `${state.photos.length}/${MAX_PHOTOS} รูป (ไม่บังคับ) — ลากรูปมาวาง หรือ Ctrl+V ก็ได้`;
 }
 
 document.getElementById('photoInput').addEventListener('change', e=>{
   onPhotoFilesSelected(e.target.files);
   e.target.value = '';
+});
+
+// ลากไฟล์รูปวางบนการ์ด "แนบรูปภาพ" — ทางเลือกเร็วกว่าเปิดตัวเลือกไฟล์ทุกครั้ง
+const photoCardEl = document.getElementById('photoCard');
+['dragenter','dragover'].forEach(evt=>{
+  photoCardEl.addEventListener(evt, e=>{
+    e.preventDefault();
+    photoCardEl.classList.add('dragover');
+  });
+});
+['dragleave','drop'].forEach(evt=>{
+  photoCardEl.addEventListener(evt, e=>{
+    e.preventDefault();
+    photoCardEl.classList.remove('dragover');
+  });
+});
+photoCardEl.addEventListener('drop', e=>{
+  if(e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length){
+    onPhotoFilesSelected(e.dataTransfer.files);
+  }
+});
+
+// วางรูปจาก clipboard (Ctrl+V) — เช่น capture หน้าจอเล่นย้อนกล้อง MDVR มาแล้ว
+// วางตรงนี้ได้เลยโดยไม่ต้อง save ไฟล์ก่อน ไม่ยุ่งกับการวางข้อความปกติในช่องอื่น
+// (ทำงานเฉพาะตอน clipboard มีไฟล์รูปจริงๆ)
+document.addEventListener('paste', e=>{
+  const items = (e.clipboardData && e.clipboardData.items) || [];
+  const files = [];
+  for(const item of items){
+    if(item.kind === 'file' && item.type.startsWith('image/')){
+      const file = item.getAsFile();
+      if(file) files.push(file);
+    }
+  }
+  if(files.length){
+    e.preventDefault();
+    onPhotoFilesSelected(files);
+  }
 });
 
 async function uploadPhotoToDrive(photo){
