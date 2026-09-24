@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.19.0">
+<meta name="app-version" content="1.19.1">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -559,7 +559,8 @@ function updateProductBanner(){
   const banner = document.getElementById('stockLockBanner');
   const plateTyped = !!(state.plate || '').trim();
   if(stockLock){
-    banner.textContent = `ล็อกรายการติดตั้งตามใบเบิกล่าสุด ${stockLock.noStock} (${Object.keys(stockLock.items).length} รายการ)`;
+    const scope = stockLock.matchedByJob ? 'ที่จัดไว้สำหรับใบงานนี้โดยเฉพาะ' : 'ล่าสุดที่ตรงทะเบียนนี้';
+    banner.textContent = `ล็อกรายการติดตั้งตามใบเบิก${scope} ${stockLock.noStock} (${Object.keys(stockLock.items).length} รายการ)`;
     banner.className = 'stock-lock-banner locked';
   } else if(techStock){
     banner.textContent = `แสดงเฉพาะของที่เบิกไปถืออยู่ (${tester.techName}) — ${Object.keys(techStock).length} รายการ`;
@@ -601,13 +602,22 @@ async function checkStockLock(){
       .map(d=>{ try{ return JSON.parse(d.data().v); }catch{ return null; } })
       .filter(d=> d && d.plate && d.plate.trim() === plate)
       .sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
-    const match = docs[0];
+    // If this report came from a picked งานที่ได้รับมอบหมาย (and the plate
+    // still matches that job — a manual edit afterward could've changed
+    // it), prefer the ใบเบิก that was actually created for THIS job over
+    // just "latest ใบเบิก that happens to share the same ทะเบียน" — Admin
+    // web links them via adminJobId when the withdrawal is made.
+    const linkedAssignment = selectedAssignmentId ? assignments.find(a=> a.id === selectedAssignmentId) : null;
+    const trustJobLink = !!(linkedAssignment && (linkedAssignment.vehicle||'').trim() === plate);
+    let match = trustJobLink ? docs.find(d=> d.adminJobId === selectedAssignmentId) : null;
+    const matchedByJob = !!match;
+    if(!match) match = docs[0];
     if(match){
       const items = {};
       Object.entries(match.items||{}).forEach(([name,it])=>{
         if(it && it.qty > 0) items[name] = it.qty;
       });
-      stockLock = { noStock: match.noStock || '(ไม่มีเลขที่)', items };
+      stockLock = { noStock: match.noStock || '(ไม่มีเลขที่)', items, matchedByJob };
     } else {
       stockLock = null;
     }
@@ -785,6 +795,11 @@ const ADMIN_NAME_MAP = {
   "ช่างเทส": "Pu",
 };
 let assignments = [];
+// Remembers which งานที่ได้รับมอบหมาย was picked (if any), so
+// checkStockLock() can match this exact job's ใบเบิก via its adminJobId
+// cross-reference instead of just "latest ใบเบิก for this ทะเบียน" — see
+// onAssignmentSelect() and checkStockLock() below.
+let selectedAssignmentId = null;
 
 async function loadAssignments(){
   if(!tester.techName) return;
@@ -827,6 +842,7 @@ function onAssignmentSelect(id){
   if(!id) return;
   const a = assignments.find(x=>x.id===id);
   if(!a) return;
+  selectedAssignmentId = id;
   state.customer = a.customer || '';
   state.plate = a.vehicle || '';
   document.getElementById('jobCustomer').value = state.customer;
@@ -872,6 +888,7 @@ async function saveReport(){
 
 function loadReportIntoForm(doc){
   currentReportId = doc.id;
+  selectedAssignmentId = null;
   state = {
     tpl: doc.tpl || 'upgrade',
     date: doc.date || '',
@@ -922,6 +939,7 @@ function startNewReport(){
   document.getElementById('editingBanner').classList.add('app-hidden');
   syncFormInputsFromState();
   stockLock = null;
+  selectedAssignmentId = null;
   vehicleOldModels = [];
   deviceLookup = {};
   openIssue = null;
@@ -949,6 +967,7 @@ function startNextVehicle(){
   document.getElementById('editingBanner').classList.add('app-hidden');
   syncFormInputsFromState();
   stockLock = null;
+  selectedAssignmentId = null;
   vehicleOldModels = [];
   deviceLookup = {};
   openIssue = null;
