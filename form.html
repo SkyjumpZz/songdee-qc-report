@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.19.1">
+<meta name="app-version" content="1.20.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -269,6 +269,13 @@
   }
   .stock-lock-banner.locked{border-color:var(--accent-2); color:var(--accent-2);}
   .stock-lock-banner.warn{border-color:var(--amber); color:var(--amber);}
+  .tech-stock-search{margin-bottom:10px;}
+  .tech-stock-search label{margin:0 0 5px;}
+  .tech-stock-search input{
+    width:100%; background:var(--bg-panel-2); border:1px solid var(--line);
+    color:var(--text); border-radius:9px; padding:9px 11px; font-size:13px; font-family:inherit;
+  }
+  .tech-stock-search input:focus{outline:none; border-color:var(--accent);}
   .editing-banner{
     font-size:12px; color:var(--accent); background:rgba(255,176,32,0.08);
     border:1px solid var(--accent); border-radius:9px; padding:9px 11px; margin-bottom:10px;
@@ -361,6 +368,11 @@
   <div class="card" id="fixesCard">
     <div class="card-title"><span class="dot"></span><span id="fixesCardTitle">แก้ไข</span></div>
     <div class="stock-lock-banner" id="stockLockBanner"></div>
+    <div class="tech-stock-search app-hidden" id="techStockSearch">
+      <label>ดูของ Spare ของช่าง (พิมพ์ชื่อ เปลี่ยนเป็นช่างคนอื่นได้)</label>
+      <input type="text" id="techStockNameInput" list="techNameList" placeholder="ชื่อช่าง">
+      <datalist id="techNameList"></datalist>
+    </div>
     <div class="stock-lock-banner app-hidden" id="vehicleEquipmentBanner"></div>
     <div id="fixRows"></div>
     <button class="btn-add" id="addFixBtn" onclick="addFixRow()">+ เพิ่มรายการแก้ไข</button>
@@ -516,7 +528,9 @@ _auth.onAuthStateChanged(async user=>{
 let stockLock = null; // { noStock, items: {name: qty} } or null
 let _stockLockTimer = null;
 let liveCatalog = null; // string[] once loaded, else null (fall back to PRODUCTS)
-let techStock = null; // {name: remainingQty} once loaded & non-empty, else null
+let allTechStock = {}; // raw sd:tech blob: {techName: [{name,qty,used,ret,pend}, ...]}
+let techStock = null; // {name: remainingQty} for whichever name is active below, or null
+let techStockOwnerName = ''; // whose stock techStock currently shows
 let techStockChecked = false; // avoids a false "nothing found" banner flash before the fetch resolves
 
 async function loadLiveCatalog(){
@@ -531,24 +545,60 @@ async function loadLiveCatalog(){
   renderFixRows();
 }
 
+// {name: remaining qty} for one technician's Stock spare items — remain =
+// qty (withdrawn) - used - ret(urned) - pend(ing), same formula Stock's own
+// "🧰 ของ Spare ช่าง" page uses.
+function computeTechStockItems(name){
+  const rows = Array.isArray(allTechStock[name]) ? allTechStock[name] : [];
+  const items = {};
+  rows.forEach(r=>{
+    const remain = (r.qty||0) - (r.used||0) - (r.ret||0) - (r.pend||0);
+    if(r.name && remain > 0) items[r.name] = remain;
+  });
+  return Object.keys(items).length ? items : null;
+}
+
+// Defaults to this session's own tester.techName, but ช่างค้นหาชื่ออื่นได้
+// เองใน #techStockNameInput (e.g. to borrow/log from a colleague's spare
+// stock instead of theirs) — see wireTechStockSearch() below.
+function applyTechStockName(name){
+  techStockOwnerName = (name || '').trim() || tester.techName || '';
+  techStock = techStockOwnerName ? computeTechStockItems(techStockOwnerName) : null;
+  updateProductBanner();
+}
+
+function loadTechStockNameOptions(){
+  const list = document.getElementById('techNameList');
+  if(!list) return;
+  list.innerHTML = '';
+  Object.keys(allTechStock).sort().forEach(name=>{
+    const o = document.createElement('option');
+    o.value = name;
+    list.appendChild(o);
+  });
+}
+
+function wireTechStockSearch(){
+  const input = document.getElementById('techStockNameInput');
+  const wrap = document.getElementById('techStockSearch');
+  if(!input || !wrap) return;
+  wrap.classList.toggle('app-hidden', !Object.keys(allTechStock).length);
+  input.value = tester.techName || '';
+  input.oninput = ()=> applyTechStockName(input.value);
+}
+
 async function loadTechStock(){
-  if(!tester.techName) { techStockChecked = true; return; }
   try{
     const snap = await _db.collection('sd').doc('sd_tech').get();
-    const all = snap.exists ? JSON.parse(snap.data().v || '{}') : {};
-    const rows = Array.isArray(all[tester.techName]) ? all[tester.techName] : [];
-    const items = {};
-    rows.forEach(r=>{
-      const remain = (r.qty||0) - (r.used||0) - (r.ret||0) - (r.pend||0);
-      if(r.name && remain > 0) items[r.name] = remain;
-    });
-    techStock = Object.keys(items).length ? items : null;
+    allTechStock = snap.exists ? JSON.parse(snap.data().v || '{}') : {};
   }catch(e){
     console.error('[Tech stock]', e);
-    techStock = null;
+    allTechStock = {};
   }
   techStockChecked = true;
-  updateProductBanner();
+  loadTechStockNameOptions();
+  wireTechStockSearch();
+  applyTechStockName(tester.techName || '');
 }
 
 // Shared by checkStockLock() (plate typed/changed) and loadTechStock()
@@ -563,7 +613,7 @@ function updateProductBanner(){
     banner.textContent = `ล็อกรายการติดตั้งตามใบเบิก${scope} ${stockLock.noStock} (${Object.keys(stockLock.items).length} รายการ)`;
     banner.className = 'stock-lock-banner locked';
   } else if(techStock){
-    banner.textContent = `แสดงเฉพาะของที่เบิกไปถืออยู่ (${tester.techName}) — ${Object.keys(techStock).length} รายการ`;
+    banner.textContent = `แสดงเฉพาะของที่เบิกไปถืออยู่ (${techStockOwnerName}) — ${Object.keys(techStock).length} รายการ`;
     banner.className = 'stock-lock-banner locked';
   } else if(plateTyped && techStockChecked){
     banner.textContent = 'ไม่พบใบเบิกที่ตรงกับทะเบียนนี้ และไม่พบของที่ถืออยู่ในระบบ Stock ของช่างนี้ — เลือกอุปกรณ์แบบอิสระได้';
