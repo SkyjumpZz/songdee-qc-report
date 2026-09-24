@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.18.1">
+<meta name="app-version" content="1.19.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -473,6 +473,8 @@ _auth.onAuthStateChanged(async user=>{
     pageTabs.classList.remove('app-hidden');
     updatePreview();
     scheduleStockLockCheck();
+    loadLiveCatalog();
+    loadTechStock();
     loadAssignments();
     loadReportFromUrlIfAny();
     loadPlateSuggestions();
@@ -491,9 +493,89 @@ _auth.onAuthStateChanged(async user=>{
 // actually withdrawn on that doc, capped at the withdrawn qty.
 // Matched by ทะเบียน only (latest ใบเบิก wins) — NOT by techName, since
 // the Admin app's own tech names never reliably match roles.techName.
+//
+// Two more Stock-connected sources feed the same picker, in priority
+// order (see renderFixRows()):
+//   1. stockLock   — this ใบเบิก, matched by plate (above)
+//   2. techStock   — items currently checked out to THIS technician
+//                    (Stock's "🧰 ของ Spare ช่าง" page), matched by
+//                    techName — same fuzzy-match caveat as ทะเบียน
+//                    matching would have had: Stock keeps that page's
+//                    names in sync with roles.techName by hand, no
+//                    validation. A mismatch just means techStock stays
+//                    empty (falls through to the full catalog below),
+//                    never someone else's inventory.
+//   3. liveCatalog — Stock's full item catalog (all categories
+//                    flattened), replacing the old hardcoded PRODUCTS
+//                    list as the free-pick fallback.
+// Both sd:cats/sd:tech are, like sd:doc:*, plain JSON blobs in the
+// generic "sd" collection (songdee-stock has no typed products/
+// tech-stock collection) — doc id is the key with [/:.]  replaced by
+// "_" (songdee-stock's own ss()/sg() helpers do the same transform).
 // ---------------------------------------------------------------
 let stockLock = null; // { noStock, items: {name: qty} } or null
 let _stockLockTimer = null;
+let liveCatalog = null; // string[] once loaded, else null (fall back to PRODUCTS)
+let techStock = null; // {name: remainingQty} once loaded & non-empty, else null
+let techStockChecked = false; // avoids a false "nothing found" banner flash before the fetch resolves
+
+async function loadLiveCatalog(){
+  try{
+    const snap = await _db.collection('sd').doc('sd_cats').get();
+    const cats = snap.exists ? JSON.parse(snap.data().v || '[]') : [];
+    const flat = cats.flatMap(c=> Array.isArray(c.items) ? c.items : []).filter(Boolean);
+    if(flat.length) liveCatalog = flat;
+  }catch(e){
+    console.error('[Stock catalog]', e);
+  }
+  renderFixRows();
+}
+
+async function loadTechStock(){
+  if(!tester.techName) { techStockChecked = true; return; }
+  try{
+    const snap = await _db.collection('sd').doc('sd_tech').get();
+    const all = snap.exists ? JSON.parse(snap.data().v || '{}') : {};
+    const rows = Array.isArray(all[tester.techName]) ? all[tester.techName] : [];
+    const items = {};
+    rows.forEach(r=>{
+      const remain = (r.qty||0) - (r.used||0) - (r.ret||0) - (r.pend||0);
+      if(r.name && remain > 0) items[r.name] = remain;
+    });
+    techStock = Object.keys(items).length ? items : null;
+  }catch(e){
+    console.error('[Tech stock]', e);
+    techStock = null;
+  }
+  techStockChecked = true;
+  updateProductBanner();
+}
+
+// Shared by checkStockLock() (plate typed/changed) and loadTechStock()
+// (resolves independently, may land after or before a plate check) —
+// whichever source currently "wins" per the priority above decides what
+// the banner says and what renderFixRows() offers.
+function updateProductBanner(){
+  const banner = document.getElementById('stockLockBanner');
+  const plateTyped = !!(state.plate || '').trim();
+  if(stockLock){
+    banner.textContent = `ล็อกรายการติดตั้งตามใบเบิกล่าสุด ${stockLock.noStock} (${Object.keys(stockLock.items).length} รายการ)`;
+    banner.className = 'stock-lock-banner locked';
+  } else if(techStock){
+    banner.textContent = `แสดงเฉพาะของที่เบิกไปถืออยู่ (${tester.techName}) — ${Object.keys(techStock).length} รายการ`;
+    banner.className = 'stock-lock-banner locked';
+  } else if(plateTyped && techStockChecked){
+    banner.textContent = 'ไม่พบใบเบิกที่ตรงกับทะเบียนนี้ และไม่พบของที่ถืออยู่ในระบบ Stock ของช่างนี้ — เลือกอุปกรณ์แบบอิสระได้';
+    banner.className = 'stock-lock-banner warn';
+  } else {
+    // Blank while still loading, or once loaded with nothing to say
+    // (no plate typed yet and this tech has no Stock items on file).
+    banner.textContent = '';
+    banner.className = 'stock-lock-banner';
+  }
+  renderFixRows();
+  updatePreview();
+}
 
 function scheduleStockLockCheck(){
   clearTimeout(_stockLockTimer);
@@ -505,10 +587,7 @@ async function checkStockLock(){
   const plate = (state.plate || '').trim();
   if(!plate){
     stockLock = null;
-    banner.textContent = '';
-    banner.className = 'stock-lock-banner';
-    renderFixRows();
-    updatePreview();
+    updateProductBanner();
     return;
   }
   banner.textContent = 'กำลังตรวจสอบใบเบิก...';
@@ -529,20 +608,19 @@ async function checkStockLock(){
         if(it && it.qty > 0) items[name] = it.qty;
       });
       stockLock = { noStock: match.noStock || '(ไม่มีเลขที่)', items };
-      banner.textContent = `ล็อกรายการติดตั้งตามใบเบิกล่าสุด ${stockLock.noStock} (${Object.keys(items).length} รายการ)`;
-      banner.className = 'stock-lock-banner locked';
     } else {
       stockLock = null;
-      banner.textContent = 'ไม่พบใบเบิกที่ตรงกับทะเบียนนี้ — เลือกอุปกรณ์แบบอิสระได้';
-      banner.className = 'stock-lock-banner warn';
     }
+    updateProductBanner();
   }catch(e){
     stockLock = null;
+    // Distinct message from "no match" — a real fetch failure, worth
+    // telling apart from "checked and there's genuinely nothing".
     banner.textContent = 'ตรวจสอบใบเบิกไม่สำเร็จ: ' + e.message + ' — เลือกอุปกรณ์แบบอิสระได้';
     banner.className = 'stock-lock-banner warn';
+    renderFixRows();
+    updatePreview();
   }
-  renderFixRows();
-  updatePreview();
 }
 
 // ---------------------------------------------------------------
@@ -848,11 +926,9 @@ function startNewReport(){
   deviceLookup = {};
   openIssue = null;
   closeIssueChecked = true;
-  const banner = document.getElementById('stockLockBanner');
-  banner.textContent = '';
-  banner.className = 'stock-lock-banner';
   renderIssueBanner();
   renderAll();
+  updateProductBanner();
 }
 
 // For a customer visit covering several vehicles: keep วันที่/ลูกค้า/Fleet
@@ -877,18 +953,17 @@ function startNextVehicle(){
   deviceLookup = {};
   openIssue = null;
   closeIssueChecked = true;
-  const banner = document.getElementById('stockLockBanner');
-  banner.textContent = '';
-  banner.className = 'stock-lock-banner';
   renderIssueBanner();
   renderAll();
+  updateProductBanner();
   showToast('เริ่มทะเบียนถัดไป (ลูกค้าเดิม) — กรอกทะเบียนใหม่ได้เลย');
 }
 
 // ---------------------------------------------------------------
-// Mock product list — swap this array for a live fetch from the
-// SONGDEE GPS Stock System (songdeegps-stock, Firebase `songdee-stock`)
-// e.g. fetch product names/SKUs from its Firestore `products` collection.
+// Bundled fallback catalog — only used when loadLiveCatalog() (above)
+// hasn't resolved yet or fails outright (Stock unreachable), so the
+// picker never ends up with zero options. The real source of truth is
+// now Stock's own sd:cats catalog via liveCatalog.
 // ---------------------------------------------------------------
 const PRODUCTS = [
   "MDVR32-04 V.1", "SD Card 64GB", "SD Card 128GB", "HDD 1TB", "ชุด Caredrive",
@@ -896,7 +971,6 @@ const PRODUCTS = [
   "กล้อง AI", "สาย 5 เมตร (4 เส้น)", "สาย 10 เมตร (2 เส้น)", "ซิมการ์ด",
   "DMS V.3", "ฐานรองกล้อง", "เสาอากาศ GPS", "เสาอากาศ 3G", "สายไฟหลัก MDVR",
   "AI Box", "ADAS",
-  "อื่นๆ (พิมพ์เอง)"
 ];
 
 // Products tracked by serial number in their own Ai Box Tracking-spreadsheet
@@ -1086,8 +1160,14 @@ function removeFixRow(idx){
 }
 function renderFixRows(){
   const container = document.getElementById('fixRows');
-  const locked = !!stockLock;
-  const options = locked ? Object.keys(stockLock.items) : PRODUCTS;
+  // Priority: this ทะเบียน's ใบเบิก > this technician's own Stock spare
+  // items > the full catalog (free pick). See the comment above
+  // checkStockLock() for why/how each source is matched.
+  const lockSource = stockLock ? 'plate' : (techStock ? 'tech' : null);
+  const locked = !!lockSource;
+  const lockItems = lockSource === 'plate' ? stockLock.items : techStock;
+  const lockQtyLabel = lockSource === 'plate' ? 'เบิก' : 'คงเหลือ';
+  const options = locked ? Object.keys(lockItems) : [...(liveCatalog || PRODUCTS), "อื่นๆ (พิมพ์เอง)"];
   container.innerHTML = '';
   state.fixes.forEach((row, idx)=>{
     const wrap = document.createElement('div');
@@ -1102,20 +1182,20 @@ function renderFixRows(){
     blank.value=''; blank.textContent='-- เลือกอุปกรณ์ --'; sel.appendChild(blank);
     options.forEach(p=>{
       const o = document.createElement('option');
-      o.value=p; o.textContent = locked ? `${p} (เบิก ${stockLock.items[p]})` : p;
+      o.value=p; o.textContent = locked ? `${p} (${lockQtyLabel} ${lockItems[p]})` : p;
       if(p===row.product) o.selected=true;
       sel.appendChild(o);
     });
-    sel.onchange = ()=>{ row.product = sel.value; row.qty = locked ? (stockLock.items[row.product]||1) : row.qty; updatePreview(); renderFixRows(); };
+    sel.onchange = ()=>{ row.product = sel.value; row.qty = locked ? (lockItems[row.product]||1) : row.qty; updatePreview(); renderFixRows(); };
 
     const qty = document.createElement('input');
     qty.type = locked ? 'number' : 'text';
-    if(locked){ qty.min = 0; qty.max = stockLock.items[row.product] || 0; }
+    if(locked){ qty.min = 0; qty.max = lockItems[row.product] || 0; }
     qty.className='qty'; qty.value=row.qty; qty.placeholder='จำนวน';
     qty.oninput = ()=>{
       let v = qty.value;
       if(locked){
-        const max = stockLock.items[row.product] || 0;
+        const max = lockItems[row.product] || 0;
         v = Math.max(0, Math.min(parseInt(v)||0, max));
         qty.value = v;
       }
