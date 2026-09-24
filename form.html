@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.18.0">
+<meta name="app-version" content="1.18.1">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -779,6 +779,7 @@ async function saveReport(){
     // Only ever persist uploaded photos (name + Drive viewUrl) — never the
     // local base64 bytes, which would bloat/overflow a Firestore doc.
     photos: state.photos.filter(p=> p.driveUrl).map(p=> ({ name: p.name, driveUrl: p.driveUrl })),
+    driveFolderUrl: state.driveFolderUrl || null,
     techUid: tester.uid, techName: tester.techName,
     updatedAt: Date.now(),
   };
@@ -807,6 +808,7 @@ function loadReportIntoForm(doc){
       id: makePhotoId(), name: p.name || '', driveUrl: p.driveUrl || '',
       previewUrl: null, base64: null, mimeType: null, uploading: false, error: null,
     })),
+    driveFolderUrl: doc.driveFolderUrl || null,
   };
   syncFormInputsFromState();
   const dateStr = state.date ? state.date.split('-').reverse().join('/') : '(ไม่ระบุวันที่)';
@@ -1007,6 +1009,7 @@ function defaultState(){
     stickers: {},
     checklist: {},
     photos: [],
+    driveFolderUrl: null,
   };
 }
 let state = defaultState();
@@ -1430,6 +1433,10 @@ async function uploadPhotoToDrive(photo){
     const data = await res.json().catch(()=> ({}));
     if(!res.ok || !data.viewUrl) throw new Error(data.error || ('HTTP ' + res.status));
     photo.driveUrl = data.viewUrl;
+    // Every photo of this report lands in the same category/date/plate
+    // Drive folder, so any one upload's folderUrl is as good as another's —
+    // just remember whichever response happens to include it.
+    if(data.folderUrl) state.driveFolderUrl = data.folderUrl;
     photo.base64 = null; // อัปโหลดสำเร็จแล้ว ไม่ต้องเก็บ base64 ซ้ำในหน่วยความจำอีก
   }catch(e){
     photo.error = 'อัปโหลดไม่สำเร็จ: ' + e.message;
@@ -1626,8 +1633,8 @@ function buildMessage(){
 
   const uploadedPhotos = state.photos.filter(p=> p.driveUrl);
   if(uploadedPhotos.length){
-    lines.push('📷 รูปภาพแนบ:');
-    uploadedPhotos.forEach((p,i)=> lines.push(`- รูปที่ ${i+1}: ${p.driveUrl}`));
+    lines.push(`📷 รูปภาพแนบ: ${uploadedPhotos.length} รูป`);
+    if(state.driveFolderUrl) lines.push(`เข้าดูรูปทั้งหมดใน Drive: ${state.driveFolderUrl}`);
     lines.push('');
   }
   lines.push(`ผู้ทดสอบ: ${tester.techName || '-'}`);
@@ -1679,13 +1686,11 @@ function buildLineCard(){
   // actually reach LINE as images even if more were attached.
   const uploadedPhotos = state.photos.filter(p=> p.driveUrl);
 
-  // Also add each of those same photos as a footer link button, so there's
-  // a way to open/download the full-res Drive copy straight from the card
-  // text even without scrolling past the image bubbles.
-  const links = uploadedPhotos.slice(0, 4).map((p, i)=> ({
-    label: `📷 เปิดรูปที่ ${i + 1} ใน Drive`,
-    url: p.driveUrl,
-  }));
+  // One footer link straight to the whole Drive folder for this report
+  // (all its photos live there) instead of a separate button per photo.
+  const links = state.driveFolderUrl
+    ? [{ label: '📂 เข้าดูรูปทั้งหมดใน Drive', url: state.driveFolderUrl }]
+    : [];
 
   return {
     title: `✅ รายงานตรวจสอบงานช่าง · ${TEMPLATES[state.tpl].label}`,
