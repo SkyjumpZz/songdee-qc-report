@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.20.0">
+<meta name="app-version" content="1.20.1">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -633,6 +633,16 @@ function scheduleStockLockCheck(){
   _stockLockTimer = setTimeout(()=>{ checkStockLock(); loadVehicleOldModels(); loadDeviceLookup(); loadOpenIssue(); }, 500);
 }
 
+// Loose plate match — a technician typing ทะเบียน here and whatever got
+// typed into Stock when the ใบเบิก was created don't reliably agree on
+// spaces/dashes (e.g. "1กก1234" vs "1กก-1234" vs "1กก 1234"). A strict
+// trimmed-equality match silently missed a confirmed-real, non-cancelled
+// ใบเบิก over exactly this kind of formatting difference. Same fix
+// songdee-line-proxy already uses for its own plate lookups.
+function normPlate(s){
+  return String(s||'').replace(/[\s\-]/g,'').toLowerCase();
+}
+
 async function checkStockLock(){
   const banner = document.getElementById('stockLockBanner');
   const plate = (state.plate || '').trim();
@@ -650,7 +660,7 @@ async function checkStockLock(){
       .get();
     const docs = snap.docs
       .map(d=>{ try{ return JSON.parse(d.data().v); }catch{ return null; } })
-      .filter(d=> d && d.plate && d.plate.trim() === plate)
+      .filter(d=> d && d.plate && !d.cancelled && normPlate(d.plate) === normPlate(plate))
       .sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
     // If this report came from a picked งานที่ได้รับมอบหมาย (and the plate
     // still matches that job — a manual edit afterward could've changed
@@ -658,7 +668,7 @@ async function checkStockLock(){
     // just "latest ใบเบิก that happens to share the same ทะเบียน" — Admin
     // web links them via adminJobId when the withdrawal is made.
     const linkedAssignment = selectedAssignmentId ? assignments.find(a=> a.id === selectedAssignmentId) : null;
-    const trustJobLink = !!(linkedAssignment && (linkedAssignment.vehicle||'').trim() === plate);
+    const trustJobLink = !!(linkedAssignment && normPlate(linkedAssignment.vehicle) === normPlate(plate));
     let match = trustJobLink ? docs.find(d=> d.adminJobId === selectedAssignmentId) : null;
     const matchedByJob = !!match;
     if(!match) match = docs[0];
