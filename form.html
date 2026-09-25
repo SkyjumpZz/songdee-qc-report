@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.20.1">
+<meta name="app-version" content="1.21.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -329,6 +329,11 @@
 
   <div class="card">
     <div class="card-title"><span class="dot"></span>ข้อมูลงาน</div>
+    <div class="tech-stock-search app-hidden" id="techStockSearch">
+      <label>ช่างที่กำลังทำรายงานนี้ (พิมพ์ชื่อ — ดึงทั้งงานที่มอบหมายและของ Spare ของช่างคนนั้น)</label>
+      <input type="text" id="techStockNameInput" list="techNameList" placeholder="ชื่อช่าง">
+      <datalist id="techNameList"></datalist>
+    </div>
     <div id="jobAssignField">
       <label>งานที่ได้รับมอบหมาย (จาก Admin)</label>
       <select id="jobAssignSelect">
@@ -368,11 +373,6 @@
   <div class="card" id="fixesCard">
     <div class="card-title"><span class="dot"></span><span id="fixesCardTitle">แก้ไข</span></div>
     <div class="stock-lock-banner" id="stockLockBanner"></div>
-    <div class="tech-stock-search app-hidden" id="techStockSearch">
-      <label>ดูของ Spare ของช่าง (พิมพ์ชื่อ เปลี่ยนเป็นช่างคนอื่นได้)</label>
-      <input type="text" id="techStockNameInput" list="techNameList" placeholder="ชื่อช่าง">
-      <datalist id="techNameList"></datalist>
-    </div>
     <div class="stock-lock-banner app-hidden" id="vehicleEquipmentBanner"></div>
     <div id="fixRows"></div>
     <button class="btn-add" id="addFixBtn" onclick="addFixRow()">+ เพิ่มรายการแก้ไข</button>
@@ -584,7 +584,14 @@ function wireTechStockSearch(){
   if(!input || !wrap) return;
   wrap.classList.toggle('app-hidden', !Object.keys(allTechStock).length);
   input.value = tester.techName || '';
-  input.oninput = ()=> applyTechStockName(input.value);
+  // One name drives both lookups together: this technician's Spare stock
+  // AND their own งานที่ได้รับมอบหมาย list (which ใบเบิก to pull follows
+  // from whichever job gets picked there — see checkStockLock()).
+  input.oninput = ()=>{
+    const name = input.value.trim() || tester.techName || '';
+    applyTechStockName(name);
+    loadAssignments(name);
+  };
 }
 
 async function loadTechStock(){
@@ -841,9 +848,15 @@ async function loadPlateSuggestions(){
 // Job assignments — read-only lookup into the Admin web app's own
 // "assignments" collection (same songdee-stock Firebase project). Admin
 // assigns jobs there with customer/vehicle/assignedToName; here we just
-// list the logged-in technician's own assignments so ชื่อลูกค้า/ทะเบียน
-// can be picked instead of typed, cutting down typos. Selecting one
-// auto-fills both fields (and still lets them be edited manually after).
+// list a technician's own assignments so ชื่อลูกค้า/ทะเบียน can be picked
+// instead of typed, cutting down typos. Selecting one auto-fills both
+// fields (and still lets them be edited manually after).
+//
+// Which technician defaults to the logged-in one (tester.techName), but
+// #techStockNameInput (see wireTechStockSearch()) lets it be changed to
+// look up a DIFFERENT technician's assignments + Spare stock together —
+// e.g. checking what a specific tech has been given for a specific job,
+// not just whoever happens to be logged in right now.
 //
 // The Admin web app has its OWN technician list (its "technicians"
 // collection, no shared ID with Firebase Auth) — assignedToName there is
@@ -861,9 +874,10 @@ let assignments = [];
 // onAssignmentSelect() and checkStockLock() below.
 let selectedAssignmentId = null;
 
-async function loadAssignments(){
-  if(!tester.techName) return;
-  const adminName = ADMIN_NAME_MAP[tester.techName] || tester.techName;
+async function loadAssignments(name){
+  const techName = (name || '').trim() || tester.techName;
+  if(!techName) return;
+  const adminName = ADMIN_NAME_MAP[techName] || techName;
   try{
     const snap = await _db.collection('assignments')
       .where('assignedToName', '==', adminName)
@@ -880,7 +894,9 @@ async function loadAssignments(){
     console.error('[Assignments] load failed', e);
     assignments = [];
   }
+  selectedAssignmentId = null; // whichever job was picked belonged to the previous technician's list
   renderAssignmentSelect();
+  updateProductBanner();
 }
 
 function renderAssignmentSelect(){
