@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.21.0">
+<meta name="app-version" content="1.22.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -487,6 +487,7 @@ _auth.onAuthStateChanged(async user=>{
     scheduleStockLockCheck();
     loadLiveCatalog();
     loadTechStock();
+    await loadNameMap(); // must resolve before the first assignments fetch uses the real mapping
     loadAssignments();
     loadReportFromUrlIfAny();
     loadPlateSuggestions();
@@ -861,12 +862,28 @@ async function loadPlateSuggestions(){
 // The Admin web app has its OWN technician list (its "technicians"
 // collection, no shared ID with Firebase Auth) — assignedToName there is
 // whatever name the admin picked, which is NOT guaranteed to match this
-// account's roles.techName used to log in here. Bridge the two names
-// manually below as people are confirmed (roles.techName -> Admin name).
+// account's roles.techName used to log in here. The bridge between the two
+// names now lives in Stock's sd:nameMap (same generic "sd" blob store as
+// sd:cats/sd:tech) — editable from the Dashboard's admin panel (index.html)
+// without a redeploy, instead of the old hardcoded ADMIN_NAME_MAP constant.
+// FALLBACK_NAME_MAP is just a safety net for before sd:nameMap has ever
+// been created/loaded, or if the fetch fails.
 // ---------------------------------------------------------------
-const ADMIN_NAME_MAP = {
+const FALLBACK_NAME_MAP = {
   "ช่างเทส": "Pu",
 };
+let nameMap = { ...FALLBACK_NAME_MAP };
+
+async function loadNameMap(){
+  try{
+    const snap = await _db.collection('sd').doc('sd_nameMap').get();
+    const map = snap.exists ? JSON.parse(snap.data().v || '{}') : {};
+    if(Object.keys(map).length) nameMap = map;
+  }catch(e){
+    console.error('[Name map] load failed — using bundled fallback', e);
+  }
+}
+
 let assignments = [];
 // Remembers which งานที่ได้รับมอบหมาย was picked (if any), so
 // checkStockLock() can match this exact job's ใบเบิก via its adminJobId
@@ -877,7 +894,7 @@ let selectedAssignmentId = null;
 async function loadAssignments(name){
   const techName = (name || '').trim() || tester.techName;
   if(!techName) return;
-  const adminName = ADMIN_NAME_MAP[techName] || techName;
+  const adminName = nameMap[techName] || techName;
   try{
     const snap = await _db.collection('assignments')
       .where('assignedToName', '==', adminName)

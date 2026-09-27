@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>Dashboard · SONGDEE GPS</title>
-<meta name="app-version" content="1.7.0">
+<meta name="app-version" content="1.8.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -207,6 +207,28 @@
   .history-item .meta{font-size:12px; color:var(--text-dim); margin-top:4px;}
   .empty, .err, .loading{color:var(--text-dim); font-size:13px; padding:40px 0; text-align:center;}
   .err{color:var(--danger);}
+  .card{
+    background:var(--bg-panel); border:1px solid var(--line); border-radius:14px;
+    padding:16px; margin-bottom:16px;
+  }
+  .card-title{font-family:'Kanit',sans-serif; font-weight:600; font-size:15px; margin-bottom:10px;}
+  .admin-hint{font-size:12px; color:var(--text-dim); margin-bottom:12px; line-height:1.5;}
+  .name-map-row{
+    display:grid; grid-template-columns:1fr 1fr auto; gap:8px; align-items:center;
+    margin-bottom:8px;
+  }
+  .name-map-row input{margin:0;}
+  .name-map-row input:disabled{opacity:.7; cursor:default;}
+  .name-map-row button, .name-map-add button{
+    border-radius:8px; padding:9px 12px; cursor:pointer; font-size:13px;
+    font-family:inherit; white-space:nowrap;
+  }
+  .name-map-row button{background:none; border:1px solid var(--line); color:var(--danger);}
+  .name-map-add{display:grid; grid-template-columns:1fr 1fr auto; gap:8px; margin-top:4px;}
+  .name-map-add button{background:var(--accent-2); border:none; color:#06251a; font-weight:600;}
+  .name-map-status{font-size:12px; color:var(--text-dim); margin-top:8px; min-height:1em;}
+  .name-map-status.ok{color:var(--accent-2);}
+  .name-map-status.err{color:var(--danger);}
   /* จอกว้าง: 640px แคบเกินไป ดูเหมือนแอพมือถือลอยกลางจอเปล่าๆ ขยายเนื้อหา
      ให้กว้างขึ้น และจัดรายการรายงานเป็นหลายคอลัมน์แทนแถวเดียวยาวๆ */
   @media (min-width:860px){
@@ -316,6 +338,21 @@
 </header>
 
 <main>
+  <div class="card app-hidden" id="adminNameMapCard">
+    <div class="card-title">🔧 จัดการชื่อช่าง (เชื่อมกับ Admin web)</div>
+    <div class="admin-hint">
+      ชื่อในระบบนี้ (ตอนล็อกอิน) → ชื่อที่ใช้ใน Admin web (ตอนมอบหมายงาน) — ถ้าสองชื่อนี้ไม่ตรงกัน
+      หน้าฟอร์มจะดึงงานที่มอบหมาย/ของ Spare ของช่างคนนั้นไม่เจอ แก้ตรงนี้ได้เลยโดยไม่ต้องรอแก้โค้ด
+    </div>
+    <div id="nameMapRows"></div>
+    <div class="name-map-add">
+      <input type="text" id="nameMapNewTech" placeholder="ชื่อในระบบนี้">
+      <input type="text" id="nameMapNewAdmin" placeholder="ชื่อใน Admin web">
+      <button type="button" onclick="addNameMapRow()">+ เพิ่ม</button>
+    </div>
+    <div class="name-map-status" id="nameMapStatus"></div>
+  </div>
+
   <div id="stats" class="app-hidden">
     <div class="stat-row">
       <div class="stat-card"><div class="num" id="statTotal">-</div><div class="lbl">รายงานทั้งหมด</div></div>
@@ -482,12 +519,90 @@ _auth.onAuthStateChanged(async user=>{
     testerBar.classList.remove('app-hidden');
     pageTabs.classList.remove('app-hidden');
     stats.classList.remove('app-hidden');
+    document.getElementById('adminNameMapCard').classList.toggle('app-hidden', role.role !== 'admin');
     await loadDashboard();
+    if(role.role === 'admin') await loadNameMap();
   }catch(e){
     err.textContent = t('errRoleLoad') + e.message;
     await _auth.signOut();
   }
 });
+
+// ---------------------------------------------------------------
+// Admin-editable roles.techName -> Admin web assignedToName bridge.
+// Was a hardcoded ADMIN_NAME_MAP constant in form.html (needed a code
+// change + redeploy for every new/renamed technician) — now a plain JSON
+// blob in Stock's generic "sd" collection (same store/doc-id convention as
+// sd:cats/sd:tech: key "sd:nameMap" -> doc id "sd_nameMap"), editable here
+// by anyone with roles.role === 'admin'. form.html reads the same doc.
+// ---------------------------------------------------------------
+let nameMap = {};
+
+async function loadNameMap(){
+  try{
+    const snap = await _db.collection('sd').doc('sd_nameMap').get();
+    nameMap = snap.exists ? JSON.parse(snap.data().v || '{}') : {};
+  }catch(e){
+    console.error('[Name map] load failed', e);
+    nameMap = {};
+  }
+  renderNameMapEditor();
+}
+
+async function saveNameMap(){
+  await _db.collection('sd').doc('sd_nameMap').set({ k:'sd:nameMap', v: JSON.stringify(nameMap) });
+}
+
+async function persistNameMap(){
+  const statusEl = document.getElementById('nameMapStatus');
+  statusEl.textContent = 'กำลังบันทึก...';
+  statusEl.className = 'name-map-status';
+  try{
+    await saveNameMap();
+    statusEl.textContent = 'บันทึกแล้ว ✓';
+    statusEl.className = 'name-map-status ok';
+  }catch(e){
+    statusEl.textContent = 'บันทึกไม่สำเร็จ: ' + e.message;
+    statusEl.className = 'name-map-status err';
+  }
+}
+
+function renderNameMapEditor(){
+  const wrap = document.getElementById('nameMapRows');
+  wrap.innerHTML = '';
+  Object.entries(nameMap).sort(([a],[b])=>a.localeCompare(b)).forEach(([techName, adminName])=>{
+    const row = document.createElement('div');
+    row.className = 'name-map-row';
+
+    const techInput = document.createElement('input');
+    techInput.type = 'text'; techInput.value = techName; techInput.disabled = true;
+    techInput.title = 'เปลี่ยนชื่อฝั่งนี้ไม่ได้ — ลบแล้วเพิ่มใหม่แทน';
+
+    const adminInput = document.createElement('input');
+    adminInput.type = 'text'; adminInput.value = adminName;
+    adminInput.oninput = ()=>{ nameMap[techName] = adminInput.value; };
+    adminInput.onblur = persistNameMap;
+
+    const rm = document.createElement('button');
+    rm.type = 'button'; rm.textContent = 'ลบ';
+    rm.onclick = ()=>{ delete nameMap[techName]; renderNameMapEditor(); persistNameMap(); };
+
+    row.appendChild(techInput); row.appendChild(adminInput); row.appendChild(rm);
+    wrap.appendChild(row);
+  });
+}
+
+function addNameMapRow(){
+  const techInput = document.getElementById('nameMapNewTech');
+  const adminInput = document.getElementById('nameMapNewAdmin');
+  const techName = techInput.value.trim();
+  const adminName = adminInput.value.trim();
+  if(!techName || !adminName) return;
+  nameMap[techName] = adminName;
+  techInput.value = ''; adminInput.value = '';
+  renderNameMapEditor();
+  persistNameMap();
+}
 
 async function loadDashboard(){
   const listEl = document.getElementById('list');
