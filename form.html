@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.24.0">
+<meta name="app-version" content="1.24.1">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -874,6 +874,33 @@ function renderIssueBanner(){
   lbl.textContent = 'ปิด Issue นี้เมื่อส่งรายงาน';
   toggle.appendChild(cb); toggle.appendChild(lbl);
   banner.appendChild(text); banner.appendChild(toggle);
+  if((openIssue.feedback || '').trim()){
+    const pullBtn = document.createElement('button');
+    pullBtn.type = 'button';
+    pullBtn.textContent = 'ดึงข้อความนี้ใส่ช่องปัญหา';
+    pullBtn.style.cssText = 'margin-top:8px; background:none; border:1px solid var(--amber); color:var(--amber); border-radius:8px; padding:6px 10px; font-size:12px; cursor:pointer; font-family:inherit;';
+    pullBtn.onclick = fillProblemFromIssue;
+    banner.appendChild(pullBtn);
+  }
+}
+
+// Copies the open Issue ticket's feedback text into the ปัญหา list — same
+// idea as onAssignmentSelect() already does for a.problem (what admin typed
+// when assigning the job), just for the separate ISSUE-tracking source
+// instead (see ISSUE_ENDPOINT above). Fills the first still-empty row if
+// there is one, otherwise adds a new row, rather than overwriting anything
+// already typed.
+function fillProblemFromIssue(){
+  const text = (openIssue && openIssue.feedback || '').trim();
+  if(!text) return;
+  const emptyRow = state.problems.find(r=> !r.symptom.trim());
+  if(emptyRow){
+    emptyRow.symptom = text;
+  } else {
+    state.problems.push({symptom: text});
+  }
+  renderProblemRows();
+  updatePreview();
 }
 
 // ทะเบียน autocomplete — suggests known plates from the same sheet while
