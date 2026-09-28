@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>Dashboard · SONGDEE GPS</title>
-<meta name="app-version" content="1.10.0">
+<meta name="app-version" content="1.10.1">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -295,6 +295,24 @@
     padding:3px 8px; border-radius:var(--r-pill); background:var(--bg-panel-2); color:var(--text-dim);
     border:1px solid var(--line); white-space:nowrap;
   }
+
+  /* ลูกเล่น — matches form.html's entrance/feedback touches. Skipped
+     entirely under prefers-reduced-motion (see below), not just shortened. */
+  @keyframes cardRise{ from{opacity:0; transform:translateY(10px);} to{opacity:1; transform:translateY(0);} }
+  main .card, .stat-card, .history-item{animation:cardRise .45s cubic-bezier(.22,.9,.32,1) backwards;}
+  .stat-row .stat-card:nth-child(1){animation-delay:.02s;}
+  .stat-row .stat-card:nth-child(2){animation-delay:.07s;}
+  #testerRosterCard{animation-delay:.02s;}
+  #adminNameMapCard{animation-delay:.07s;}
+  #list .history-item:nth-child(1){animation-delay:.12s;}
+  #list .history-item:nth-child(2){animation-delay:.16s;}
+  #list .history-item:nth-child(3){animation-delay:.2s;}
+  #list .history-item:nth-child(4){animation-delay:.24s;}
+  .stat-card .num{font-variant-numeric:tabular-nums;}
+  @media (prefers-reduced-motion: reduce){
+    main .card, .stat-card, .history-item{animation:none !important;}
+  }
+
   /* จอกว้าง: 640px แคบเกินไป ดูเหมือนแอพมือถือลอยกลางจอเปล่าๆ ขยายเนื้อหา
      ให้กว้างขึ้น และจัดรายการรายงานเป็นหลายคอลัมน์แทนแถวเดียวยาวๆ */
   @media (min-width:860px){
@@ -712,6 +730,22 @@ async function loadTesterRoster(){
   }
 }
 
+// ลูกเล่น: นับขึ้นแทนการกระโดดเป็นตัวเลขสุดท้ายทันที — ถ้า prefers-reduced-motion
+// ตั้งไว้ หรือค่าเป็น 0/ไม่ใช่ตัวเลข ก็แค่ใส่ค่าสุดท้ายตรงๆ ไม่ต้องเล่นแอนิเมชัน
+function animateCount(el, target){
+  const reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if(reduceMotion || !target){ el.textContent = target; return; }
+  const start = performance.now();
+  const duration = 550;
+  function tick(now){
+    const p = Math.min((now - start) / duration, 1);
+    const eased = 1 - Math.pow(1 - p, 3);
+    el.textContent = Math.round(eased * target);
+    if(p < 1) requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+}
+
 async function loadDashboard(){
   const listEl = document.getElementById('list');
   listEl.className = 'loading';
@@ -724,8 +758,8 @@ async function loadDashboard(){
     // stats from it client-side instead.
     const snap = await _db.collection('qc_reports').orderBy('createdAt', 'desc').limit(1000).get();
     const all = snap.docs.map(d=>({id:d.id, ...d.data()}));
-    document.getElementById('statTotal').textContent = all.length;
-    document.getElementById('statToday').textContent = all.filter(d=>d.date===todayStr).length;
+    animateCount(document.getElementById('statTotal'), all.length);
+    animateCount(document.getElementById('statToday'), all.filter(d=>d.date===todayStr).length);
     renderList(all.slice(0, 20));
   }catch(e){
     listEl.className = 'err';

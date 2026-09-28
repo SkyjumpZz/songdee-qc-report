@@ -102,6 +102,21 @@
   .page-tabs .active{
     background:rgba(255,176,32,0.16); border-color:var(--accent); color:var(--accent); cursor:default;
   }
+
+  /* ลูกเล่น — matches form.html/index.html's entrance touch. Skipped
+     entirely under prefers-reduced-motion, not just shortened. */
+  @keyframes cardRise{ from{opacity:0; transform:translateY(10px);} to{opacity:1; transform:translateY(0);} }
+  .history-item{animation:cardRise .45s cubic-bezier(.22,.9,.32,1) backwards;}
+  .history-item:nth-child(1){animation-delay:.02s;}
+  .history-item:nth-child(2){animation-delay:.06s;}
+  .history-item:nth-child(3){animation-delay:.1s;}
+  .history-item:nth-child(4){animation-delay:.14s;}
+  .history-item:nth-child(5){animation-delay:.18s;}
+  .history-item:nth-child(6){animation-delay:.22s;}
+  @media (prefers-reduced-motion: reduce){
+    .history-item{animation:none !important;}
+  }
+
   /* จอกว้าง: 640px แคบเกินไป ดูเหมือนแอพมือถือลอยกลางจอเปล่าๆ ขยายเนื้อหา
      ให้กว้างขึ้น และจัดรายการรายงานเป็นหลายคอลัมน์แทนแถวเดียวยาวๆ */
   @media (min-width:860px){
