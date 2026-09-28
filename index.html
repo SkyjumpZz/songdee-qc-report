@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>Dashboard · SONGDEE GPS</title>
-<meta name="app-version" content="1.10.1">
+<meta name="app-version" content="1.10.2">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -284,16 +284,21 @@
   .name-map-status.ok{color:var(--accent-2);}
   .name-map-status.err{color:var(--danger);}
   .tester-roster-row{
-    display:flex; align-items:center; justify-content:space-between; gap:10px;
+    display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:5px 10px;
     padding:10px 0; border-bottom:1px solid var(--line-soft);
   }
   .tester-roster-row:last-child{border-bottom:none;}
-  .tester-roster-row .email{font-size:13px; color:var(--text);}
-  .tester-roster-row .tech{font-size:13px; color:var(--accent-2); font-weight:600; text-align:right;}
+  /* ชื่อจริง/อีเมลจริงยาวได้ไม่จำกัด — ก่อนแก้ตรงนี้ ไม่มี flex-basis/min-width
+     คุมไว้เลย ทำให้อีเมล+ชื่อช่างที่ยาวชนกันในจอแคบ ถูกบีบจนตัวอักษรตกบรรทัด
+     ทีละตัวเป็นคอลัมน์แคบๆ อ่านไม่ได้เลย แก้โดยให้อีเมลยอมขึ้นบรรทัดใหม่ได้เอง
+     (flex-wrap บนตัว row) และห่อคำแทนตัดกลางคำ ส่วนชื่อช่าง/badge ไม่ตัดคำ
+     แต่ยอมตกไปบรรทัดถัดไปทั้งกลุ่มแทนที่จะบีบตัวเอง */
+  .tester-roster-row .email{font-size:13px; color:var(--text); flex:1 1 180px; min-width:0; overflow-wrap:break-word;}
+  .tester-roster-row .tech{font-size:13px; color:var(--accent-2); font-weight:600; text-align:right; flex-shrink:0; white-space:nowrap;}
   .tester-roster-row .role-badge{
     font-size:10px; text-transform:uppercase; letter-spacing:.06em;
     padding:3px 8px; border-radius:var(--r-pill); background:var(--bg-panel-2); color:var(--text-dim);
-    border:1px solid var(--line); white-space:nowrap;
+    border:1px solid var(--line); white-space:nowrap; flex-shrink:0;
   }
 
   /* ลูกเล่น — matches form.html's entrance/feedback touches. Skipped
