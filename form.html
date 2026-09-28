@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.22.2">
+<meta name="app-version" content="1.23.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -307,24 +307,8 @@
   }
   .stock-lock-banner.locked{border-color:var(--accent-2); color:var(--accent-2); background:rgba(61,220,151,.06);}
   .stock-lock-banner.warn{border-color:var(--amber); color:var(--amber); background:rgba(255,176,32,.06);}
-  .tech-stock-search{margin-bottom:10px; position:relative;}
+  .tech-stock-search{margin-bottom:10px;}
   .tech-stock-search label{margin:0 0 5px;}
-  .tech-stock-search input{
-    width:100%; background:var(--bg-panel-2); border:1px solid var(--line);
-    color:var(--text); border-radius:9px; padding:9px 11px; font-size:13px; font-family:inherit;
-  }
-  .tech-stock-search input:focus{outline:none; border-color:var(--accent);}
-  .tech-suggest-dropdown{
-    position:absolute; left:0; right:0; top:100%; margin-top:4px;
-    background:var(--bg-panel-2); border:1px solid var(--line); border-radius:10px;
-    box-shadow:var(--shadow-md); max-height:220px; overflow-y:auto; z-index:20;
-  }
-  .tech-suggest-dropdown .item{
-    padding:9px 12px; font-size:13px; cursor:pointer; color:var(--text);
-    border-bottom:1px solid var(--line-soft);
-  }
-  .tech-suggest-dropdown .item:last-child{border-bottom:none;}
-  .tech-suggest-dropdown .item:hover{background:rgba(255,176,32,.08);}
   .editing-banner{
     font-size:12px; color:var(--accent); background:rgba(255,176,32,0.08);
     border:1px solid var(--accent); border-radius:9px; padding:9px 11px; margin-bottom:10px;
@@ -379,9 +363,10 @@
   <div class="card">
     <div class="card-title"><span class="dot"></span>ข้อมูลงาน</div>
     <div class="tech-stock-search app-hidden" id="techStockSearch">
-      <label>ช่างที่กำลังทำรายงานนี้ (พิมพ์ชื่อ — ดึงทั้งงานที่มอบหมายและของ Spare ของช่างคนนั้น)</label>
-      <input type="text" id="techStockNameInput" placeholder="ชื่อช่าง" autocomplete="off">
-      <div class="tech-suggest-dropdown app-hidden" id="techNameSuggestions"></div>
+      <label>ช่างที่กำลังทำรายงานนี้ (เลือกชื่อ — ดึงทั้งงานที่มอบหมายและของ Spare ของช่างคนนั้น)</label>
+      <select id="techStockNameSelect">
+        <option value="">-- เลือกช่าง --</option>
+      </select>
     </div>
     <div id="jobAssignField">
       <label>งานที่ได้รับมอบหมาย (จาก Admin)</label>
@@ -536,8 +521,7 @@ _auth.onAuthStateChanged(async user=>{
     scheduleStockLockCheck();
     loadLiveCatalog();
     loadTechStock();
-    await loadNameMap(); // must resolve before the first assignments fetch uses the real mapping
-    loadAssignments();
+    await loadNameMap(); // resolved before any assignments fetch uses the real mapping
     loadReportFromUrlIfAny();
     loadPlateSuggestions();
   }catch(e){
@@ -608,81 +592,44 @@ function computeTechStockItems(name){
   return Object.keys(items).length ? items : null;
 }
 
-// Defaults to this session's own tester.techName, but ช่างค้นหาชื่ออื่นได้
-// เองใน #techStockNameInput (e.g. to borrow/log from a colleague's spare
-// stock instead of theirs) — see wireTechStockSearch() below.
+// No default technician — starts blank every time so nobody's job/Spare
+// stock shows up until someone deliberately picks a name from the select
+// (see wireTechStockSearch() below).
 function applyTechStockName(name){
-  techStockOwnerName = (name || '').trim() || tester.techName || '';
+  techStockOwnerName = (name || '').trim();
   techStock = techStockOwnerName ? computeTechStockItems(techStockOwnerName) : null;
   updateProductBanner();
 }
 
-let techStockNames = []; // sorted list of every techName with Spare stock, for the suggestion dropdown
+let techStockNames = []; // sorted list of every techName with Spare stock, for the select's options
 
 function loadTechStockNameOptions(){
   techStockNames = Object.keys(allTechStock).sort();
 }
 
-// Custom filtered suggestion list instead of a native <datalist> — a
-// datalist pops open with every name in the system the instant the field
-// is focused, even before typing anything, which just looks like a wall of
-// unrelated names. This only shows entries once you've typed something
-// that matches.
-function renderTechNameSuggestions(query){
-  const box = document.getElementById('techNameSuggestions');
-  if(!box) return;
-  const q = query.trim().toLowerCase();
-  if(!q){
-    box.classList.add('app-hidden');
-    box.innerHTML = '';
-    return;
-  }
-  const matches = techStockNames.filter(n=> n.toLowerCase().includes(q)).slice(0, 8);
-  box.innerHTML = '';
-  if(!matches.length){
-    box.classList.add('app-hidden');
-    return;
-  }
-  matches.forEach(n=>{
-    const item = document.createElement('div');
-    item.className = 'item';
-    item.textContent = n;
-    box.appendChild(item);
-  });
-  box.classList.remove('app-hidden');
-}
-
 function wireTechStockSearch(){
-  const input = document.getElementById('techStockNameInput');
+  const select = document.getElementById('techStockNameSelect');
   const wrap = document.getElementById('techStockSearch');
-  const box = document.getElementById('techNameSuggestions');
-  if(!input || !wrap) return;
+  if(!select || !wrap) return;
   wrap.classList.toggle('app-hidden', !techStockNames.length);
-  input.value = tester.techName || '';
+  select.innerHTML = '';
+  const blank = document.createElement('option');
+  blank.value = ''; blank.textContent = '-- เลือกช่าง --';
+  select.appendChild(blank);
+  techStockNames.forEach(n=>{
+    const o = document.createElement('option');
+    o.value = n; o.textContent = n;
+    select.appendChild(o);
+  });
+  select.value = ''; // always starts unselected, even across a re-wire
   // One name drives both lookups together: this technician's Spare stock
   // AND their own งานที่ได้รับมอบหมาย list (which ใบเบิก to pull follows
   // from whichever job gets picked there — see checkStockLock()).
-  const pickName = ()=>{
-    const name = input.value.trim() || tester.techName || '';
+  select.onchange = ()=>{
+    const name = select.value;
     applyTechStockName(name);
     loadAssignments(name);
   };
-  input.oninput = ()=>{
-    renderTechNameSuggestions(input.value);
-    pickName();
-  };
-  box.onclick = (e)=>{
-    const item = e.target.closest('.item');
-    if(!item) return;
-    input.value = item.textContent;
-    box.classList.add('app-hidden');
-    box.innerHTML = '';
-    pickName();
-  };
-  input.addEventListener('blur', ()=>{
-    // Delay so a click on a suggestion item registers before it disappears.
-    setTimeout(()=>{ box.classList.add('app-hidden'); }, 150);
-  });
 }
 
 async function loadTechStock(){
@@ -696,7 +643,6 @@ async function loadTechStock(){
   techStockChecked = true;
   loadTechStockNameOptions();
   wireTechStockSearch();
-  applyTechStockName(tester.techName || '');
 }
 
 // Shared by checkStockLock() (plate typed/changed) and loadTechStock()
@@ -943,11 +889,11 @@ async function loadPlateSuggestions(){
 // instead of typed, cutting down typos. Selecting one auto-fills both
 // fields (and still lets them be edited manually after).
 //
-// Which technician defaults to the logged-in one (tester.techName), but
-// #techStockNameInput (see wireTechStockSearch()) lets it be changed to
-// look up a DIFFERENT technician's assignments + Spare stock together —
-// e.g. checking what a specific tech has been given for a specific job,
-// not just whoever happens to be logged in right now.
+// Which technician to look up is a deliberate choice every time — nobody's
+// picked by default. #techStockNameSelect (see wireTechStockSearch()) drives
+// this together with their Spare stock — e.g. checking what a specific tech
+// has been given for a specific job, not just whoever happens to be logged
+// in right now.
 //
 // The Admin web app has its OWN technician list (its "technicians"
 // collection, no shared ID with Firebase Auth) — assignedToName there is
@@ -982,8 +928,14 @@ let assignments = [];
 let selectedAssignmentId = null;
 
 async function loadAssignments(name){
-  const techName = (name || '').trim() || tester.techName;
-  if(!techName) return;
+  const techName = (name || '').trim();
+  if(!techName){
+    assignments = [];
+    selectedAssignmentId = null;
+    renderAssignmentSelect();
+    updateProductBanner();
+    return;
+  }
   const adminName = nameMap[techName] || techName;
   try{
     const snap = await _db.collection('assignments')
