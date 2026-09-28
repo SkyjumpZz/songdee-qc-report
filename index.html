@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>Dashboard · SONGDEE GPS</title>
-<meta name="app-version" content="1.12.0">
+<meta name="app-version" content="1.13.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -36,18 +36,51 @@
     --r-lg:22px;
     --r-pill:999px;
     --shadow-lg:0 22px 50px -22px rgba(0,0,0,.85);
+    /* สีสันเพิ่มเติม — เหมือนกับ form.html ให้แต่ละการ์ดมีสีประจำตัว
+       ไม่ใช่เหลืองทองซ้ำทุกอัน (login screen ไม่เห็นค่าพวกนี้เลย เพราะ
+       .login-overlay ทับด้วยพื้นทึบของตัวเองอยู่แล้ว) */
+    --hue-blue:#5b8def;
+    --hue-purple:#a78bfa;
+    --hue-pink:#f472b6;
+    --hue-cyan:#22d3ee;
   }
   *{box-sizing:border-box;}
   body{
     margin:0;
     background:
       radial-gradient(1200px 500px at 50% -10%, #16223a 0%, transparent 60%),
-      radial-gradient(900px 460px at 100% 100%, rgba(255,176,32,0.05) 0%, transparent 62%),
+      radial-gradient(900px 460px at 100% 100%, rgba(255,176,32,0.06) 0%, transparent 62%),
+      radial-gradient(800px 460px at 0% 40%, rgba(91,141,239,.05) 0%, transparent 60%),
       var(--bg);
     background-attachment:fixed;
     color:var(--text);
     font-family:'IBM Plex Sans Thai','Kanit',sans-serif;
     min-height:100vh;
+    position:relative;
+  }
+  /* วงแสงลอยเบาๆ พื้นหลัง — เหมือน form.html เลย login screen ไม่เห็นเพราะ
+     z-index ต่ำกว่า .login-overlay (300) และ overlay เองก็ทึบแสงอยู่แล้ว */
+  .ambient-orbs{position:fixed; inset:0; z-index:-1; overflow:hidden; pointer-events:none;}
+  .ambient-orbs span{
+    position:absolute; border-radius:50%; filter:blur(70px); opacity:.32;
+    animation:orbDrift 26s ease-in-out infinite alternate;
+  }
+  .ambient-orbs span:nth-child(1){
+    width:320px; height:320px; top:-60px; right:-80px;
+    background:radial-gradient(circle, var(--accent), transparent 70%);
+    animation-duration:24s;
+  }
+  .ambient-orbs span:nth-child(2){
+    width:280px; height:280px; bottom:10%; left:-90px;
+    background:radial-gradient(circle, var(--accent-2), transparent 70%);
+    animation-duration:30s; animation-delay:-10s;
+  }
+  @keyframes orbDrift{
+    from{transform:translate(0,0) scale(1);}
+    to{transform:translate(-20px,26px) scale(1.08);}
+  }
+  @media (prefers-reduced-motion: reduce){
+    .ambient-orbs span{animation:none !important;}
   }
   ::-webkit-scrollbar{width:10px; height:10px;}
   ::-webkit-scrollbar-track{background:transparent;}
@@ -300,11 +333,19 @@
   .empty, .err, .loading{color:var(--text-dim); font-size:13px; padding:40px 0; text-align:center;}
   .err{color:var(--danger);}
   .card{
+    --card-hue:var(--accent);
+    position:relative; overflow:hidden;
     background:linear-gradient(165deg, rgba(255,255,255,.025), transparent 45%), var(--bg-panel);
     border:1px solid var(--line-soft); border-radius:var(--r-lg);
     padding:18px; margin-bottom:16px;
     box-shadow:var(--shadow-sm), var(--shadow-md);
   }
+  .card::before{
+    content:''; position:absolute; top:0; left:0; bottom:0; width:3px;
+    background:var(--card-hue); opacity:.6;
+  }
+  #testerRosterCard{--card-hue:var(--hue-blue);}
+  #adminNameMapCard{--card-hue:var(--hue-purple);}
   .card-title{
     display:flex; align-items:center; gap:11px;
     font-family:'Kanit',sans-serif; font-weight:600; font-size:15.5px; margin-bottom:12px;
@@ -312,9 +353,9 @@
   .card-title .dot{
     display:flex; align-items:center; justify-content:center; flex-shrink:0;
     width:32px; height:32px; border-radius:11px; font-size:16px; line-height:1;
-    background:linear-gradient(150deg, rgba(255,176,32,.22), rgba(255,176,32,.06));
-    border:1px solid rgba(255,176,32,.28);
-    box-shadow:0 4px 14px -6px rgba(255,176,32,.5);
+    background:linear-gradient(150deg, color-mix(in srgb, var(--card-hue) 32%, transparent), color-mix(in srgb, var(--card-hue) 8%, transparent));
+    border:1px solid color-mix(in srgb, var(--card-hue) 38%, transparent);
+    box-shadow:0 4px 14px -6px color-mix(in srgb, var(--card-hue) 55%, transparent);
   }
   .admin-hint{font-size:12px; color:var(--text-dim); margin-bottom:14px; line-height:1.55;}
   .name-map-row{
@@ -389,6 +430,8 @@
 </style>
 </head>
 <body>
+
+<div class="ambient-orbs" aria-hidden="true"><span></span><span></span></div>
 
 <div class="login-overlay" id="loginOverlay">
   <div class="login-langbar">

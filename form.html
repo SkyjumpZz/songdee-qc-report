@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.25.1">
+<meta name="app-version" content="1.26.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -26,6 +26,12 @@
     --accent-2:#3ddc97;
     --danger:#ff5c5c;
     --amber:#ffb020;
+    /* หมวดสี ให้แต่ละการ์ดมีสีประจำตัวไม่ใช่เหลืองทองซ้ำทุกอัน — แก้ตาม
+       ฟีดแบ็ก "ทุกอย่างมันดูโล่งๆ" ให้แอปมีสีสันหลากหลายขึ้น */
+    --hue-blue:#5b8def;
+    --hue-purple:#a78bfa;
+    --hue-pink:#f472b6;
+    --hue-cyan:#22d3ee;
     --r-sm:12px;
     --r-md:16px;
     --r-lg:22px;
@@ -40,14 +46,47 @@
   body{
     margin:0;
     background:
-      radial-gradient(1100px 520px at 12% -8%, rgba(255,176,32,.09) 0%, transparent 55%),
-      radial-gradient(900px 500px at 100% 0%, rgba(61,220,151,.06) 0%, transparent 55%),
+      radial-gradient(1100px 520px at 12% -8%, rgba(255,176,32,.1) 0%, transparent 55%),
+      radial-gradient(900px 500px at 100% 0%, rgba(61,220,151,.08) 0%, transparent 55%),
+      radial-gradient(800px 480px at 90% 60%, rgba(91,141,239,.06) 0%, transparent 55%),
+      radial-gradient(700px 420px at 0% 85%, rgba(167,139,250,.06) 0%, transparent 55%),
       var(--bg);
     background-attachment:fixed;
     color:var(--text);
     font-family:'IBM Plex Sans Thai','Kanit',sans-serif;
     min-height:100vh;
     padding-bottom:132px;
+    position:relative;
+  }
+  /* วงแสงลอยเบาๆ พื้นหลัง — เพิ่มสีสัน/ชีวิตชีวาให้พื้นหลังที่เดิมโล่งๆ
+     เป็นแค่ navy เรียบๆ โดยไม่รบกวนการอ่าน (blur หนัก + opacity ต่ำ,
+     fixed อยู่หลังเนื้อหาเสมอ, หยุดนิ่งถ้า prefers-reduced-motion) */
+  .ambient-orbs{position:fixed; inset:0; z-index:-1; overflow:hidden; pointer-events:none;}
+  .ambient-orbs span{
+    position:absolute; border-radius:50%; filter:blur(70px); opacity:.35;
+    animation:orbDrift 22s ease-in-out infinite alternate;
+  }
+  .ambient-orbs span:nth-child(1){
+    width:340px; height:340px; top:-60px; left:-80px;
+    background:radial-gradient(circle, var(--accent), transparent 70%);
+    animation-duration:26s;
+  }
+  .ambient-orbs span:nth-child(2){
+    width:300px; height:300px; top:30%; right:-100px;
+    background:radial-gradient(circle, var(--accent-2), transparent 70%);
+    animation-duration:32s; animation-delay:-8s;
+  }
+  .ambient-orbs span:nth-child(3){
+    width:280px; height:280px; bottom:-80px; left:20%;
+    background:radial-gradient(circle, var(--hue-purple), transparent 70%);
+    animation-duration:28s; animation-delay:-15s;
+  }
+  @keyframes orbDrift{
+    from{transform:translate(0,0) scale(1);}
+    to{transform:translate(24px,-28px) scale(1.08);}
+  }
+  @media (prefers-reduced-motion: reduce){
+    .ambient-orbs span{animation:none !important;}
   }
   ::-webkit-scrollbar{width:10px; height:10px;}
   ::-webkit-scrollbar-track{background:transparent;}
@@ -94,6 +133,8 @@
   .update-banner.show{transform:translateY(0);}
   main{max-width:640px; margin:0 auto; padding:18px 16px;}
   .card{
+    --card-hue:var(--accent);
+    position:relative; overflow:hidden;
     background:linear-gradient(165deg, rgba(255,255,255,.025), transparent 45%), var(--bg-panel);
     border:1px solid var(--line-soft);
     border-radius:var(--r-lg);
@@ -102,6 +143,20 @@
     box-shadow:var(--shadow-sm), var(--shadow-md);
     transition:border-color .2s ease, transform .2s ease;
   }
+  /* แถบสีข้างการ์ด — สีประจำตัวแต่ละหมวด (ตั้งค่าผ่าน --card-hue ต่อการ์ด
+     ด้านล่าง) ให้แยกแยะหมวดได้จากสีตั้งแต่แวบแรก ไม่ต้องอ่านหัวข้อ */
+  .card::before{
+    content:''; position:absolute; top:0; left:0; bottom:0; width:3px;
+    background:var(--card-hue); opacity:.6;
+  }
+  #tplCard{--card-hue:var(--hue-blue);}
+  #jobInfoCard{--card-hue:var(--accent);}
+  #problemsCard{--card-hue:var(--danger);}
+  #fixesCard{--card-hue:var(--accent-2);}
+  #stickerCard{--card-hue:var(--hue-purple);}
+  #checklistCard{--card-hue:var(--hue-cyan);}
+  #photoCard{--card-hue:var(--hue-pink);}
+  #previewCard{--card-hue:var(--hue-blue);}
   .card-title{
     display:flex; align-items:center; gap:11px;
     font-family:'Kanit',sans-serif; font-weight:600; font-size:15.5px;
@@ -110,9 +165,9 @@
   .card-title .dot{
     display:flex; align-items:center; justify-content:center; flex-shrink:0;
     width:32px; height:32px; border-radius:11px; font-size:16px; line-height:1;
-    background:linear-gradient(150deg, rgba(255,176,32,.22), rgba(255,176,32,.06));
-    border:1px solid rgba(255,176,32,.28);
-    box-shadow:0 4px 14px -6px rgba(255,176,32,.5);
+    background:linear-gradient(150deg, color-mix(in srgb, var(--card-hue) 32%, transparent), color-mix(in srgb, var(--card-hue) 8%, transparent));
+    border:1px solid color-mix(in srgb, var(--card-hue) 38%, transparent);
+    box-shadow:0 4px 14px -6px color-mix(in srgb, var(--card-hue) 55%, transparent);
   }
   label{
     display:block; font-size:12px; color:var(--text-dim); margin:12px 0 6px;
@@ -442,6 +497,8 @@
 </head>
 <body>
 
+<div class="ambient-orbs" aria-hidden="true"><span></span><span></span><span></span></div>
+
 <div class="update-banner" id="updateBanner">มีเวอร์ชันใหม่ กำลังโหลดหน้าล่าสุดให้...</div>
 
 <header>
@@ -471,12 +528,12 @@
     <span class="logout" onclick="startNewReport()">ปิด</span>
   </div>
 
-  <div class="card">
+  <div class="card" id="tplCard">
     <div class="card-title"><span class="dot">🗂️</span>ประเภทงาน</div>
     <div class="tpl-tabs" id="tplTabs"></div>
   </div>
 
-  <div class="card">
+  <div class="card" id="jobInfoCard">
     <div class="card-title"><span class="dot">🚚</span>ข้อมูลงาน</div>
     <div class="tech-stock-search app-hidden" id="techStockSearch">
       <label>ช่างที่กำลังทำรายงานนี้ (เลือกชื่อ — ดึงทั้งงานที่มอบหมายและของ Spare ของช่างคนนั้น)</label>
@@ -548,7 +605,7 @@
     <div class="photo-hint" id="photoHint"></div>
   </div>
 
-  <div class="card">
+  <div class="card" id="previewCard">
     <div class="card-title"><span class="dot">📝</span>ตัวอย่างข้อความที่จะส่ง</div>
     <div class="preview" id="preview"></div>
     <div class="missing-badge" id="missingBadge"></div>
