@@ -87,6 +87,16 @@
     transition:border-color .15s ease, transform .15s ease, box-shadow .15s ease;
   }
   .history-item:hover{border-color:var(--accent); transform:translateY(-1px); box-shadow:var(--shadow-md);}
+  .history-item .hi-row{display:flex; align-items:flex-start; gap:11px;}
+  .history-item .hi-icon{
+    width:34px; height:34px; border-radius:11px; flex-shrink:0;
+    display:flex; align-items:center; justify-content:center; font-size:15px;
+    background:var(--bg-panel-2); border:1px solid var(--line-soft);
+  }
+  .history-item.tpl-upgrade .hi-icon{background:linear-gradient(150deg, rgba(255,176,32,.22), rgba(255,176,32,.06)); border-color:rgba(255,176,32,.28);}
+  .history-item.tpl-new_install .hi-icon{background:linear-gradient(150deg, rgba(61,220,151,.22), rgba(61,220,151,.06)); border-color:rgba(61,220,151,.28);}
+  .history-item.tpl-repair .hi-icon{background:linear-gradient(150deg, rgba(255,92,92,.18), rgba(255,92,92,.06)); border-color:rgba(255,92,92,.26);}
+  .history-item .hi-text{flex:1; min-width:0;}
   .history-item .title{font-size:14px; font-weight:600; color:var(--text);}
   .history-item .meta{font-size:12px; color:var(--text-dim); margin-top:4px;}
   .empty, .err, .loading{color:var(--text-dim); font-size:13px; padding:40px 0; text-align:center;}
@@ -167,6 +177,7 @@ const _auth = firebase.auth();
 const _db = firebase.firestore();
 
 const TEMPLATE_LABELS = { upgrade:"อัปเกรด", new_install:"ติดตั้งใหม่", repair:"ซ่อม" };
+const TEMPLATE_ICONS = { upgrade:"⬆️", new_install:"✨", repair:"🛠️" };
 
 function escapeHtmlLite(s){
   return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -221,10 +232,11 @@ function renderList(list){
   list.forEach(doc=>{
     const dateStr = doc.date ? doc.date.split('-').reverse().join('/') : '(ไม่ระบุวันที่)';
     const tplLabel = TEMPLATE_LABELS[doc.tpl] || doc.tpl || '';
+    const tplIcon = TEMPLATE_ICONS[doc.tpl] || '📄';
     const a = document.createElement('a');
-    a.className = 'history-item';
+    a.className = 'history-item' + (doc.tpl ? ' tpl-' + doc.tpl : '');
     a.href = `form.html?report=${encodeURIComponent(doc.id)}`;
-    a.innerHTML = `<div class="title">${escapeHtmlLite(dateStr)} ${escapeHtmlLite(tplLabel)} ${escapeHtmlLite(doc.customer||'')}</div><div class="meta">ทะเบียน: ${escapeHtmlLite(doc.plate||'-')}</div>`;
+    a.innerHTML = `<div class="hi-row"><div class="hi-icon">${tplIcon}</div><div class="hi-text"><div class="title">${escapeHtmlLite(dateStr)} ${escapeHtmlLite(tplLabel)} ${escapeHtmlLite(doc.customer||'')}</div><div class="meta">ทะเบียน: ${escapeHtmlLite(doc.plate||'-')}</div></div></div>`;
     listEl.appendChild(a);
   });
 }

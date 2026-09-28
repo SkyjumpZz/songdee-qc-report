@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>Dashboard · SONGDEE GPS</title>
-<meta name="app-version" content="1.10.2">
+<meta name="app-version" content="1.11.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -225,12 +225,33 @@
   .stat-card{
     flex:1; background:linear-gradient(165deg, rgba(255,255,255,.025), transparent 45%), var(--bg-panel);
     border:1px solid var(--line-soft); border-radius:var(--r-lg);
-    padding:18px 16px; text-align:center;
+    padding:18px 16px; text-align:center; position:relative; overflow:hidden;
     box-shadow:var(--shadow-sm), var(--shadow-md);
   }
-  .stat-card .num{font-family:'Kanit',sans-serif; font-size:30px; font-weight:700; color:var(--accent-2);}
+  .stat-card::before{
+    content:''; position:absolute; top:0; left:0; right:0; height:2px;
+  }
+  .stat-card .stat-icon{
+    width:38px; height:38px; border-radius:12px; margin:0 auto 10px;
+    display:flex; align-items:center; justify-content:center; font-size:18px;
+  }
+  .stat-card.a::before{background:linear-gradient(90deg, transparent, var(--accent-2), transparent);}
+  .stat-card.a .stat-icon{
+    background:linear-gradient(150deg, rgba(61,220,151,.22), rgba(61,220,151,.06));
+    border:1px solid rgba(61,220,151,.28); box-shadow:0 4px 14px -6px rgba(61,220,151,.5);
+  }
+  .stat-card.b::before{background:linear-gradient(90deg, transparent, var(--accent), transparent);}
+  .stat-card.b .stat-icon{
+    background:linear-gradient(150deg, rgba(255,176,32,.22), rgba(255,176,32,.06));
+    border:1px solid rgba(255,176,32,.28); box-shadow:0 4px 14px -6px rgba(255,176,32,.5);
+  }
+  .stat-card.b .num{color:var(--accent);}
+  .stat-card .num{font-family:'Kanit',sans-serif; font-size:30px; font-weight:700; color:var(--accent-2); font-variant-numeric:tabular-nums;}
   .stat-card .lbl{font-size:12px; color:var(--text-dim); margin-top:5px; font-weight:500;}
-  .section-title{font-size:12.5px; font-weight:700; color:var(--text-dim); text-transform:uppercase; letter-spacing:.06em; margin:22px 0 12px;}
+  .section-title{
+    display:flex; align-items:center; gap:6px;
+    font-size:12.5px; font-weight:700; color:var(--text-dim); text-transform:uppercase; letter-spacing:.06em; margin:22px 0 12px;
+  }
   .history-item{
     border:1px solid var(--line-soft); border-radius:var(--r-md); padding:13px 15px;
     margin-bottom:10px; cursor:pointer; background:var(--bg-panel); text-decoration:none; display:block;
@@ -238,6 +259,16 @@
     transition:border-color .15s ease, transform .15s ease, box-shadow .15s ease;
   }
   .history-item:hover{border-color:var(--accent); transform:translateY(-1px); box-shadow:var(--shadow-md);}
+  .history-item .hi-row{display:flex; align-items:flex-start; gap:11px;}
+  .history-item .hi-icon{
+    width:34px; height:34px; border-radius:11px; flex-shrink:0;
+    display:flex; align-items:center; justify-content:center; font-size:15px;
+    background:var(--bg-panel-2); border:1px solid var(--line-soft);
+  }
+  .history-item.tpl-upgrade .hi-icon{background:linear-gradient(150deg, rgba(255,176,32,.22), rgba(255,176,32,.06)); border-color:rgba(255,176,32,.28);}
+  .history-item.tpl-new_install .hi-icon{background:linear-gradient(150deg, rgba(61,220,151,.22), rgba(61,220,151,.06)); border-color:rgba(61,220,151,.28);}
+  .history-item.tpl-repair .hi-icon{background:linear-gradient(150deg, rgba(255,92,92,.18), rgba(255,92,92,.06)); border-color:rgba(255,92,92,.26);}
+  .history-item .hi-text{flex:1; min-width:0;}
   .history-item .title{font-size:14px; font-weight:600; color:var(--text);}
   .history-item .meta{font-size:12px; color:var(--text-dim); margin-top:4px;}
   .empty, .err, .loading{color:var(--text-dim); font-size:13px; padding:40px 0; text-align:center;}
@@ -450,10 +481,10 @@
 
   <div id="stats" class="app-hidden">
     <div class="stat-row">
-      <div class="stat-card"><div class="num" id="statTotal">-</div><div class="lbl">รายงานทั้งหมด</div></div>
-      <div class="stat-card"><div class="num" id="statToday">-</div><div class="lbl">วันนี้</div></div>
+      <div class="stat-card a"><div class="stat-icon">📊</div><div class="num" id="statTotal">-</div><div class="lbl">รายงานทั้งหมด</div></div>
+      <div class="stat-card b"><div class="stat-icon">📅</div><div class="num" id="statToday">-</div><div class="lbl">วันนี้</div></div>
     </div>
-    <div class="section-title">รายงานล่าสุด (ทุกช่าง)</div>
+    <div class="section-title">🕘 รายงานล่าสุด (ทุกช่าง)</div>
   </div>
   <div id="list" class="loading">กำลังตรวจสอบสิทธิ์...</div>
 </main>
@@ -472,6 +503,7 @@ const _auth = firebase.auth();
 const _db = firebase.firestore();
 
 const TEMPLATE_LABELS = { upgrade:"อัปเกรด", new_install:"ติดตั้งใหม่", repair:"ซ่อม" };
+const TEMPLATE_ICONS = { upgrade:"⬆️", new_install:"✨", repair:"🛠️" };
 
 function escapeHtmlLite(s){
   return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -784,10 +816,11 @@ function renderList(list){
   list.forEach(doc=>{
     const dateStr = doc.date ? doc.date.split('-').reverse().join('/') : '(ไม่ระบุวันที่)';
     const tplLabel = TEMPLATE_LABELS[doc.tpl] || doc.tpl || '';
+    const tplIcon = TEMPLATE_ICONS[doc.tpl] || '📄';
     const a = document.createElement('a');
-    a.className = 'history-item';
+    a.className = 'history-item' + (doc.tpl ? ' tpl-' + doc.tpl : '');
     a.href = `form.html?report=${encodeURIComponent(doc.id)}`;
-    a.innerHTML = `<div class="title">${escapeHtmlLite(dateStr)} ${escapeHtmlLite(tplLabel)} ${escapeHtmlLite(doc.customer||'')}</div><div class="meta">ทะเบียน: ${escapeHtmlLite(doc.plate||'-')} · ช่าง: ${escapeHtmlLite(doc.techName||'-')}</div>`;
+    a.innerHTML = `<div class="hi-row"><div class="hi-icon">${tplIcon}</div><div class="hi-text"><div class="title">${escapeHtmlLite(dateStr)} ${escapeHtmlLite(tplLabel)} ${escapeHtmlLite(doc.customer||'')}</div><div class="meta">ทะเบียน: ${escapeHtmlLite(doc.plate||'-')} · ช่าง: ${escapeHtmlLite(doc.techName||'-')}</div></div></div>`;
     listEl.appendChild(a);
   });
 }
