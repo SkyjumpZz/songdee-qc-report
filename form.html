@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.23.0">
+<meta name="app-version" content="1.24.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -309,6 +309,18 @@
   .stock-lock-banner.warn{border-color:var(--amber); color:var(--amber); background:rgba(255,176,32,.06);}
   .tech-stock-search{margin-bottom:10px;}
   .tech-stock-search label{margin:0 0 5px;}
+  .suggest-field{position:relative;}
+  .suggest-dropdown{
+    position:absolute; left:0; right:0; top:100%; margin-top:4px;
+    background:var(--bg-panel-2); border:1px solid var(--line); border-radius:10px;
+    box-shadow:var(--shadow-md); max-height:220px; overflow-y:auto; z-index:20;
+  }
+  .suggest-dropdown .item{
+    padding:9px 12px; font-size:13px; cursor:pointer; color:var(--text);
+    border-bottom:1px solid var(--line-soft);
+  }
+  .suggest-dropdown .item:last-child{border-bottom:none;}
+  .suggest-dropdown .item:hover{background:rgba(255,176,32,.08);}
   .editing-banner{
     font-size:12px; color:var(--accent); background:rgba(255,176,32,0.08);
     border:1px solid var(--accent); border-radius:9px; padding:9px 11px; margin-bottom:10px;
@@ -379,15 +391,17 @@
         <label>วันที่<span class="req">*</span></label>
         <input type="date" id="jobDate">
       </div>
-      <div>
+      <div class="suggest-field">
         <label>ชื่อลูกค้า</label>
-        <input type="text" id="jobCustomer" placeholder="เช่น บริษัท เอบีซี จำกัด">
+        <input type="text" id="jobCustomer" placeholder="เช่น บริษัท เอบีซี จำกัด" autocomplete="off">
+        <div class="suggest-dropdown app-hidden" id="jobCustomerSuggestions"></div>
       </div>
     </div>
     <div class="row2">
-      <div>
+      <div class="suggest-field">
         <label>Fleet</label>
-        <input type="text" id="jobFleet" placeholder="เช่น Fleet A">
+        <input type="text" id="jobFleet" placeholder="เช่น Fleet A" autocomplete="off">
+        <div class="suggest-dropdown app-hidden" id="jobFleetSuggestions"></div>
       </div>
       <div>
         <label>ทะเบียน<span class="req">*</span></label>
@@ -524,6 +538,7 @@ _auth.onAuthStateChanged(async user=>{
     await loadNameMap(); // resolved before any assignments fetch uses the real mapping
     loadReportFromUrlIfAny();
     loadPlateSuggestions();
+    loadCustomerFleetSuggestions();
   }catch(e){
     alert('โหลดข้อมูลสิทธิ์ไม่สำเร็จ: ' + e.message);
     await _auth.signOut();
@@ -879,6 +894,89 @@ async function loadPlateSuggestions(){
   }catch(e){
     console.error('[Plate suggestions]', e);
   }
+}
+
+// ชื่อลูกค้า / Fleet autocomplete — pulled from this app's own report
+// history (qc_reports) plus every customer name in Admin web's own
+// "assignments" collection (not just the currently-picked technician's —
+// a customer can be typed by any tech). Still free text either way (a
+// brand-new customer not seen before can always just be typed); the
+// dropdown only suggests names seen before so the same one doesn't need
+// retyping from scratch every time.
+let customerSuggestions = [];
+let fleetSuggestions = [];
+
+async function loadCustomerFleetSuggestions(){
+  const customers = new Set();
+  const fleets = new Set();
+  try{
+    const snap = await _db.collection('qc_reports').orderBy('createdAt', 'desc').limit(500).get();
+    snap.docs.forEach(d=>{
+      const v = d.data();
+      if(v.customer && v.customer.trim()) customers.add(v.customer.trim());
+      if(v.fleet && v.fleet.trim()) fleets.add(v.fleet.trim());
+    });
+  }catch(e){
+    console.error('[Customer/Fleet suggestions] qc_reports', e);
+  }
+  try{
+    const snap = await _db.collection('assignments').get();
+    snap.docs.forEach(d=>{
+      const v = d.data();
+      if(v.customer && v.customer.trim()) customers.add(v.customer.trim());
+    });
+  }catch(e){
+    console.error('[Customer/Fleet suggestions] assignments', e);
+  }
+  customerSuggestions = [...customers].sort();
+  fleetSuggestions = [...fleets].sort();
+  wireSuggestInput('jobCustomer', 'jobCustomerSuggestions', ()=>customerSuggestions, name=>{
+    state.customer = name;
+    updatePreview();
+  });
+  wireSuggestInput('jobFleet', 'jobFleetSuggestions', ()=>fleetSuggestions, name=>{
+    state.fleet = name;
+    updatePreview();
+  });
+}
+
+// Custom filtered dropdown instead of a native <input list> datalist —
+// same reasoning as the technician picker earlier: a datalist dumps every
+// option the moment the field is focused, even with nothing typed. This
+// stays hidden until there's at least one character to filter by. onPick
+// mirrors whatever the field's own plain 'input' listener already does
+// (rather than dispatching a synthetic event, which would also re-trigger
+// this same suggestion box's own input listener and pop it back open).
+function wireSuggestInput(inputId, boxId, getList, onPick){
+  const input = document.getElementById(inputId);
+  const box = document.getElementById(boxId);
+  if(!input || !box) return;
+  input.addEventListener('input', ()=>{
+    const q = input.value.trim().toLowerCase();
+    box.innerHTML = '';
+    if(!q){ box.classList.add('app-hidden'); return; }
+    const matches = getList().filter(n=> n.toLowerCase().includes(q)).slice(0, 8);
+    if(!matches.length){ box.classList.add('app-hidden'); return; }
+    matches.forEach(n=>{
+      const item = document.createElement('div');
+      item.className = 'item';
+      item.textContent = n;
+      box.appendChild(item);
+    });
+    box.classList.remove('app-hidden');
+  });
+  box.addEventListener('click', e=>{
+    const item = e.target.closest('.item');
+    if(!item) return;
+    input.value = item.textContent;
+    box.classList.add('app-hidden');
+    box.innerHTML = '';
+    onPick(item.textContent);
+  });
+  input.addEventListener('blur', ()=>{
+    // Delay so a click on a suggestion item registers before it disappears.
+    setTimeout(()=>{ box.classList.add('app-hidden'); }, 150);
+  });
 }
 
 // ---------------------------------------------------------------
