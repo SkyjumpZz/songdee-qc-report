@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>Dashboard · SONGDEE GPS</title>
-<meta name="app-version" content="1.9.0">
+<meta name="app-version" content="1.10.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -25,6 +25,17 @@
     --shadow-sm:0 1px 2px rgba(0,0,0,.25);
     --shadow-md:0 10px 28px -14px rgba(0,0,0,.6);
     --shadow-glow-accent:0 0 0 3px rgba(255,176,32,.14);
+    /* Dashboard-only redesign tokens — additive, never override the values
+       above (login screen and its input/button styling still read the
+       originals verbatim, so it stays visually untouched per the redesign
+       request: "keep the login page as-is"). */
+    --bg-input:#0a1120;
+    --text-faint:#5f6f92;
+    --r-sm:12px;
+    --r-md:16px;
+    --r-lg:22px;
+    --r-pill:999px;
+    --shadow-lg:0 22px 50px -22px rgba(0,0,0,.85);
   }
   *{box-sizing:border-box;}
   body{
@@ -43,11 +54,10 @@
   ::-webkit-scrollbar-thumb{background:var(--line); border-radius:8px;}
   ::-webkit-scrollbar-thumb:hover{background:var(--text-dim);}
   header{
-    border-bottom:1px solid var(--line);
-    background:linear-gradient(180deg, rgba(255,176,32,0.07), transparent);
-    box-shadow:0 1px 0 rgba(255,255,255,.03);
+    border-bottom:1px solid var(--line-soft);
+    background:rgba(11,18,32,.72);
     position:sticky; top:0; z-index:10;
-    backdrop-filter:blur(10px);
+    backdrop-filter:blur(14px);
   }
   /* บนจอกว้าง (เว็บ) main{max-width:640px} ทำให้เนื้อหาลอยแคบกลางจอ แต่ header
      เดิมไม่มี max-width เลยยืดเต็มจอ - แถบบนกับเนื้อหาด้านล่างเลยไม่ตรงแนวกัน
@@ -56,20 +66,23 @@
      มือถือหน้าจอแคบกว่า 640px อยู่แล้วไม่เห็นความต่างเลย) */
   .header-inner{
     max-width:640px; margin:0 auto;
-    padding:22px 18px 16px;
+    padding:18px 18px 14px;
   }
   header .eyebrow{
+    display:inline-flex; align-items:center; gap:6px;
     font-family:'IBM Plex Mono',monospace;
-    font-size:11px; letter-spacing:.14em; text-transform:uppercase;
-    color:var(--accent); margin-bottom:6px;
+    font-size:10.5px; letter-spacing:.1em; text-transform:uppercase;
+    color:var(--accent); background:rgba(255,176,32,.1);
+    border:1px solid rgba(255,176,32,.22); border-radius:var(--r-pill);
+    padding:4px 10px; margin-bottom:10px;
   }
   header h1{
-    font-family:'Kanit',sans-serif; font-weight:600; font-size:20px; margin:0;
-    letter-spacing:.01em;
+    font-family:'Kanit',sans-serif; font-weight:700; font-size:22px; margin:0;
+    letter-spacing:-.01em;
   }
   .version-tag{
-    font-family:'IBM Plex Mono',monospace; font-size:11px; font-weight:400;
-    color:var(--text-dim); vertical-align:middle; margin-left:6px;
+    font-family:'IBM Plex Mono',monospace; font-size:10.5px; font-weight:400;
+    color:var(--text-faint); vertical-align:middle; margin-left:6px;
   }
   .tester-bar{
     display:flex; align-items:center; justify-content:space-between;
@@ -79,16 +92,16 @@
   .tester-bar a, .tester-bar .link{cursor:pointer; text-decoration:underline; text-underline-offset:2px; color:inherit; transition:color .15s ease;}
   .tester-bar a:hover, .tester-bar .link:hover{color:var(--accent);}
   .app-hidden{display:none !important;}
-  .page-tabs{display:flex; gap:6px; margin-top:10px;}
+  .page-tabs{display:flex; gap:6px; margin-top:12px;}
   .page-tabs a, .page-tabs span.tab{
-    flex:1; padding:9px 8px; border-radius:10px; border:1px solid var(--line);
+    flex:1; padding:9px 8px; border-radius:var(--r-sm); border:1px solid var(--line-soft);
     background:var(--bg-panel-2); color:var(--text-dim); font-family:'Kanit',sans-serif;
-    font-size:13px; font-weight:500; text-align:center; text-decoration:none; cursor:pointer;
+    font-size:13px; font-weight:600; text-align:center; text-decoration:none; cursor:pointer;
     transition:border-color .15s ease, color .15s ease, background .15s ease;
   }
   .page-tabs a:hover{border-color:var(--text-dim); color:var(--text);}
   .page-tabs .active{
-    background:rgba(255,176,32,0.14); border-color:var(--accent); color:var(--accent); cursor:default;
+    background:rgba(255,176,32,0.16); border-color:var(--accent); color:var(--accent); cursor:default;
   }
   label{
     display:block; font-size:12.5px; color:var(--text-dim); margin:10px 0 5px;
@@ -207,19 +220,19 @@
   @media (min-width:860px){
     .login-visual{display:block;}
   }
-  main{max-width:640px; margin:0 auto; padding:16px 16px 60px;}
-  .stat-row{display:flex; gap:10px; margin-bottom:16px;}
+  main{max-width:640px; margin:0 auto; padding:18px 16px 60px;}
+  .stat-row{display:flex; gap:10px; margin-bottom:18px;}
   .stat-card{
-    flex:1; background:linear-gradient(180deg, rgba(255,255,255,.015), transparent 40%), var(--bg-panel);
-    border:1px solid var(--line); border-radius:16px;
-    padding:16px; text-align:center;
+    flex:1; background:linear-gradient(165deg, rgba(255,255,255,.025), transparent 45%), var(--bg-panel);
+    border:1px solid var(--line-soft); border-radius:var(--r-lg);
+    padding:18px 16px; text-align:center;
     box-shadow:var(--shadow-sm), var(--shadow-md);
   }
-  .stat-card .num{font-family:'Kanit',sans-serif; font-size:28px; font-weight:600; color:var(--accent-2);}
-  .stat-card .lbl{font-size:12px; color:var(--text-dim); margin-top:4px;}
-  .section-title{font-size:13px; font-weight:600; color:var(--text-dim); text-transform:uppercase; letter-spacing:.05em; margin:18px 0 10px;}
+  .stat-card .num{font-family:'Kanit',sans-serif; font-size:30px; font-weight:700; color:var(--accent-2);}
+  .stat-card .lbl{font-size:12px; color:var(--text-dim); margin-top:5px; font-weight:500;}
+  .section-title{font-size:12.5px; font-weight:700; color:var(--text-dim); text-transform:uppercase; letter-spacing:.06em; margin:22px 0 12px;}
   .history-item{
-    border:1px solid var(--line-soft); border-radius:11px; padding:12px 14px;
+    border:1px solid var(--line-soft); border-radius:var(--r-md); padding:13px 15px;
     margin-bottom:10px; cursor:pointer; background:var(--bg-panel); text-decoration:none; display:block;
     box-shadow:var(--shadow-sm);
     transition:border-color .15s ease, transform .15s ease, box-shadow .15s ease;
@@ -230,42 +243,56 @@
   .empty, .err, .loading{color:var(--text-dim); font-size:13px; padding:40px 0; text-align:center;}
   .err{color:var(--danger);}
   .card{
-    background:linear-gradient(180deg, rgba(255,255,255,.015), transparent 40%), var(--bg-panel);
-    border:1px solid var(--line); border-radius:16px;
-    padding:16px; margin-bottom:16px;
+    background:linear-gradient(165deg, rgba(255,255,255,.025), transparent 45%), var(--bg-panel);
+    border:1px solid var(--line-soft); border-radius:var(--r-lg);
+    padding:18px; margin-bottom:16px;
     box-shadow:var(--shadow-sm), var(--shadow-md);
   }
-  .card-title{font-family:'Kanit',sans-serif; font-weight:600; font-size:15px; margin-bottom:10px;}
-  .admin-hint{font-size:12px; color:var(--text-dim); margin-bottom:12px; line-height:1.5;}
+  .card-title{
+    display:flex; align-items:center; gap:11px;
+    font-family:'Kanit',sans-serif; font-weight:600; font-size:15.5px; margin-bottom:12px;
+  }
+  .card-title .dot{
+    display:flex; align-items:center; justify-content:center; flex-shrink:0;
+    width:32px; height:32px; border-radius:11px; font-size:16px; line-height:1;
+    background:linear-gradient(150deg, rgba(255,176,32,.22), rgba(255,176,32,.06));
+    border:1px solid rgba(255,176,32,.28);
+    box-shadow:0 4px 14px -6px rgba(255,176,32,.5);
+  }
+  .admin-hint{font-size:12px; color:var(--text-dim); margin-bottom:14px; line-height:1.55;}
   .name-map-row{
     display:grid; grid-template-columns:1fr 1fr auto; gap:8px; align-items:center;
-    margin-bottom:8px;
+    margin-bottom:9px;
   }
-  .name-map-row input{margin:0;}
+  .name-map-row input{
+    margin:0; background:var(--bg-input); border-radius:var(--r-sm);
+    box-shadow:inset 0 1px 2px rgba(0,0,0,.25);
+  }
   .name-map-row input:disabled{opacity:.7; cursor:default;}
   .name-map-row button, .name-map-add button{
-    border-radius:9px; padding:9px 12px; cursor:pointer; font-size:13px;
+    border-radius:var(--r-sm); padding:10px 12px; cursor:pointer; font-size:13px; font-weight:600;
     font-family:inherit; white-space:nowrap;
     transition:background .15s ease, border-color .15s ease, filter .15s ease;
   }
   .name-map-row button{background:none; border:1px solid var(--line); color:var(--danger);}
   .name-map-row button:hover{background:rgba(255,92,92,.08); border-color:var(--danger);}
-  .name-map-add{display:grid; grid-template-columns:1fr 1fr auto; gap:8px; margin-top:4px;}
-  .name-map-add button{background:var(--accent-2); border:none; color:#06251a; font-weight:600;}
+  .name-map-add{display:grid; grid-template-columns:1fr 1fr auto; gap:8px; margin-top:6px;}
+  .name-map-add input{background:var(--bg-input); border-radius:var(--r-sm); box-shadow:inset 0 1px 2px rgba(0,0,0,.25);}
+  .name-map-add button{background:linear-gradient(135deg, var(--accent-2), #2bc386); border:none; color:#06251a; font-weight:700;}
   .name-map-add button:hover{filter:brightness(1.08);}
-  .name-map-status{font-size:12px; color:var(--text-dim); margin-top:8px; min-height:1em;}
+  .name-map-status{font-size:12px; color:var(--text-dim); margin-top:9px; min-height:1em;}
   .name-map-status.ok{color:var(--accent-2);}
   .name-map-status.err{color:var(--danger);}
   .tester-roster-row{
     display:flex; align-items:center; justify-content:space-between; gap:10px;
-    padding:9px 0; border-bottom:1px solid var(--line-soft);
+    padding:10px 0; border-bottom:1px solid var(--line-soft);
   }
   .tester-roster-row:last-child{border-bottom:none;}
   .tester-roster-row .email{font-size:13px; color:var(--text);}
   .tester-roster-row .tech{font-size:13px; color:var(--accent-2); font-weight:600; text-align:right;}
   .tester-roster-row .role-badge{
     font-size:10px; text-transform:uppercase; letter-spacing:.06em;
-    padding:2px 7px; border-radius:6px; background:var(--bg-panel-2); color:var(--text-dim);
+    padding:3px 8px; border-radius:var(--r-pill); background:var(--bg-panel-2); color:var(--text-dim);
     border:1px solid var(--line); white-space:nowrap;
   }
   /* จอกว้าง: 640px แคบเกินไป ดูเหมือนแอพมือถือลอยกลางจอเปล่าๆ ขยายเนื้อหา
@@ -378,13 +405,13 @@
 
 <main>
   <div class="card app-hidden" id="testerRosterCard">
-    <div class="card-title">👤 รายชื่อผู้ทดสอบ</div>
+    <div class="card-title"><span class="dot">👤</span>รายชื่อผู้ทดสอบ</div>
     <div class="admin-hint">บัญชีที่ล็อกอินเข้าระบบนี้ (อีเมล) และชื่อช่างที่ใช้ทดสอบของแต่ละคน</div>
     <div id="testerRosterRows" class="loading">กำลังโหลด...</div>
   </div>
 
   <div class="card app-hidden" id="adminNameMapCard">
-    <div class="card-title">🔧 จัดการชื่อช่าง (เชื่อมกับ Admin web)</div>
+    <div class="card-title"><span class="dot">🔧</span>จัดการชื่อช่าง (เชื่อมกับ Admin web)</div>
     <div class="admin-hint">
       ชื่อในระบบนี้ (ตอนล็อกอิน) → ชื่อที่ใช้ใน Admin web (ตอนมอบหมายงาน) — ถ้าสองชื่อนี้ไม่ตรงกัน
       หน้าฟอร์มจะดึงงานที่มอบหมาย/ของ Spare ของช่างคนนั้นไม่เจอ แก้ตรงนี้ได้เลยโดยไม่ต้องรอแก้โค้ด

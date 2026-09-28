@@ -11,25 +11,30 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <style>
   :root{
-    --bg:#0b1220;
-    --bg-panel:#121b2e;
-    --bg-panel-2:#0f1729;
-    --line:#223047;
-    --line-soft:#1a2439;
-    --text:#e7edf7;
-    --text-dim:#8b9bb5;
+    --bg:#080d18;
+    --bg-panel:#121c33;
+    --bg-panel-2:#0e1729;
+    --line:#26375a;
+    --line-soft:#1c2942;
+    --text:#f0f4fc;
+    --text-dim:#94a3c4;
+    --text-faint:#5f6f92;
     --accent:#ffb020;
     --accent-2:#3ddc97;
     --danger:#ff5c5c;
-    --shadow-sm:0 1px 2px rgba(0,0,0,.25);
-    --shadow-md:0 10px 28px -14px rgba(0,0,0,.6);
+    --r-sm:12px;
+    --r-md:16px;
+    --r-lg:22px;
+    --r-pill:999px;
+    --shadow-sm:0 1px 2px rgba(0,0,0,.3);
+    --shadow-md:0 14px 34px -18px rgba(0,0,0,.75);
   }
   *{box-sizing:border-box;}
   body{
     margin:0;
     background:
-      radial-gradient(1200px 500px at 50% -10%, #16223a 0%, transparent 60%),
-      radial-gradient(900px 460px at 100% 100%, rgba(255,176,32,0.05) 0%, transparent 62%),
+      radial-gradient(1100px 520px at 12% -8%, rgba(255,176,32,.09) 0%, transparent 55%),
+      radial-gradient(900px 500px at 100% 0%, rgba(61,220,151,.06) 0%, transparent 55%),
       var(--bg);
     background-attachment:fixed;
     color:var(--text);
@@ -41,11 +46,10 @@
   ::-webkit-scrollbar-thumb{background:var(--line); border-radius:8px;}
   ::-webkit-scrollbar-thumb:hover{background:var(--text-dim);}
   header{
-    border-bottom:1px solid var(--line);
-    background:linear-gradient(180deg, rgba(255,176,32,0.07), transparent);
-    box-shadow:0 1px 0 rgba(255,255,255,.03);
+    border-bottom:1px solid var(--line-soft);
+    background:rgba(8,13,24,.72);
     position:sticky; top:0; z-index:10;
-    backdrop-filter:blur(10px);
+    backdrop-filter:blur(14px);
   }
   /* บนจอกว้าง (เว็บ) main{max-width:640px} ทำให้เนื้อหาลอยแคบกลางจอ แต่ header
      เดิมไม่มี max-width เลยยืดเต็มจอ - แถบบนกับเนื้อหาด้านล่างเลยไม่ตรงแนวกัน
@@ -54,27 +58,30 @@
      มือถือหน้าจอแคบกว่า 640px อยู่แล้วไม่เห็นความต่างเลย) */
   .header-inner{
     max-width:640px; margin:0 auto;
-    padding:22px 18px 16px;
+    padding:18px 18px 14px;
   }
   header .eyebrow{
+    display:inline-flex; align-items:center; gap:6px;
     font-family:'IBM Plex Mono',monospace;
-    font-size:11px; letter-spacing:.14em; text-transform:uppercase;
-    color:var(--accent); margin-bottom:6px;
+    font-size:10.5px; letter-spacing:.1em; text-transform:uppercase;
+    color:var(--accent); background:rgba(255,176,32,.1);
+    border:1px solid rgba(255,176,32,.22); border-radius:var(--r-pill);
+    padding:4px 10px; margin-bottom:10px;
   }
   header h1{
-    font-family:'Kanit',sans-serif; font-weight:600; font-size:20px; margin:0;
-    letter-spacing:.01em;
+    font-family:'Kanit',sans-serif; font-weight:700; font-size:22px; margin:0;
+    letter-spacing:-.01em;
   }
   .tester-bar{
     display:flex; align-items:center; justify-content:space-between;
-    font-size:12px; color:var(--text-dim); margin-top:8px;
+    font-size:12px; color:var(--text-dim); margin-top:10px;
   }
   .tester-bar .who{color:var(--accent-2); font-weight:600;}
   .tester-bar a, .tester-bar .link{cursor:pointer; text-decoration:underline; text-underline-offset:2px; color:inherit; transition:color .15s ease;}
   .tester-bar a:hover, .tester-bar .link:hover{color:var(--accent);}
-  main{max-width:640px; margin:0 auto; padding:16px 16px 60px;}
+  main{max-width:640px; margin:0 auto; padding:18px 16px 60px;}
   .history-item{
-    border:1px solid var(--line-soft); border-radius:11px; padding:12px 14px;
+    border:1px solid var(--line-soft); border-radius:var(--r-md); padding:13px 15px;
     margin-bottom:10px; cursor:pointer; background:var(--bg-panel); text-decoration:none; display:block;
     box-shadow:var(--shadow-sm);
     transition:border-color .15s ease, transform .15s ease, box-shadow .15s ease;
@@ -84,16 +91,16 @@
   .history-item .meta{font-size:12px; color:var(--text-dim); margin-top:4px;}
   .empty, .err, .loading{color:var(--text-dim); font-size:13px; padding:40px 0; text-align:center;}
   .err{color:var(--danger);}
-  .page-tabs{display:flex; gap:6px; margin-top:10px;}
+  .page-tabs{display:flex; gap:6px; margin-top:12px;}
   .page-tabs a, .page-tabs span.tab{
-    flex:1; padding:9px 8px; border-radius:10px; border:1px solid var(--line);
+    flex:1; padding:9px 8px; border-radius:var(--r-sm); border:1px solid var(--line-soft);
     background:var(--bg-panel-2); color:var(--text-dim); font-family:'Kanit',sans-serif;
-    font-size:13px; font-weight:500; text-align:center; text-decoration:none; cursor:pointer;
+    font-size:13px; font-weight:600; text-align:center; text-decoration:none; cursor:pointer;
     transition:border-color .15s ease, color .15s ease, background .15s ease;
   }
   .page-tabs a:hover{border-color:var(--text-dim); color:var(--text);}
   .page-tabs .active{
-    background:rgba(255,176,32,0.14); border-color:var(--accent); color:var(--accent); cursor:default;
+    background:rgba(255,176,32,0.16); border-color:var(--accent); color:var(--accent); cursor:default;
   }
   /* จอกว้าง: 640px แคบเกินไป ดูเหมือนแอพมือถือลอยกลางจอเปล่าๆ ขยายเนื้อหา
      ให้กว้างขึ้น และจัดรายการรายงานเป็นหลายคอลัมน์แทนแถวเดียวยาวๆ */

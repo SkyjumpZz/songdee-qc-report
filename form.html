@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.24.2">
+<meta name="app-version" content="1.25.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -12,45 +12,52 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <style>
   :root{
-    --bg:#0b1220;
-    --bg-panel:#121b2e;
-    --bg-panel-2:#0f1729;
-    --line:#223047;
-    --line-soft:#1a2439;
-    --text:#e7edf7;
-    --text-dim:#8b9bb5;
+    --bg:#080d18;
+    --bg-panel:#121c33;
+    --bg-panel-2:#0e1729;
+    --bg-input:#0a1120;
+    --line:#26375a;
+    --line-soft:#1c2942;
+    --text:#f0f4fc;
+    --text-dim:#94a3c4;
+    --text-faint:#5f6f92;
     --accent:#ffb020;
+    --accent-soft:#ffd685;
     --accent-2:#3ddc97;
     --danger:#ff5c5c;
     --amber:#ffb020;
-    --shadow-sm:0 1px 2px rgba(0,0,0,.25);
-    --shadow-md:0 10px 28px -14px rgba(0,0,0,.6);
-    --shadow-glow-accent:0 0 0 3px rgba(255,176,32,.14);
-    --shadow-glow-ok:0 4px 16px -4px rgba(61,220,151,.45);
+    --r-sm:12px;
+    --r-md:16px;
+    --r-lg:22px;
+    --r-pill:999px;
+    --shadow-sm:0 1px 2px rgba(0,0,0,.3);
+    --shadow-md:0 14px 34px -18px rgba(0,0,0,.75);
+    --shadow-lg:0 22px 50px -22px rgba(0,0,0,.85);
+    --shadow-glow-accent:0 0 0 3px rgba(255,176,32,.18);
+    --shadow-glow-ok:0 8px 22px -6px rgba(61,220,151,.5);
   }
   *{box-sizing:border-box;}
   body{
     margin:0;
     background:
-      radial-gradient(1200px 500px at 50% -10%, #16223a 0%, transparent 60%),
-      radial-gradient(900px 460px at 100% 100%, rgba(255,176,32,0.05) 0%, transparent 62%),
+      radial-gradient(1100px 520px at 12% -8%, rgba(255,176,32,.09) 0%, transparent 55%),
+      radial-gradient(900px 500px at 100% 0%, rgba(61,220,151,.06) 0%, transparent 55%),
       var(--bg);
     background-attachment:fixed;
     color:var(--text);
     font-family:'IBM Plex Sans Thai','Kanit',sans-serif;
     min-height:100vh;
-    padding-bottom:120px;
+    padding-bottom:132px;
   }
   ::-webkit-scrollbar{width:10px; height:10px;}
   ::-webkit-scrollbar-track{background:transparent;}
   ::-webkit-scrollbar-thumb{background:var(--line); border-radius:8px;}
   ::-webkit-scrollbar-thumb:hover{background:var(--text-dim);}
   header{
-    border-bottom:1px solid var(--line);
-    background:linear-gradient(180deg, rgba(255,176,32,0.07), transparent);
-    box-shadow:0 1px 0 rgba(255,255,255,.03);
+    border-bottom:1px solid var(--line-soft);
+    background:rgba(8,13,24,.72);
     position:sticky; top:0; z-index:10;
-    backdrop-filter:blur(10px);
+    backdrop-filter:blur(14px);
   }
   /* บนจอกว้าง (เว็บ) main{max-width:640px} ทำให้เนื้อหาลอยแคบกลางจอ แต่ header
      เดิมไม่มี max-width เลยยืดเต็มจอ - แถบบนกับเนื้อหาด้านล่างเลยไม่ตรงแนวกัน
@@ -59,20 +66,23 @@
      มือถือหน้าจอแคบกว่า 640px อยู่แล้วไม่เห็นความต่างเลย) */
   .header-inner{
     max-width:640px; margin:0 auto;
-    padding:22px 18px 16px;
+    padding:18px 18px 14px;
   }
   header .eyebrow{
+    display:inline-flex; align-items:center; gap:6px;
     font-family:'IBM Plex Mono',monospace;
-    font-size:11px; letter-spacing:.14em; text-transform:uppercase;
-    color:var(--accent); margin-bottom:6px;
+    font-size:10.5px; letter-spacing:.1em; text-transform:uppercase;
+    color:var(--accent); background:rgba(255,176,32,.1);
+    border:1px solid rgba(255,176,32,.22); border-radius:var(--r-pill);
+    padding:4px 10px; margin-bottom:10px;
   }
   header h1{
-    font-family:'Kanit',sans-serif; font-weight:600; font-size:20px; margin:0;
-    letter-spacing:.01em;
+    font-family:'Kanit',sans-serif; font-weight:700; font-size:22px; margin:0;
+    letter-spacing:-.01em;
   }
   .version-tag{
-    font-family:'IBM Plex Mono',monospace; font-size:11px; font-weight:400;
-    color:var(--text-dim); vertical-align:middle; margin-left:6px;
+    font-family:'IBM Plex Mono',monospace; font-size:10.5px; font-weight:400;
+    color:var(--text-faint); vertical-align:middle; margin-left:6px;
   }
   .update-banner{
     position:fixed; top:0; left:0; right:0; z-index:200;
@@ -82,43 +92,45 @@
     transition:transform .25s ease;
   }
   .update-banner.show{transform:translateY(0);}
-  main{max-width:640px; margin:0 auto; padding:16px;}
+  main{max-width:640px; margin:0 auto; padding:18px 16px;}
   .card{
-    background:linear-gradient(180deg, rgba(255,255,255,.015), transparent 40%), var(--bg-panel);
-    border:1px solid var(--line);
-    border-radius:16px;
-    padding:16px;
-    margin-bottom:14px;
+    background:linear-gradient(165deg, rgba(255,255,255,.025), transparent 45%), var(--bg-panel);
+    border:1px solid var(--line-soft);
+    border-radius:var(--r-lg);
+    padding:18px;
+    margin-bottom:16px;
     box-shadow:var(--shadow-sm), var(--shadow-md);
-    transition:border-color .2s ease;
+    transition:border-color .2s ease, transform .2s ease;
   }
   .card-title{
-    display:flex; align-items:center; gap:9px;
-    font-family:'Kanit',sans-serif; font-weight:600; font-size:15px;
-    color:var(--text); margin-bottom:12px;
+    display:flex; align-items:center; gap:11px;
+    font-family:'Kanit',sans-serif; font-weight:600; font-size:15.5px;
+    color:var(--text); margin-bottom:14px;
   }
   .card-title .dot{
-    width:7px;height:7px;border-radius:50%;
-    background:linear-gradient(135deg, var(--accent), #ffd685);
-    box-shadow:0 0 9px rgba(255,176,32,.55);
-    flex-shrink:0;
+    display:flex; align-items:center; justify-content:center; flex-shrink:0;
+    width:32px; height:32px; border-radius:11px; font-size:16px; line-height:1;
+    background:linear-gradient(150deg, rgba(255,176,32,.22), rgba(255,176,32,.06));
+    border:1px solid rgba(255,176,32,.28);
+    box-shadow:0 4px 14px -6px rgba(255,176,32,.5);
   }
   label{
-    display:block; font-size:12.5px; color:var(--text-dim); margin:10px 0 5px;
-    font-weight:500;
+    display:block; font-size:12px; color:var(--text-dim); margin:12px 0 6px;
+    font-weight:600; letter-spacing:.01em;
   }
   label .req{color:var(--danger); margin-left:2px;}
   input[type=text], input[type=date], input[type=tel], input[type=password], input[type=number], select, textarea{
     width:100%;
-    background:var(--bg-panel-2);
+    background:var(--bg-input);
     border:1px solid var(--line);
     color:var(--text);
-    border-radius:10px;
-    padding:11px 12px;
+    border-radius:var(--r-sm);
+    padding:12px 13px;
     font-size:14.5px;
     font-family:inherit;
     appearance:none;
     -webkit-appearance:none;
+    box-shadow:inset 0 1px 2px rgba(0,0,0,.25);
     transition:border-color .15s ease, box-shadow .15s ease;
   }
   /* input[type=number] (the qty field once a ใบเบิก locks it) was falling
@@ -148,120 +160,146 @@
   }
   .item-row .qty{text-align:center;}
   .btn-remove{
-    background:var(--bg-panel-2); border:1px solid var(--line);
-    color:var(--text-dim); border-radius:10px; height:41px; width:41px;
+    background:var(--bg-input); border:1px solid var(--line);
+    color:var(--text-dim); border-radius:var(--r-sm); height:43px; width:43px;
     font-size:16px; cursor:pointer; transition:color .15s ease, border-color .15s ease, background .15s ease;
   }
-  .btn-remove:hover{color:var(--danger); border-color:var(--danger); background:rgba(255,92,92,.08);}
+  .btn-remove:hover{color:var(--danger); border-color:var(--danger); background:rgba(255,92,92,.1);}
   .btn-add{
-    width:100%; margin-top:4px;
-    background:transparent; border:1px dashed var(--line);
-    color:var(--text-dim); border-radius:10px; padding:10px;
-    font-size:13.5px; cursor:pointer; font-family:inherit;
+    width:100%; margin-top:6px;
+    background:transparent; border:1.5px dashed var(--line);
+    color:var(--text-dim); border-radius:var(--r-sm); padding:12px;
+    font-size:13.5px; font-weight:600; cursor:pointer; font-family:inherit;
     transition:border-color .15s ease, color .15s ease, background .15s ease;
   }
-  .btn-add:hover{border-color:var(--accent); color:var(--accent); background:rgba(255,176,32,.05);}
+  .btn-add:hover{border-color:var(--accent); color:var(--accent); background:rgba(255,176,32,.06);}
   .check-item{
-    border:1px solid var(--line-soft); border-radius:11px;
-    padding:11px 12px; margin-bottom:9px; background:var(--bg-panel-2);
-    box-shadow:var(--shadow-sm);
+    border:1px solid var(--line-soft); border-radius:var(--r-md);
+    padding:0; margin-bottom:10px; background:var(--bg-panel-2);
+    box-shadow:var(--shadow-sm); overflow:hidden;
+    transition:border-color .15s ease;
   }
   .check-item .lbl{
-    font-size:13.5px; font-weight:500; margin-bottom:8px;
-    display:flex; gap:7px; align-items:flex-start; line-height:1.4;
+    font-size:13.5px; font-weight:500; margin-bottom:0;
+    display:flex; gap:9px; align-items:flex-start; line-height:1.45;
+    padding:12px 13px 10px;
   }
-  .check-item .lbl .mark{color:var(--amber); flex-shrink:0;}
+  .check-item .lbl .mark{
+    flex-shrink:0; width:20px; height:20px; display:flex; align-items:center; justify-content:center;
+    font-size:11px; color:var(--amber); background:rgba(255,176,32,.12);
+    border-radius:6px; margin-top:1px;
+  }
   .check-toggle{
-    display:flex; align-items:center; gap:8px;
-    background:var(--bg-panel-2); border:1px solid var(--line);
-    border-radius:10px; padding:11px 12px; cursor:pointer;
-    font-size:14px; color:var(--text-dim);
-    transition:border-color .15s ease, color .15s ease, background .15s ease;
+    display:flex; align-items:center; gap:9px;
+    background:var(--bg-input); border:none; border-top:1px solid var(--line-soft);
+    padding:11px 13px; cursor:pointer;
+    font-size:13.5px; font-weight:500; color:var(--text-dim);
+    transition:color .15s ease, background .15s ease;
   }
-  .check-toggle input{width:16px; height:16px; accent-color:var(--accent-2);}
-  .check-toggle.checked{border-color:var(--accent-2); color:var(--accent-2); background:rgba(61,220,151,0.1); box-shadow:0 0 0 1px rgba(61,220,151,.15) inset;}
+  .check-toggle input{
+    appearance:none; -webkit-appearance:none; width:19px; height:19px; flex-shrink:0;
+    border-radius:6px; border:1.5px solid var(--line); background:var(--bg-panel-2);
+    position:relative; cursor:pointer; transition:border-color .15s ease, background .15s ease;
+  }
+  .check-toggle input:checked{
+    background:linear-gradient(135deg, var(--accent-2), #2bc386); border-color:transparent;
+  }
+  .check-toggle input:checked::after{
+    content:''; position:absolute; left:6px; top:2px; width:5px; height:9px;
+    border:solid #06251a; border-width:0 2px 2px 0; transform:rotate(45deg);
+  }
+  .check-item:has(.check-toggle.checked){border-color:rgba(61,220,151,.4);}
+  .check-toggle.checked{color:var(--accent-2); background:rgba(61,220,151,.08);}
   .problem-row{
     display:grid; grid-template-columns:1fr auto; gap:8px; align-items:end;
     margin-bottom:8px;
   }
   .fix-entry{
-    border:1px solid var(--line-soft); border-radius:11px;
-    padding:12px; margin-bottom:10px; background:var(--bg-panel-2);
-    box-shadow:var(--shadow-sm);
+    border:1px solid var(--line-soft); border-radius:var(--r-md);
+    padding:14px; margin-bottom:11px; background:var(--bg-panel-2);
+    box-shadow:var(--shadow-sm); position:relative;
   }
   .fix-entry:last-child{margin-bottom:0;}
   .fix-entry .item-row{margin-bottom:0;}
-  .old-model-row{margin-top:10px; padding-top:10px; border-top:1px solid var(--line);}
+  .old-model-row{margin-top:11px; padding-top:11px; border-top:1px solid var(--line);}
   .old-model-row label{font-size:11.5px; margin:0 0 5px;}
-  .photo-grid{display:grid; grid-template-columns:repeat(3, 1fr); gap:8px; margin-bottom:10px;}
+  .photo-grid{display:grid; grid-template-columns:repeat(3, 1fr); gap:9px; margin-bottom:12px;}
   .photo-thumb{
-    position:relative; aspect-ratio:1; border-radius:10px; overflow:hidden;
+    position:relative; aspect-ratio:1; border-radius:var(--r-sm); overflow:hidden;
     border:1px solid var(--line); background:var(--bg-panel-2); box-shadow:var(--shadow-sm);
   }
   .photo-thumb img{width:100%; height:100%; object-fit:cover; display:block;}
   .photo-remove{
-    position:absolute; top:4px; right:4px; width:22px; height:22px; border-radius:50%;
-    background:rgba(0,0,0,0.6); color:#fff; border:none; font-size:13px; line-height:1;
+    position:absolute; top:5px; right:5px; width:23px; height:23px; border-radius:50%;
+    background:rgba(0,0,0,0.65); color:#fff; border:none; font-size:13px; line-height:1;
     cursor:pointer; transition:background .15s ease;
   }
   .photo-remove:hover{background:var(--danger);}
   .photo-status{
     position:absolute; bottom:0; left:0; right:0; font-size:10px; text-align:center;
-    padding:3px 4px; background:rgba(0,0,0,0.6); color:#fff;
+    padding:3px 4px; background:rgba(0,0,0,0.65); color:#fff;
     overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
   }
-  .photo-hint{font-size:11.5px; color:var(--text-dim); margin-top:6px;}
+  .photo-hint{font-size:11.5px; color:var(--text-faint); margin-top:8px;}
   /* ลากไฟล์รูปมาวาง หรือ Ctrl+V วางจาก clipboard ได้ (ไม่ต้องผ่านตัวเลือกไฟล์
      เสมอไป — สะดวกเวลา capture หน้าจอเล่นย้อนกล้อง MDVR แล้ววางตรงนี้เลย) */
   #photoCard.dragover{
     border-color:var(--accent); background:rgba(255,176,32,0.06);
     box-shadow:0 0 0 2px rgba(255,176,32,0.18) inset;
   }
-  .sticker-grid{display:grid; gap:9px;}
+  .sticker-grid{display:grid; gap:10px;}
   .sticker-row{
     display:grid; grid-template-columns:1fr 1fr; gap:10px; align-items:center;
-    border:1px solid var(--line-soft); border-radius:11px; padding:10px 12px;
+    border:1px solid var(--line-soft); border-radius:var(--r-md); padding:11px 13px;
     background:var(--bg-panel-2); box-shadow:var(--shadow-sm);
   }
-  .sticker-row .name{font-size:13.5px; color:var(--text);}
-  .tpl-tabs{display:flex; gap:6px; margin-bottom:2px;}
+  .sticker-row .name{font-size:13.5px; font-weight:600; color:var(--text);}
+  .tpl-tabs{
+    display:flex; gap:4px; margin-bottom:2px; padding:4px;
+    background:var(--bg-input); border-radius:var(--r-pill); border:1px solid var(--line-soft);
+  }
   .tpl-tabs button{
-    flex:1; padding:10px 8px; border-radius:10px; border:1px solid var(--line);
-    background:var(--bg-panel-2); color:var(--text-dim); font-family:inherit;
-    font-size:13px; font-weight:500; cursor:pointer;
-    transition:border-color .15s ease, color .15s ease, background .15s ease;
+    flex:1; padding:10px 8px; border-radius:var(--r-pill); border:none;
+    background:transparent; color:var(--text-dim); font-family:inherit;
+    font-size:13px; font-weight:600; cursor:pointer;
+    transition:color .15s ease, background .15s ease, box-shadow .15s ease;
   }
-  .tpl-tabs button:hover:not(.active){border-color:var(--text-dim); color:var(--text);}
+  .tpl-tabs button:hover:not(.active){color:var(--text);}
   .tpl-tabs button.active{
-    background:rgba(255,176,32,0.14); border-color:var(--accent); color:var(--accent);
-    box-shadow:0 2px 10px -4px rgba(255,176,32,.4);
+    background:linear-gradient(135deg, var(--accent), #e69c1c); color:#231400;
+    box-shadow:0 4px 14px -4px rgba(255,176,32,.55);
   }
-  .page-tabs{display:flex; gap:6px; margin-top:10px;}
+  .page-tabs{display:flex; gap:6px; margin-top:12px;}
   .page-tabs a, .page-tabs span.tab{
-    flex:1; padding:9px 8px; border-radius:10px; border:1px solid var(--line);
+    flex:1; padding:9px 8px; border-radius:var(--r-sm); border:1px solid var(--line-soft);
     background:var(--bg-panel-2); color:var(--text-dim); font-family:'Kanit',sans-serif;
-    font-size:13px; font-weight:500; text-align:center; text-decoration:none; cursor:pointer;
+    font-size:13px; font-weight:600; text-align:center; text-decoration:none; cursor:pointer;
     transition:border-color .15s ease, color .15s ease, background .15s ease;
   }
   .page-tabs a:hover{border-color:var(--text-dim); color:var(--text);}
   .page-tabs .active{
-    background:rgba(255,176,32,0.14); border-color:var(--accent); color:var(--accent); cursor:default;
+    background:rgba(255,176,32,0.16); border-color:var(--accent); color:var(--accent); cursor:default;
   }
   .preview{
     font-family:'IBM Plex Sans Thai', sans-serif;
     font-size:13.5px; line-height:1.85; white-space:pre-wrap;
-    background:var(--bg-panel-2); border:1px solid var(--line);
-    border-radius:10px; padding:14px; color:var(--text);
+    background:var(--bg-input); border:1px solid var(--line);
+    border-radius:var(--r-sm); padding:14px; color:var(--text);
     max-height:340px; overflow-y:auto;
   }
   .actionbar{
     position:fixed; bottom:0; left:0; right:0;
-    background:linear-gradient(0deg, var(--bg) 65%, transparent);
-    padding:18px 16px 20px;
+    background:linear-gradient(0deg, var(--bg) 60%, transparent);
+    padding:16px 16px 22px;
   }
-  .actionbar-inner{max-width:640px; margin:0 auto; display:flex; gap:10px;}
+  .actionbar-inner{
+    max-width:640px; margin:0 auto; display:flex; gap:10px;
+    background:rgba(18,28,51,.75); border:1px solid var(--line-soft);
+    border-radius:var(--r-lg); padding:8px; backdrop-filter:blur(14px);
+    box-shadow:var(--shadow-lg);
+  }
   .btn-primary, .btn-secondary{
-    flex:1; padding:14px; border-radius:12px; border:none; font-family:'Kanit',sans-serif;
+    flex:1; padding:13px; border-radius:var(--r-md); border:none; font-family:'Kanit',sans-serif;
     font-weight:600; font-size:14.5px; cursor:pointer; display:flex; align-items:center;
     justify-content:center; gap:8px;
     transition:transform .15s ease, box-shadow .15s ease, filter .15s ease;
@@ -270,20 +308,20 @@
     background:linear-gradient(135deg, var(--accent-2), #2bc386); color:#06251a;
     box-shadow:var(--shadow-glow-ok);
   }
-  .btn-primary:hover{filter:brightness(1.05); box-shadow:0 6px 20px -4px rgba(61,220,151,.55);}
+  .btn-primary:hover{filter:brightness(1.05); box-shadow:0 8px 24px -6px rgba(61,220,151,.6);}
   .btn-primary:active{transform:scale(0.98);}
   .btn-primary:disabled{background:var(--line); color:var(--text-dim); cursor:not-allowed; box-shadow:none;}
-  .btn-secondary{background:var(--bg-panel); color:var(--text); border:1px solid var(--line);}
+  .btn-secondary{background:var(--bg-input); color:var(--text); border:1px solid var(--line);}
   .btn-secondary:hover{border-color:var(--text-dim);}
   .btn-secondary:active{transform:scale(0.98);}
-  .hint{font-size:11.5px; color:var(--text-dim); margin-top:8px; line-height:1.6;}
+  .hint{font-size:11.5px; color:var(--text-faint); margin-top:8px; line-height:1.6;}
   .missing-badge{
     font-size:11px; color:var(--danger); font-family:'IBM Plex Mono',monospace;
-    margin-top:6px;
+    margin-top:8px;
   }
   .toast{
     position:fixed; top:16px; left:50%; transform:translateX(-50%) translateY(-140%);
-    background:var(--accent-2); color:#06251a; padding:11px 18px; border-radius:10px;
+    background:var(--accent-2); color:#06251a; padding:11px 18px; border-radius:var(--r-sm);
     font-family:'Kanit',sans-serif; font-weight:600; font-size:13.5px;
     transition:transform .25s ease; z-index:100; box-shadow:0 8px 24px rgba(0,0,0,0.4);
   }
@@ -295,24 +333,24 @@
   .app-hidden{display:none !important;}
   .tester-bar{
     display:flex; align-items:center; justify-content:space-between;
-    font-size:12px; color:var(--text-dim); margin-top:8px;
+    font-size:12px; color:var(--text-dim); margin-top:10px;
   }
   .tester-bar .who{color:var(--accent-2); font-weight:600;}
   .tester-bar .logout{cursor:pointer; text-decoration:underline; text-underline-offset:2px; color:inherit; transition:color .15s ease;}
   .tester-bar .logout:hover{color:var(--accent);}
   .stock-lock-banner{
-    font-size:12px; border-radius:10px; padding:9px 11px; margin-bottom:10px;
-    border:1px solid var(--line-soft); background:var(--bg-panel-2); color:var(--text-dim);
+    font-size:12px; border-radius:var(--r-sm); padding:10px 12px; margin-bottom:12px;
+    border:1px solid var(--line-soft); background:var(--bg-input); color:var(--text-dim);
     transition:border-color .2s ease, color .2s ease;
   }
-  .stock-lock-banner.locked{border-color:var(--accent-2); color:var(--accent-2); background:rgba(61,220,151,.06);}
-  .stock-lock-banner.warn{border-color:var(--amber); color:var(--amber); background:rgba(255,176,32,.06);}
-  .tech-stock-search{margin-bottom:10px;}
-  .tech-stock-search label{margin:0 0 5px;}
+  .stock-lock-banner.locked{border-color:var(--accent-2); color:var(--accent-2); background:rgba(61,220,151,.08);}
+  .stock-lock-banner.warn{border-color:var(--amber); color:var(--amber); background:rgba(255,176,32,.08);}
+  .tech-stock-search{margin-bottom:12px;}
+  .tech-stock-search label{margin:0 0 6px;}
   .suggest-field{position:relative;}
   .suggest-dropdown{
     position:absolute; left:0; right:0; top:100%; margin-top:4px;
-    background:var(--bg-panel-2); border:1px solid var(--line); border-radius:10px;
+    background:var(--bg-panel-2); border:1px solid var(--line); border-radius:var(--r-sm);
     box-shadow:var(--shadow-md); max-height:220px; overflow-y:auto; z-index:20;
   }
   .suggest-dropdown .item{
@@ -322,8 +360,8 @@
   .suggest-dropdown .item:last-child{border-bottom:none;}
   .suggest-dropdown .item:hover{background:rgba(255,176,32,.08);}
   .editing-banner{
-    font-size:12px; color:var(--accent); background:rgba(255,176,32,0.08);
-    border:1px solid var(--accent); border-radius:9px; padding:9px 11px; margin-bottom:10px;
+    font-size:12px; color:var(--accent); background:rgba(255,176,32,0.1);
+    border:1px solid var(--accent); border-radius:var(--r-sm); padding:10px 13px; margin-bottom:12px;
     display:flex; align-items:center; justify-content:space-between; gap:8px;
   }
   /* จอกว้าง: 640px แคบเกินไป ดูเหมือนแอพมือถือลอยกลางจอเปล่าๆ
@@ -368,12 +406,12 @@
   </div>
 
   <div class="card">
-    <div class="card-title"><span class="dot"></span>ประเภทงาน</div>
+    <div class="card-title"><span class="dot">🗂️</span>ประเภทงาน</div>
     <div class="tpl-tabs" id="tplTabs"></div>
   </div>
 
   <div class="card">
-    <div class="card-title"><span class="dot"></span>ข้อมูลงาน</div>
+    <div class="card-title"><span class="dot">🚚</span>ข้อมูลงาน</div>
     <div class="tech-stock-search app-hidden" id="techStockSearch">
       <label>ช่างที่กำลังทำรายงานนี้ (เลือกชื่อ — ดึงทั้งงานที่มอบหมายและของ Spare ของช่างคนนั้น)</label>
       <select id="techStockNameSelect">
@@ -412,14 +450,14 @@
   </div>
 
   <div class="card" id="problemsCard">
-    <div class="card-title"><span class="dot"></span>ปัญหา</div>
+    <div class="card-title"><span class="dot">⚠️</span>ปัญหา</div>
     <div class="stock-lock-banner app-hidden" id="issueBanner"></div>
     <div id="problemRows"></div>
     <button class="btn-add" onclick="addProblemRow()">+ เพิ่มปัญหา</button>
   </div>
 
   <div class="card" id="fixesCard">
-    <div class="card-title"><span class="dot"></span><span id="fixesCardTitle">แก้ไข</span></div>
+    <div class="card-title"><span class="dot">🔧</span><span id="fixesCardTitle">แก้ไข</span></div>
     <div class="stock-lock-banner" id="stockLockBanner"></div>
     <div class="stock-lock-banner app-hidden" id="vehicleEquipmentBanner"></div>
     <div id="fixRows"></div>
@@ -427,17 +465,17 @@
   </div>
 
   <div class="card" id="stickerCard">
-    <div class="card-title"><span class="dot"></span>ตรวจสอบสติ๊กเกอร์ 3 จุด</div>
+    <div class="card-title"><span class="dot">🏷️</span>ตรวจสอบสติ๊กเกอร์ 3 จุด</div>
     <div class="sticker-grid" id="stickerGrid"></div>
   </div>
 
   <div class="card" id="checklistCard">
-    <div class="card-title"><span class="dot"></span>รายการตรวจสอบ</div>
+    <div class="card-title"><span class="dot">✅</span>รายการตรวจสอบ</div>
     <div id="checklistItems"></div>
   </div>
 
   <div class="card" id="photoCard">
-    <div class="card-title"><span class="dot"></span>แนบรูปภาพ</div>
+    <div class="card-title"><span class="dot">📷</span>แนบรูปภาพ</div>
     <div class="photo-grid" id="photoGrid"></div>
     <input type="file" id="photoInput" accept="image/*" multiple capture="environment" class="app-hidden">
     <button type="button" class="btn-add" id="addPhotoBtn" onclick="document.getElementById('photoInput').click()">+ เพิ่มรูปภาพ</button>
@@ -445,7 +483,7 @@
   </div>
 
   <div class="card">
-    <div class="card-title"><span class="dot"></span>ตัวอย่างข้อความที่จะส่ง</div>
+    <div class="card-title"><span class="dot">📝</span>ตัวอย่างข้อความที่จะส่ง</div>
     <div class="preview" id="preview"></div>
     <div class="missing-badge" id="missingBadge"></div>
   </div>
@@ -454,8 +492,8 @@
 
 <div class="actionbar app-hidden" id="actionBar">
   <div class="actionbar-inner">
-    <button class="btn-secondary" onclick="copyText()">คัดลอกข้อความ</button>
-    <button class="btn-primary" id="sendBtn" onclick="sendToLine()">ส่งเข้า LINE →</button>
+    <button class="btn-secondary" onclick="copyText()">📋 คัดลอกข้อความ</button>
+    <button class="btn-primary" id="sendBtn" onclick="sendToLine()">📤 ส่งเข้า LINE</button>
   </div>
 </div>
 
@@ -1387,12 +1425,14 @@ function syncFormInputsFromState(){
   document.getElementById('jobPlate').value = state.plate || '';
 }
 
+const TPL_ICON = { upgrade: '⬆️', new_install: '✨', repair: '🛠️' };
+
 function renderTabs(){
   const wrap = document.getElementById('tplTabs');
   wrap.innerHTML = '';
   Object.entries(TEMPLATES).forEach(([key, t])=>{
     const b = document.createElement('button');
-    b.textContent = t.label;
+    b.textContent = (TPL_ICON[key] ? TPL_ICON[key] + ' ' : '') + t.label;
     b.className = key === state.tpl ? 'active' : '';
     b.onclick = ()=>{
       state.tpl = key;
