@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>Dashboard · SONGDEE GPS</title>
-<meta name="app-version" content="1.8.1">
+<meta name="app-version" content="1.9.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -256,6 +256,18 @@
   .name-map-status{font-size:12px; color:var(--text-dim); margin-top:8px; min-height:1em;}
   .name-map-status.ok{color:var(--accent-2);}
   .name-map-status.err{color:var(--danger);}
+  .tester-roster-row{
+    display:flex; align-items:center; justify-content:space-between; gap:10px;
+    padding:9px 0; border-bottom:1px solid var(--line-soft);
+  }
+  .tester-roster-row:last-child{border-bottom:none;}
+  .tester-roster-row .email{font-size:13px; color:var(--text);}
+  .tester-roster-row .tech{font-size:13px; color:var(--accent-2); font-weight:600; text-align:right;}
+  .tester-roster-row .role-badge{
+    font-size:10px; text-transform:uppercase; letter-spacing:.06em;
+    padding:2px 7px; border-radius:6px; background:var(--bg-panel-2); color:var(--text-dim);
+    border:1px solid var(--line); white-space:nowrap;
+  }
   /* จอกว้าง: 640px แคบเกินไป ดูเหมือนแอพมือถือลอยกลางจอเปล่าๆ ขยายเนื้อหา
      ให้กว้างขึ้น และจัดรายการรายงานเป็นหลายคอลัมน์แทนแถวเดียวยาวๆ */
   @media (min-width:860px){
@@ -365,6 +377,12 @@
 </header>
 
 <main>
+  <div class="card app-hidden" id="testerRosterCard">
+    <div class="card-title">👤 รายชื่อผู้ทดสอบ</div>
+    <div class="admin-hint">บัญชีที่ล็อกอินเข้าระบบนี้ (อีเมล) และชื่อช่างที่ใช้ทดสอบของแต่ละคน</div>
+    <div id="testerRosterRows" class="loading">กำลังโหลด...</div>
+  </div>
+
   <div class="card app-hidden" id="adminNameMapCard">
     <div class="card-title">🔧 จัดการชื่อช่าง (เชื่อมกับ Admin web)</div>
     <div class="admin-hint">
@@ -547,8 +565,12 @@ _auth.onAuthStateChanged(async user=>{
     pageTabs.classList.remove('app-hidden');
     stats.classList.remove('app-hidden');
     document.getElementById('adminNameMapCard').classList.toggle('app-hidden', role.role !== 'admin');
+    document.getElementById('testerRosterCard').classList.toggle('app-hidden', role.role !== 'admin');
     await loadDashboard();
-    if(role.role === 'admin') await loadNameMap();
+    if(role.role === 'admin'){
+      await loadNameMap();
+      await loadTesterRoster();
+    }
   }catch(e){
     err.textContent = t('errRoleLoad') + e.message;
     await _auth.signOut();
@@ -629,6 +651,38 @@ function addNameMapRow(){
   techInput.value = ''; adminInput.value = '';
   renderNameMapEditor();
   persistNameMap();
+}
+
+// Admin-only roster: who can log in (email) and what techName they test
+// as, straight from the same roles collection the Stock admin panel uses.
+async function loadTesterRoster(){
+  const wrap = document.getElementById('testerRosterRows');
+  wrap.className = 'loading';
+  wrap.textContent = 'กำลังโหลด...';
+  try{
+    const snap = await _db.collection('roles').get();
+    const rows = snap.docs.map(d=>d.data());
+    rows.sort((a,b)=>(a.techName||a.email||'').localeCompare(b.techName||b.email||''));
+    if(!rows.length){
+      wrap.className = 'empty';
+      wrap.textContent = 'ยังไม่มีผู้ใช้ในระบบ';
+      return;
+    }
+    wrap.className = '';
+    wrap.innerHTML = rows.map(r=>{
+      const tech = r.techName
+        ? escapeHtmlLite(r.techName)
+        : '<span style="color:var(--danger)">ยังไม่ผูกชื่อช่าง</span>';
+      return `<div class="tester-roster-row">
+        <span class="email">${escapeHtmlLite(r.email || '(ไม่มีอีเมล)')}</span>
+        <span class="tech">${tech}</span>
+        <span class="role-badge">${escapeHtmlLite(r.role || '-')}</span>
+      </div>`;
+    }).join('');
+  }catch(e){
+    wrap.className = 'err';
+    wrap.textContent = 'โหลดรายชื่อไม่สำเร็จ: ' + e.message;
+  }
 }
 
 async function loadDashboard(){
