@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>Dashboard · SONGDEE GPS</title>
-<meta name="app-version" content="1.11.0">
+<meta name="app-version" content="1.12.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -221,20 +221,41 @@
     .login-visual{display:block;}
   }
   main{max-width:640px; margin:0 auto; padding:18px 16px 60px;}
+  .dash-hero{
+    position:relative; overflow:hidden;
+    background:
+      radial-gradient(420px 220px at 8% 0%, rgba(255,176,32,.17) 0%, transparent 68%),
+      radial-gradient(360px 220px at 100% 110%, rgba(61,220,151,.13) 0%, transparent 68%),
+      linear-gradient(165deg, rgba(255,255,255,.03), transparent 50%), var(--bg-panel);
+    border:1px solid var(--line-soft); border-radius:var(--r-lg);
+    padding:20px; margin-bottom:16px;
+    box-shadow:var(--shadow-sm), var(--shadow-md);
+  }
+  .dash-hero::after{
+    content:''; position:absolute; inset:0; pointer-events:none; opacity:.55;
+    background-image:radial-gradient(circle, rgba(255,255,255,.07) 1px, transparent 1.5px);
+    background-size:16px 16px;
+    -webkit-mask-image:radial-gradient(ellipse 90% 90% at 100% 0%, black 0%, transparent 72%);
+    mask-image:radial-gradient(ellipse 90% 90% at 100% 0%, black 0%, transparent 72%);
+  }
+  .dash-hero-greet{position:relative; font-size:12.5px; color:var(--text-dim); font-weight:600;}
+  .dash-hero-name{position:relative; font-family:'Kanit',sans-serif; font-weight:700; font-size:21px; color:var(--text); margin-top:3px;}
   .stat-row{display:flex; gap:10px; margin-bottom:18px;}
   .stat-card{
-    flex:1; background:linear-gradient(165deg, rgba(255,255,255,.025), transparent 45%), var(--bg-panel);
+    flex:1; display:flex; align-items:center; gap:12px; text-align:left;
+    background:linear-gradient(165deg, rgba(255,255,255,.025), transparent 45%), var(--bg-panel);
     border:1px solid var(--line-soft); border-radius:var(--r-lg);
-    padding:18px 16px; text-align:center; position:relative; overflow:hidden;
+    padding:15px 16px; position:relative; overflow:hidden;
     box-shadow:var(--shadow-sm), var(--shadow-md);
   }
   .stat-card::before{
     content:''; position:absolute; top:0; left:0; right:0; height:2px;
   }
   .stat-card .stat-icon{
-    width:38px; height:38px; border-radius:12px; margin:0 auto 10px;
-    display:flex; align-items:center; justify-content:center; font-size:18px;
+    width:42px; height:42px; border-radius:13px; flex-shrink:0;
+    display:flex; align-items:center; justify-content:center; font-size:19px;
   }
+  .stat-card .stat-text{display:flex; flex-direction:column; min-width:0;}
   .stat-card.a::before{background:linear-gradient(90deg, transparent, var(--accent-2), transparent);}
   .stat-card.a .stat-icon{
     background:linear-gradient(150deg, rgba(61,220,151,.22), rgba(61,220,151,.06));
@@ -246,12 +267,17 @@
     border:1px solid rgba(255,176,32,.28); box-shadow:0 4px 14px -6px rgba(255,176,32,.5);
   }
   .stat-card.b .num{color:var(--accent);}
-  .stat-card .num{font-family:'Kanit',sans-serif; font-size:30px; font-weight:700; color:var(--accent-2); font-variant-numeric:tabular-nums;}
-  .stat-card .lbl{font-size:12px; color:var(--text-dim); margin-top:5px; font-weight:500;}
+  .stat-card .num{font-family:'Kanit',sans-serif; font-size:26px; font-weight:700; color:var(--accent-2); font-variant-numeric:tabular-nums; line-height:1.15;}
+  .stat-card .lbl{font-size:11.5px; color:var(--text-dim); margin-top:2px; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
   .section-title{
     display:flex; align-items:center; gap:6px;
     font-size:12.5px; font-weight:700; color:var(--text-dim); text-transform:uppercase; letter-spacing:.06em; margin:22px 0 12px;
   }
+  .date-group{
+    font-size:11.5px; font-weight:700; color:var(--text-faint); text-transform:uppercase; letter-spacing:.05em;
+    margin:16px 0 8px; padding-left:2px;
+  }
+  .date-group:first-child{margin-top:0;}
   .history-item{
     border:1px solid var(--line-soft); border-radius:var(--r-md); padding:13px 15px;
     margin-bottom:10px; cursor:pointer; background:var(--bg-panel); text-decoration:none; display:block;
@@ -358,6 +384,7 @@
     .stat-row{max-width:480px;}
     #list{display:grid; grid-template-columns:repeat(auto-fill, minmax(300px,1fr)); gap:10px;}
     .history-item{margin-bottom:0;}
+    .date-group{grid-column:1 / -1;}
   }
 </style>
 </head>
@@ -480,9 +507,13 @@
   </div>
 
   <div id="stats" class="app-hidden">
+    <div class="dash-hero">
+      <div class="dash-hero-greet" id="dashGreet"></div>
+      <div class="dash-hero-name" id="dashHeroName"></div>
+    </div>
     <div class="stat-row">
-      <div class="stat-card a"><div class="stat-icon">📊</div><div class="num" id="statTotal">-</div><div class="lbl">รายงานทั้งหมด</div></div>
-      <div class="stat-card b"><div class="stat-icon">📅</div><div class="num" id="statToday">-</div><div class="lbl">วันนี้</div></div>
+      <div class="stat-card a"><div class="stat-icon">📊</div><div class="stat-text"><div class="num" id="statTotal">-</div><div class="lbl">รายงานทั้งหมด</div></div></div>
+      <div class="stat-card b"><div class="stat-icon">📅</div><div class="stat-text"><div class="num" id="statToday">-</div><div class="lbl">วันนี้</div></div></div>
     </div>
     <div class="section-title">🕘 รายงานล่าสุด (ทุกช่าง)</div>
   </div>
@@ -619,6 +650,14 @@ function doLogout(){
   _auth.signOut();
 }
 
+function getGreeting(){
+  const h = new Date().getHours();
+  if(h < 11) return 'สวัสดีตอนเช้า ☀️';
+  if(h < 16) return 'สวัสดีตอนบ่าย 🌤️';
+  if(h < 19) return 'สวัสดีตอนเย็น 🌆';
+  return 'ทำงานดึกแล้วนะ 🌙';
+}
+
 _auth.onAuthStateChanged(async user=>{
   const overlay = document.getElementById('loginOverlay');
   const testerBar = document.getElementById('testerBar');
@@ -642,6 +681,8 @@ _auth.onAuthStateChanged(async user=>{
       return;
     }
     document.getElementById('testerName').textContent = role.techName;
+    document.getElementById('dashGreet').textContent = getGreeting();
+    document.getElementById('dashHeroName').textContent = role.techName;
     overlay.classList.add('hide');
     testerBar.classList.remove('app-hidden');
     pageTabs.classList.remove('app-hidden');
@@ -804,6 +845,18 @@ async function loadDashboard(){
   }
 }
 
+// "วันนี้"/"เมื่อวาน" instead of a bare date — doc.date is already YYYY-MM-DD
+// (same format used to build today's/yesterday's comparison strings), so a
+// plain string compare is enough, no timezone-sensitive Date parsing needed.
+function relativeDateLabel(dateStr){
+  if(!dateStr) return 'ไม่ระบุวันที่';
+  const today = new Date(); today.setHours(0,0,0,0);
+  const yesterday = new Date(today); yesterday.setDate(yesterday.getDate()-1);
+  if(dateStr === today.toISOString().slice(0,10)) return 'วันนี้';
+  if(dateStr === yesterday.toISOString().slice(0,10)) return 'เมื่อวาน';
+  return dateStr.split('-').reverse().join('/');
+}
+
 function renderList(list){
   const listEl = document.getElementById('list');
   if(!list.length){
@@ -813,14 +866,22 @@ function renderList(list){
   }
   listEl.className = '';
   listEl.innerHTML = '';
+  let lastGroup = null;
   list.forEach(doc=>{
-    const dateStr = doc.date ? doc.date.split('-').reverse().join('/') : '(ไม่ระบุวันที่)';
+    const group = relativeDateLabel(doc.date);
+    if(group !== lastGroup){
+      const h = document.createElement('div');
+      h.className = 'date-group';
+      h.textContent = group;
+      listEl.appendChild(h);
+      lastGroup = group;
+    }
     const tplLabel = TEMPLATE_LABELS[doc.tpl] || doc.tpl || '';
     const tplIcon = TEMPLATE_ICONS[doc.tpl] || '📄';
     const a = document.createElement('a');
     a.className = 'history-item' + (doc.tpl ? ' tpl-' + doc.tpl : '');
     a.href = `form.html?report=${encodeURIComponent(doc.id)}`;
-    a.innerHTML = `<div class="hi-row"><div class="hi-icon">${tplIcon}</div><div class="hi-text"><div class="title">${escapeHtmlLite(dateStr)} ${escapeHtmlLite(tplLabel)} ${escapeHtmlLite(doc.customer||'')}</div><div class="meta">ทะเบียน: ${escapeHtmlLite(doc.plate||'-')} · ช่าง: ${escapeHtmlLite(doc.techName||'-')}</div></div></div>`;
+    a.innerHTML = `<div class="hi-row"><div class="hi-icon">${tplIcon}</div><div class="hi-text"><div class="title">${escapeHtmlLite(tplLabel)} ${escapeHtmlLite(doc.customer||'')}</div><div class="meta">ทะเบียน: ${escapeHtmlLite(doc.plate||'-')} · ช่าง: ${escapeHtmlLite(doc.techName||'-')}</div></div></div>`;
     listEl.appendChild(a);
   });
 }

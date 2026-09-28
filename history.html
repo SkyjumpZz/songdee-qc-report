@@ -99,6 +99,11 @@
   .history-item .hi-text{flex:1; min-width:0;}
   .history-item .title{font-size:14px; font-weight:600; color:var(--text);}
   .history-item .meta{font-size:12px; color:var(--text-dim); margin-top:4px;}
+  .date-group{
+    font-size:11.5px; font-weight:700; color:var(--text-faint); text-transform:uppercase; letter-spacing:.05em;
+    margin:16px 0 8px; padding-left:2px;
+  }
+  .date-group:first-child{margin-top:0;}
   .empty, .err, .loading{color:var(--text-dim); font-size:13px; padding:40px 0; text-align:center;}
   .err{color:var(--danger);}
   .page-tabs{display:flex; gap:6px; margin-top:12px;}
@@ -135,6 +140,7 @@
     .header-inner, main{max-width:min(1400px, 94vw);}
     #list{display:grid; grid-template-columns:repeat(auto-fill, minmax(300px,1fr)); gap:10px;}
     .history-item{margin-bottom:0;}
+    .date-group{grid-column:1 / -1;}
   }
 </style>
 </head>
@@ -221,6 +227,18 @@ _auth.onAuthStateChanged(async user=>{
   }
 });
 
+// "วันนี้"/"เมื่อวาน" instead of a bare date — doc.date is already YYYY-MM-DD
+// (same format used to build today's/yesterday's comparison strings), so a
+// plain string compare is enough, no timezone-sensitive Date parsing needed.
+function relativeDateLabel(dateStr){
+  if(!dateStr) return 'ไม่ระบุวันที่';
+  const today = new Date(); today.setHours(0,0,0,0);
+  const yesterday = new Date(today); yesterday.setDate(yesterday.getDate()-1);
+  if(dateStr === today.toISOString().slice(0,10)) return 'วันนี้';
+  if(dateStr === yesterday.toISOString().slice(0,10)) return 'เมื่อวาน';
+  return dateStr.split('-').reverse().join('/');
+}
+
 function renderList(list){
   const listEl = document.getElementById('list');
   if(!list.length){
@@ -229,14 +247,22 @@ function renderList(list){
   }
   listEl.innerHTML = '';
   listEl.className = '';
+  let lastGroup = null;
   list.forEach(doc=>{
-    const dateStr = doc.date ? doc.date.split('-').reverse().join('/') : '(ไม่ระบุวันที่)';
+    const group = relativeDateLabel(doc.date);
+    if(group !== lastGroup){
+      const h = document.createElement('div');
+      h.className = 'date-group';
+      h.textContent = group;
+      listEl.appendChild(h);
+      lastGroup = group;
+    }
     const tplLabel = TEMPLATE_LABELS[doc.tpl] || doc.tpl || '';
     const tplIcon = TEMPLATE_ICONS[doc.tpl] || '📄';
     const a = document.createElement('a');
     a.className = 'history-item' + (doc.tpl ? ' tpl-' + doc.tpl : '');
     a.href = `form.html?report=${encodeURIComponent(doc.id)}`;
-    a.innerHTML = `<div class="hi-row"><div class="hi-icon">${tplIcon}</div><div class="hi-text"><div class="title">${escapeHtmlLite(dateStr)} ${escapeHtmlLite(tplLabel)} ${escapeHtmlLite(doc.customer||'')}</div><div class="meta">ทะเบียน: ${escapeHtmlLite(doc.plate||'-')}</div></div></div>`;
+    a.innerHTML = `<div class="hi-row"><div class="hi-icon">${tplIcon}</div><div class="hi-text"><div class="title">${escapeHtmlLite(tplLabel)} ${escapeHtmlLite(doc.customer||'')}</div><div class="meta">ทะเบียน: ${escapeHtmlLite(doc.plate||'-')}</div></div></div>`;
     listEl.appendChild(a);
   });
 }
