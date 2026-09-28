@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>Dashboard · SONGDEE GPS</title>
-<meta name="app-version" content="1.13.0">
+<meta name="app-version" content="1.14.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -331,6 +331,15 @@
   .history-item .title{font-size:14px; font-weight:600; color:var(--text);}
   .history-item .meta{font-size:12px; color:var(--text-dim); margin-top:4px;}
   .empty, .err, .loading{color:var(--text-dim); font-size:13px; padding:40px 0; text-align:center;}
+  .skeleton-wrap{display:flex; flex-direction:column; gap:10px;}
+  .skeleton-row{
+    height:60px; border-radius:var(--r-md);
+    background:linear-gradient(90deg, var(--bg-panel) 25%, var(--line-soft) 37%, var(--bg-panel) 63%);
+    background-size:400% 100%;
+    animation:shimmer 1.4s ease infinite;
+  }
+  @keyframes shimmer{0%{background-position:100% 0;} 100%{background-position:0 0;}}
+  @media (prefers-reduced-motion: reduce){.skeleton-row{animation:none;}}
   .err{color:var(--danger);}
   .card{
     --card-hue:var(--accent);
@@ -823,8 +832,7 @@ function addNameMapRow(){
 // as, straight from the same roles collection the Stock admin panel uses.
 async function loadTesterRoster(){
   const wrap = document.getElementById('testerRosterRows');
-  wrap.className = 'loading';
-  wrap.textContent = 'กำลังโหลด...';
+  renderSkeleton(wrap, 2);
   try{
     const snap = await _db.collection('roles').get();
     const rows = snap.docs.map(d=>d.data());
@@ -867,10 +875,15 @@ function animateCount(el, target){
   requestAnimationFrame(tick);
 }
 
+// ชิมเมอร์ระหว่างโหลด แทนตัวหนังสือ "กำลังโหลด..." เฉยๆ
+function renderSkeleton(container, count){
+  container.className = 'skeleton-wrap';
+  container.innerHTML = Array.from({length: count}).map(()=>'<div class="skeleton-row"></div>').join('');
+}
+
 async function loadDashboard(){
   const listEl = document.getElementById('list');
-  listEl.className = 'loading';
-  listEl.textContent = 'กำลังโหลด...';
+  renderSkeleton(listEl, 3);
   const todayStr = new Date().toISOString().slice(0,10);
   try{
     // firebase-firestore-compat doesn't expose count() aggregate queries here,

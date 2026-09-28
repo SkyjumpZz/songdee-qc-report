@@ -134,6 +134,15 @@
   }
   .date-group:first-child{margin-top:0;}
   .empty, .err, .loading{color:var(--text-dim); font-size:13px; padding:40px 0; text-align:center;}
+  .skeleton-wrap{display:flex; flex-direction:column; gap:10px;}
+  .skeleton-row{
+    height:60px; border-radius:var(--r-md);
+    background:linear-gradient(90deg, var(--bg-panel) 25%, var(--line-soft) 37%, var(--bg-panel) 63%);
+    background-size:400% 100%;
+    animation:shimmer 1.4s ease infinite;
+  }
+  @keyframes shimmer{0%{background-position:100% 0;} 100%{background-position:0 0;}}
+  @media (prefers-reduced-motion: reduce){.skeleton-row{animation:none;}}
   .err{color:var(--danger);}
   .page-tabs{display:flex; gap:6px; margin-top:12px;}
   .page-tabs a, .page-tabs span.tab{
@@ -220,6 +229,12 @@ function escapeHtmlLite(s){
   return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
+// ชิมเมอร์ระหว่างโหลด แทนตัวหนังสือ "กำลังโหลด..." เฉยๆ
+function renderSkeleton(container, count){
+  container.className = 'skeleton-wrap';
+  container.innerHTML = Array.from({length: count}).map(()=>'<div class="skeleton-row"></div>').join('');
+}
+
 function doLogout(){
   _auth.signOut().then(()=>{ location.href = 'index.html'; });
 }
@@ -242,7 +257,7 @@ _auth.onAuthStateChanged(async user=>{
     document.getElementById('testerBar').style.display = 'flex';
     document.getElementById('pageTabs').style.display = 'flex';
 
-    listEl.textContent = 'กำลังโหลด...';
+    renderSkeleton(listEl, 4);
     // where()+orderBy() on different fields needs a composite index we don't
     // have — filter by techUid only, sort client-side instead.
     const snap = await _db.collection('qc_reports')
