@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.24.1">
+<meta name="app-version" content="1.24.2">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -616,10 +616,19 @@ function applyTechStockName(name){
   updateProductBanner();
 }
 
-let techStockNames = []; // sorted list of every techName with Spare stock, for the select's options
+let techStockNames = []; // merged, deduped names for the select's options
+let assignedTechNames = []; // assignedToName values seen across all `assignments` docs (see loadCustomerFleetSuggestions)
 
-function loadTechStockNameOptions(){
-  techStockNames = Object.keys(allTechStock).sort();
+// Gating this list on Spare-stock ownership alone (Object.keys(allTechStock))
+// meant the whole picker stayed hidden — nothing to select at all — whenever
+// nobody currently had any Spare stock on file, even though a technician can
+// have assigned jobs with no Spare stock recorded yet. Merges in every
+// assignedToName ever seen in Admin web's assignments too, so the picker has
+// options as long as ANY job has ever been assigned to anyone, not only once
+// someone's Spare stock has been logged in Stock.
+function refreshTechStockNames(){
+  techStockNames = [...new Set([...Object.keys(allTechStock), ...assignedTechNames])].sort();
+  wireTechStockSearch();
 }
 
 function wireTechStockSearch(){
@@ -656,8 +665,7 @@ async function loadTechStock(){
     allTechStock = {};
   }
   techStockChecked = true;
-  loadTechStockNameOptions();
-  wireTechStockSearch();
+  refreshTechStockNames();
 }
 
 // Shared by checkStockLock() (plate typed/changed) and loadTechStock()
@@ -946,11 +954,13 @@ async function loadCustomerFleetSuggestions(){
   }catch(e){
     console.error('[Customer/Fleet suggestions] qc_reports', e);
   }
+  const techNames = new Set();
   try{
     const snap = await _db.collection('assignments').get();
     snap.docs.forEach(d=>{
       const v = d.data();
       if(v.customer && v.customer.trim()) customers.add(v.customer.trim());
+      if(v.assignedToName && v.assignedToName.trim()) techNames.add(v.assignedToName.trim());
     });
   }catch(e){
     console.error('[Customer/Fleet suggestions] assignments', e);
@@ -965,6 +975,8 @@ async function loadCustomerFleetSuggestions(){
     state.fleet = name;
     updatePreview();
   });
+  assignedTechNames = [...techNames];
+  refreshTechStockNames();
 }
 
 // Custom filtered dropdown instead of a native <input list> datalist —
