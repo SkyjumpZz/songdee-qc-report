@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.27.0">
+<meta name="app-version" content="1.27.1">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -1651,6 +1651,21 @@ function renderFixRows(){
   const lockItems = lockSource === 'plate' ? stockLock.items : techStock;
   const lockQtyLabel = lockSource === 'plate' ? 'เบิก' : 'คงเหลือ';
   const options = locked ? Object.keys(lockItems) : [...(liveCatalog || PRODUCTS), "อื่นๆ (พิมพ์เอง)"];
+
+  // ล็อกรายการจากใบเบิก/ของ Spare มีจำนวนจำกัดต่อชิ้น — ถ้ามีของชิ้นเดียวกัน
+  // แต่ต้องใช้หลายแถว (เช่น Motor เหลือ 1) ต้องหักจำนวนที่แถวอื่นเลือกไปแล้ว
+  // ออกจากยอดคงเหลือที่โชว์ ไม่งั้นทุกแถวจะเห็น "คงเหลือ 1" ซ้ำกันหมดทั้งที่
+  // จริงๆเหลือ 0 ให้แถวอื่นแล้ว — ไม่นับจำนวนของแถวตัวเอง (excludeIdx) เพราะ
+  // ถามว่า "เหลือให้แถวนี้เท่าไหร่" ไม่ใช่ "เหลือหลังแถวนี้ด้วยเท่าไหร่"
+  function remainingFor(product, excludeIdx){
+    if(!locked || !(product in lockItems)) return lockItems[product];
+    const usedElsewhere = state.fixes.reduce((sum, r, i)=>{
+      if(i === excludeIdx || r.product !== product) return sum;
+      return sum + (parseInt(r.qty) || 0);
+    }, 0);
+    return Math.max(0, (lockItems[product]||0) - usedElsewhere);
+  }
+
   container.innerHTML = '';
   state.fixes.forEach((row, idx)=>{
     const wrap = document.createElement('div');
@@ -1665,20 +1680,20 @@ function renderFixRows(){
     blank.value=''; blank.textContent='-- เลือกอุปกรณ์ --'; sel.appendChild(blank);
     options.forEach(p=>{
       const o = document.createElement('option');
-      o.value=p; o.textContent = locked ? `${p} (${lockQtyLabel} ${lockItems[p]})` : p;
+      o.value=p; o.textContent = locked ? `${p} (${lockQtyLabel} ${remainingFor(p, idx)})` : p;
       if(p===row.product) o.selected=true;
       sel.appendChild(o);
     });
-    sel.onchange = ()=>{ row.product = sel.value; row.qty = locked ? (lockItems[row.product]||1) : row.qty; updatePreview(); renderFixRows(); };
+    sel.onchange = ()=>{ row.product = sel.value; row.qty = locked ? (remainingFor(row.product, idx)||1) : row.qty; updatePreview(); renderFixRows(); };
 
     const qty = document.createElement('input');
     qty.type = locked ? 'number' : 'text';
-    if(locked){ qty.min = 0; qty.max = lockItems[row.product] || 0; }
+    if(locked){ qty.min = 0; qty.max = remainingFor(row.product, idx) || 0; }
     qty.className='qty'; qty.value=row.qty; qty.placeholder='จำนวน';
     qty.oninput = ()=>{
       let v = qty.value;
       if(locked){
-        const max = lockItems[row.product] || 0;
+        const max = remainingFor(row.product, idx) || 0;
         v = Math.max(0, Math.min(parseInt(v)||0, max));
         qty.value = v;
       }
