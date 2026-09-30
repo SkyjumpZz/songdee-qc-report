@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.28.0">
+<meta name="app-version" content="1.28.1">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -2457,6 +2457,14 @@ async function sendToLine(){
       const swapRes = await pushDeviceSwaps();
       if(swapRes && swapRes.length){
         saveSuffix += ` · อัปเดต Ai Box/ADAS/DMS ${swapRes.length} รายการ ✓`;
+        // swapDevice() on the Worker side returns ok:true even when a given
+        // SN has no matching row in the tracking sheet (it just skips that
+        // side of the swap) — surface it here instead of silently reporting
+        // success for a serial that was never actually written.
+        const missingSNs = swapRes.flatMap(r => r.notFound || []);
+        if(missingSNs.length){
+          saveSuffix += ` (หา SN ไม่เจอในชีต ไม่ได้อัปเดต: ${missingSNs.join(', ')})`;
+        }
       }
     }catch(e){
       console.error('[Device swap]', e);

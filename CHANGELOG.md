@@ -57,6 +57,22 @@ machines/sessions (not just in chat history).
     the one production endpoint before/after deploying (it's a
     read-only lookup, no write-path risk).
 
+## Surface Device Tracking SNs that weren't found (v1.28.1)
+
+Read songdee-vehicle-lookup's `swapDevice()` in full while answering a
+question about what exactly changes in the AI Box/ADAS/DMS Tracking sheet
+on submit: it returns `{ok:true, updated, notFound}` — an SN with no
+matching row in the tracking sheet is silently skipped, not an error. But
+`pushDeviceSwaps()`'s caller in `sendToLine()` only ever read `swapRes.length`
+for the "✓ อัปเดต" toast text, never `notFound` — so a mistyped or
+unregistered SN reported the same success toast as one that actually wrote.
+
+`sendToLine()` now flattens `notFound` across every swap result and, if
+any SN wasn't found, appends it to the toast: "(หา SN ไม่เจอในชีต
+ไม่ได้อัปเดต: ...)". No change to what gets written — this only makes an
+already-silent partial failure visible instead of indistinguishable from
+full success.
+
 ## Per-technician LINE groups (v1.15.0 / v1.28.0)
 
 Previously every report went to one single shared LINE group
