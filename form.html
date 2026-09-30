@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.27.2">
+<meta name="app-version" content="1.28.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -726,6 +726,7 @@ _auth.onAuthStateChanged(async user=>{
     loadLiveCatalog();
     loadTechStock();
     await loadNameMap(); // resolved before any assignments fetch uses the real mapping
+    loadLineGroupMap(); // not awaited — sendToLine() can't run before the user finishes the form anyway
     loadReportFromUrlIfAny();
     loadPlateSuggestions();
     loadCustomerFleetSuggestions();
@@ -1244,6 +1245,27 @@ async function loadNameMap(){
     if(Object.keys(map).length) nameMap = map;
   }catch(e){
     console.error('[Name map] load failed — using bundled fallback', e);
+  }
+}
+
+// ---------------------------------------------------------------
+// roles.techName -> LINE group ID bridge, same "sd" blob store as
+// sd:nameMap (key "sd:lineGroupMap" -> doc id "sd_lineGroupMap"), editable
+// from the Dashboard's admin panel (index.html). sendToLine() below looks
+// up the logged-in tester's own techName here: if mapped, the push to
+// songdee-line-proxy includes that groupId and goes ONLY to that LINE
+// group; if unmapped, the field is omitted and the proxy falls back to
+// its single default shared group (unchanged behavior).
+// ---------------------------------------------------------------
+let lineGroupMap = {};
+
+async function loadLineGroupMap(){
+  try{
+    const snap = await _db.collection('sd').doc('sd_lineGroupMap').get();
+    lineGroupMap = snap.exists ? JSON.parse(snap.data().v || '{}') : {};
+  }catch(e){
+    console.error('[LINE group map] load failed — falling back to shared group', e);
+    lineGroupMap = {};
   }
 }
 
@@ -2459,10 +2481,11 @@ async function sendToLine(){
     }
     try{
       showToast('กำลังส่ง...');
+      const groupId = lineGroupMap[tester.techName];
       const res = await fetch(endpoint, {
         method:'POST',
         headers:{'Content-Type':'application/json', 'X-Api-Key': LINE_API_KEY},
-        body: JSON.stringify({ message: buildLineCard() })
+        body: JSON.stringify({ message: buildLineCard(), ...(groupId ? { groupId } : {}) })
       });
       if(res.ok){ showToast('ส่งเข้า LINE แล้ว ✓' + saveSuffix); celebrateSuccess(); }
       else{ showToast('ส่งไม่สำเร็จ (' + res.status + ') — คัดลอกข้อความสำรองไว้แล้ว' + saveSuffix); navigator.clipboard.writeText(text).catch(()=>{}); }

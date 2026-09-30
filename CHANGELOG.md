@@ -25,7 +25,9 @@ machines/sessions (not just in chat history).
   card's body (not a Flex "hero" block, which is limited to one image
   pinned above the header). Backward compatible: a singular `imageUrl`
   still works as a 1-photo shortcut, existing `items`-based callers
-  are unaffected.
+  are unaffected. Also gained an optional `groupId` field on the push
+  endpoint (see "Per-technician LINE groups" below) and a `/กลุ่ม`
+  webhook command that replies with the current chat's Group ID.
 - **songdee-drive-proxy** (private) — shared Cloudflare Worker
   (previously songdee-admin-only) that uploads a base64 image to Google
   Drive via a Service Account and returns a public `viewUrl`. This
@@ -54,6 +56,35 @@ machines/sessions (not just in chat history).
     to test against, so changes here were verified via `curl` against
     the one production endpoint before/after deploying (it's a
     read-only lookup, no write-path risk).
+
+## Per-technician LINE groups (v1.15.0 / v1.28.0)
+
+Previously every report went to one single shared LINE group
+(`env.LINE_GROUP_ID` in songdee-line-proxy, hardcoded, no per-request
+override). Requested so different technicians'/teams' reports can land in
+their own LINE group instead of one shared feed.
+
+- **songdee-line-proxy**: push endpoint now accepts an optional `groupId`
+  field in the request body. If present and non-empty, the message is
+  pushed there instead of `env.LINE_GROUP_ID`. If absent (Stock/Admin's
+  existing calls, and any qc-report tester with no group configured),
+  behavior is unchanged — pushes to the default shared group. Also added
+  a `/กลุ่ม` webhook command: sent inside any LINE group chat, the bot
+  replies with that group's ID, so setting up a new group needs no log-
+  digging — add the bot, type `/กลุ่ม` in the group, copy the ID it
+  replies with.
+- **qc-report admin panel** (index.html, admin-only): new "ตั้งกลุ่มไลน์
+  ตามช่าง" card, same pattern/UI as the existing ชื่อช่าง↔Admin name-map
+  editor — maps `techName -> LINE Group ID`, stored in the same generic
+  `sd` blob store (`sd:lineGroupMap`, doc id `sd_lineGroupMap`). Multiple
+  technicians can share the same Group ID (routes them to one team's
+  group); a technician with no row here still goes to the default shared
+  group, so nothing breaks while the mapping is being filled in.
+- **form.html**: `sendToLine()` looks up the logged-in tester's own
+  `techName` in this map. If mapped, the push includes `groupId` and the
+  report goes **only** to that group (not also to the shared one, per
+  what was asked). If unmapped, `groupId` is omitted and the proxy falls
+  back to the shared group as before.
 
 ## Photo attachments (v1.14.0)
 

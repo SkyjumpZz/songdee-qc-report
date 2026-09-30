@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>Dashboard · SONGDEE GPS</title>
-<meta name="app-version" content="1.14.0">
+<meta name="app-version" content="1.15.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -355,6 +355,7 @@
   }
   #testerRosterCard{--card-hue:var(--hue-blue);}
   #adminNameMapCard{--card-hue:var(--hue-purple);}
+  #lineGroupMapCard{--card-hue:var(--hue-pink);}
   .card-title{
     display:flex; align-items:center; gap:11px;
     font-family:'Kanit',sans-serif; font-weight:600; font-size:15.5px; margin-bottom:12px;
@@ -416,6 +417,7 @@
   .stat-row .stat-card:nth-child(2){animation-delay:.07s;}
   #testerRosterCard{animation-delay:.02s;}
   #adminNameMapCard{animation-delay:.07s;}
+  #lineGroupMapCard{animation-delay:.12s;}
   #list .history-item:nth-child(1){animation-delay:.12s;}
   #list .history-item:nth-child(2){animation-delay:.16s;}
   #list .history-item:nth-child(3){animation-delay:.2s;}
@@ -556,6 +558,22 @@
       <button type="button" onclick="addNameMapRow()">+ เพิ่ม</button>
     </div>
     <div class="name-map-status" id="nameMapStatus"></div>
+  </div>
+
+  <div class="card app-hidden" id="lineGroupMapCard">
+    <div class="card-title"><span class="dot">💬</span>ตั้งกลุ่มไลน์ตามช่าง</div>
+    <div class="admin-hint">
+      กำหนดให้รายงานของช่างคนไหน ส่งเข้ากลุ่มไลน์กลุ่มไหน — ใส่ Group ID ได้เลย (พิมพ์ "/กลุ่ม" ในกลุ่มไลน์นั้นๆ
+      เพื่อให้บอทตอบ Group ID มาให้) ช่างที่ยังไม่ตั้งไว้ที่นี่ รายงานจะยังส่งเข้ากลุ่มกลางตามเดิม
+      ส่วนช่างที่ตั้งไว้แล้ว รายงานจะส่งเข้าเฉพาะกลุ่มที่ตั้งไว้เท่านั้น (ไม่ส่งเข้ากลุ่มกลางซ้ำ)
+    </div>
+    <div id="lineGroupMapRows"></div>
+    <div class="name-map-add">
+      <input type="text" id="lineGroupMapNewTech" placeholder="ชื่อช่าง (ตอนล็อกอิน)">
+      <input type="text" id="lineGroupMapNewGroup" placeholder="LINE Group ID (เช่น Cxxxxxxxx...)">
+      <button type="button" onclick="addLineGroupMapRow()">+ เพิ่ม</button>
+    </div>
+    <div class="name-map-status" id="lineGroupMapStatus"></div>
   </div>
 
   <div id="stats" class="app-hidden">
@@ -741,10 +759,12 @@ _auth.onAuthStateChanged(async user=>{
     stats.classList.remove('app-hidden');
     document.getElementById('adminNameMapCard').classList.toggle('app-hidden', role.role !== 'admin');
     document.getElementById('testerRosterCard').classList.toggle('app-hidden', role.role !== 'admin');
+    document.getElementById('lineGroupMapCard').classList.toggle('app-hidden', role.role !== 'admin');
     await loadDashboard();
     if(role.role === 'admin'){
       await loadNameMap();
       await loadTesterRoster();
+      await loadLineGroupMap();
     }
   }catch(e){
     err.textContent = t('errRoleLoad') + e.message;
@@ -826,6 +846,82 @@ function addNameMapRow(){
   techInput.value = ''; adminInput.value = '';
   renderNameMapEditor();
   persistNameMap();
+}
+
+// ---------------------------------------------------------------
+// Admin-editable roles.techName -> LINE group ID bridge. Same generic "sd"
+// blob store/doc-id convention as sd:nameMap (key "sd:lineGroupMap" -> doc
+// id "sd_lineGroupMap"). form.html reads the same doc: when sending a
+// report, if the tester's techName has an entry here, the push to
+// songdee-line-proxy includes that groupId and goes ONLY to that group;
+// unmapped technicians keep going to the proxy's default shared group.
+// ---------------------------------------------------------------
+let lineGroupMap = {};
+
+async function loadLineGroupMap(){
+  try{
+    const snap = await _db.collection('sd').doc('sd_lineGroupMap').get();
+    lineGroupMap = snap.exists ? JSON.parse(snap.data().v || '{}') : {};
+  }catch(e){
+    console.error('[LINE group map] load failed', e);
+    lineGroupMap = {};
+  }
+  renderLineGroupMapEditor();
+}
+
+async function saveLineGroupMap(){
+  await _db.collection('sd').doc('sd_lineGroupMap').set({ k:'sd:lineGroupMap', v: JSON.stringify(lineGroupMap) });
+}
+
+async function persistLineGroupMap(){
+  const statusEl = document.getElementById('lineGroupMapStatus');
+  statusEl.textContent = 'กำลังบันทึก...';
+  statusEl.className = 'name-map-status';
+  try{
+    await saveLineGroupMap();
+    statusEl.textContent = 'บันทึกแล้ว ✓';
+    statusEl.className = 'name-map-status ok';
+  }catch(e){
+    statusEl.textContent = 'บันทึกไม่สำเร็จ: ' + e.message;
+    statusEl.className = 'name-map-status err';
+  }
+}
+
+function renderLineGroupMapEditor(){
+  const wrap = document.getElementById('lineGroupMapRows');
+  wrap.innerHTML = '';
+  Object.entries(lineGroupMap).sort(([a],[b])=>a.localeCompare(b)).forEach(([techName, groupId])=>{
+    const row = document.createElement('div');
+    row.className = 'name-map-row';
+
+    const techInput = document.createElement('input');
+    techInput.type = 'text'; techInput.value = techName; techInput.disabled = true;
+    techInput.title = 'เปลี่ยนชื่อฝั่งนี้ไม่ได้ — ลบแล้วเพิ่มใหม่แทน';
+
+    const groupInput = document.createElement('input');
+    groupInput.type = 'text'; groupInput.value = groupId;
+    groupInput.oninput = ()=>{ lineGroupMap[techName] = groupInput.value; };
+    groupInput.onblur = persistLineGroupMap;
+
+    const rm = document.createElement('button');
+    rm.type = 'button'; rm.textContent = 'ลบ';
+    rm.onclick = ()=>{ delete lineGroupMap[techName]; renderLineGroupMapEditor(); persistLineGroupMap(); };
+
+    row.appendChild(techInput); row.appendChild(groupInput); row.appendChild(rm);
+    wrap.appendChild(row);
+  });
+}
+
+function addLineGroupMapRow(){
+  const techInput = document.getElementById('lineGroupMapNewTech');
+  const groupInput = document.getElementById('lineGroupMapNewGroup');
+  const techName = techInput.value.trim();
+  const groupId = groupInput.value.trim();
+  if(!techName || !groupId) return;
+  lineGroupMap[techName] = groupId;
+  techInput.value = ''; groupInput.value = '';
+  renderLineGroupMapEditor();
+  persistLineGroupMap();
 }
 
 // Admin-only roster: who can log in (email) and what techName they test
