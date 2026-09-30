@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.27.1">
+<meta name="app-version" content="1.27.2">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -2191,7 +2191,7 @@ function buildMessage(){
   }
   const fixLines = state.fixes.map(fixLine).filter(Boolean);
   if(fixLines.length){
-    lines.push('แก้ไข');
+    lines.push(FIXES_CARD_LABEL[state.tpl] || 'แก้ไข');
     lines.push(...fixLines);
     lines.push('');
   }
@@ -2240,7 +2240,7 @@ function buildLineCard(){
   }
   const fixLines = state.fixes.map(fixLine).filter(Boolean);
   if(fixLines.length){
-    sections.push({ heading:'🔧 แก้ไข', lines: fixLines.map(l=>l.replace(/^- /,'• ')) });
+    sections.push({ heading:'🔧 ' + (FIXES_CARD_LABEL[state.tpl] || 'แก้ไข'), lines: fixLines.map(l=>l.replace(/^- /,'• ')) });
   }
   sections.push({
     heading: '🔹 สติ๊กเกอร์ 3 จุด',
