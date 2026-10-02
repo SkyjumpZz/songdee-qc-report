@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.28.1">
+<meta name="app-version" content="1.29.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -1372,6 +1372,7 @@ async function saveReport(){
 
 function loadReportIntoForm(doc){
   currentReportId = doc.id;
+  isResendOfExistingReport = true;
   selectedAssignmentId = null;
   state = {
     tpl: doc.tpl || 'upgrade',
@@ -1419,6 +1420,7 @@ async function loadReportFromUrlIfAny(){
 
 function startNewReport(){
   currentReportId = null;
+  isResendOfExistingReport = false;
   state = defaultState();
   document.getElementById('editingBanner').classList.add('app-hidden');
   syncFormInputsFromState();
@@ -1443,6 +1445,7 @@ function startNextVehicle(){
   const keepFleet = state.fleet;
   const keepTpl = state.tpl;
   currentReportId = null;
+  isResendOfExistingReport = false;
   state = defaultState();
   state.date = keepDate;
   state.customer = keepCustomer;
@@ -1591,6 +1594,13 @@ function defaultState(){
 }
 let state = defaultState();
 let currentReportId = null;
+// True once a previously-saved report has been reopened for editing
+// (loadReportIntoForm()) — LINE's push API can't edit/replace a message
+// already sent, so resending shows up as a brand-new card with no link
+// back to the original. Used to prefix the resent card/message with a
+// "แก้ไขจากรายงานเดิม" marker so readers in the LINE group don't mistake
+// it for an unrelated second report.
+let isResendOfExistingReport = false;
 
 function syncFormInputsFromState(){
   document.getElementById('jobDate').value = state.date || '';
@@ -2200,6 +2210,7 @@ async function pushIssueClose(){
 function buildMessage(){
   const dateStr = state.date ? state.date.split('-').reverse().join('/') : '(ยังไม่ระบุวันที่)';
   const lines = [];
+  if(isResendOfExistingReport) lines.push('📝 แก้ไขจากรายงานเดิม (ส่งซ้ำ)');
   lines.push(`${dateStr} ${TEMPLATES[state.tpl].label}${state.customer ? ' ' + state.customer : ''}`);
   if(state.fleet) lines.push(`Fleet: ${state.fleet}`);
   lines.push(`ทะเบียน: ${state.plate || '(ยังไม่ระบุ)'}`);
@@ -2295,7 +2306,7 @@ function buildLineCard(){
   return {
     title: `✅ รายงานตรวจสอบงานช่าง · ${TEMPLATES[state.tpl].label}`,
     color: '#3ddc97',
-    badge: `📋 ${dateStr}`,
+    badge: isResendOfExistingReport ? `📝 แก้ไขจากรายงานเดิม (ส่งซ้ำ) · ${dateStr}` : `📋 ${dateStr}`,
     fields,
     sections,
     imageUrls: uploadedPhotos.map(p=> p.driveUrl),

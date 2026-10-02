@@ -57,6 +57,26 @@ machines/sessions (not just in chat history).
     the one production endpoint before/after deploying (it's a
     read-only lookup, no write-path risk).
 
+## Mark a resent report as an edit in LINE (v1.29.0)
+
+LINE's push API can't edit or replace a message already sent, so
+reopening a past report from history (`form.html?report=ID`) and sending
+it again — the only way to correct a report, since the form only
+requires วันที่/ทะเบียน and lets everything else go in blank — posts a
+brand-new card into the group with no link back to the original. Readers
+in the LINE group had no way to tell two cards for the same job apart,
+or know which one was current.
+
+Added `isResendOfExistingReport`, set true by `loadReportIntoForm()`
+(only called when opening a previously-saved report) and cleared by
+`startNewReport()`/`startNextVehicle()`. When true, `buildMessage()`
+prefixes the plain-text message with "📝 แก้ไขจากรายงานเดิม (ส่งซ้ำ)" and
+`buildLineCard()`'s badge line becomes "📝 แก้ไขจากรายงานเดิม (ส่งซ้ำ) ·
+{date}" instead of the plain date badge. Doesn't link back to the
+original card (LINE has no way to reference an older message from a
+push) — just flags the resend so it isn't mistaken for an unrelated
+second report.
+
 ## Surface Device Tracking SNs that weren't found (v1.28.1)
 
 Read songdee-vehicle-lookup's `swapDevice()` in full while answering a
