@@ -57,6 +57,15 @@ machines/sessions (not just in chat history).
     the one production endpoint before/after deploying (it's a
     read-only lookup, no write-path risk).
 
+## Color the resend card amber too (v1.29.1)
+
+Follow-up on the resend badge above — asked for the resent card to stand
+out by color, not just by its badge text. `buildLineCard()`'s `color`
+(the Flex header background) is now `#ffb020` for a resend instead of
+the normal `#3ddc97` green — the same amber already used for the app's
+own stock-lock/issue "needs a look" banners, so it reads consistently
+with the rest of the UI rather than introducing a new color meaning.
+
 ## Mark a resent report as an edit in LINE (v1.29.0)
 
 LINE's push API can't edit or replace a message already sent, so

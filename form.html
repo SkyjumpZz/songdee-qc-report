@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.29.0">
+<meta name="app-version" content="1.29.1">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -2305,7 +2305,10 @@ function buildLineCard(){
 
   return {
     title: `✅ รายงานตรวจสอบงานช่าง · ${TEMPLATES[state.tpl].label}`,
-    color: '#3ddc97',
+    // Amber (same "needs a look" tone as the app's own stock-lock/issue
+    // banners) for a resent/edited report, so it stands out from a normal
+    // green first-send card at a glance in the LINE group, not just by text.
+    color: isResendOfExistingReport ? '#ffb020' : '#3ddc97',
     badge: isResendOfExistingReport ? `📝 แก้ไขจากรายงานเดิม (ส่งซ้ำ) · ${dateStr}` : `📋 ${dateStr}`,
     fields,
     sections,
