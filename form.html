@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.29.1">
+<meta name="app-version" content="1.30.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -151,6 +151,7 @@
   }
   #tplCard{--card-hue:var(--hue-blue);}
   #jobInfoCard{--card-hue:var(--accent);}
+  #mdvrInstallCard{--card-hue:var(--hue-cyan);}
   #problemsCard{--card-hue:var(--danger);}
   #fixesCard{--card-hue:var(--accent-2);}
   #stickerCard{--card-hue:var(--hue-purple);}
@@ -594,6 +595,33 @@
     </div>
   </div>
 
+  <div class="card app-hidden" id="mdvrInstallCard">
+    <div class="card-title"><span class="dot">📡</span>ข้อมูลเครื่อง MDVR</div>
+    <div class="row2">
+      <div>
+        <label>IMEI (เครื่องที่ยังไม่ผูกทะเบียน)</label>
+        <select id="mdvrImeiSelect">
+          <option value="">-- เลือก IMEI --</option>
+        </select>
+      </div>
+      <div>
+        <label>Device ID</label>
+        <input type="text" id="mdvrDeviceId" placeholder="กรอก Device ID" autocomplete="off">
+      </div>
+    </div>
+    <div>
+      <label>Server</label>
+      <select id="mdvrServerSelect">
+        <option value="">-- เลือก Server --</option>
+        <option value="60">60</option>
+        <option value="63">63</option>
+        <option value="73">73</option>
+        <option value="75">75</option>
+        <option value="90">90</option>
+      </select>
+    </div>
+  </div>
+
   <div class="card" id="problemsCard">
     <div class="card-title"><span class="dot">⚠️</span>ปัญหา</div>
     <div class="stock-lock-banner app-hidden" id="issueBanner"></div>
@@ -725,6 +753,7 @@ _auth.onAuthStateChanged(async user=>{
     scheduleStockLockCheck();
     loadLiveCatalog();
     loadTechStock();
+    loadMdvrAvailable(); // not awaited — same reasoning as loadLineGroupMap() below
     await loadNameMap(); // resolved before any assignments fetch uses the real mapping
     loadLineGroupMap(); // not awaited — sendToLine() can't run before the user finishes the form anyway
     loadReportFromUrlIfAny();
@@ -981,6 +1010,67 @@ async function loadVehicleOldModels(){
   }
   renderFixRows();
   renderVehicleEquipmentBanner();
+}
+
+// ---------------------------------------------------------------
+// ติดตั้งใหม่ only — MDVR units already sitting in the MDVR Tracking sheet
+// (added at stock intake, matched by IMEI) with no Vehicle No. yet.
+// Loaded once at startup, independent of ทะเบียน (unlike vehicleOldModels/
+// deviceLookup above, which look up an EXISTING vehicle's history — this
+// is the opposite: picking an unassigned unit to install).
+// ---------------------------------------------------------------
+const MDVR_AVAILABLE_ENDPOINT = 'https://songdee-vehicle-lookup.songdeegps.workers.dev/mdvr-available';
+const MDVR_INSTALL_ENDPOINT = 'https://songdee-vehicle-lookup.songdeegps.workers.dev/mdvr-install';
+let mdvrAvailableDevices = [];
+
+async function loadMdvrAvailable(){
+  try{
+    const res = await fetch(MDVR_AVAILABLE_ENDPOINT);
+    const data = await res.json();
+    mdvrAvailableDevices = Array.isArray(data.items) ? data.items : [];
+  }catch(e){
+    console.error('[MDVR available]', e);
+    mdvrAvailableDevices = [];
+  }
+  renderMdvrImeiOptions();
+}
+
+function renderMdvrImeiOptions(){
+  const sel = document.getElementById('mdvrImeiSelect');
+  const current = state.mdvrImei || '';
+  sel.innerHTML = '';
+  const blank = document.createElement('option');
+  blank.value = ''; blank.textContent = '-- เลือก IMEI --';
+  sel.appendChild(blank);
+  // Keep the saved value selectable even if it's no longer "available"
+  // (already got installed elsewhere since this report was first saved) —
+  // reopening a past report shouldn't silently lose/blank out its IMEI.
+  const imeis = mdvrAvailableDevices.map(d=> d.imei);
+  if(current && !imeis.includes(current)) imeis.unshift(current);
+  imeis.forEach(imei=>{
+    const o = document.createElement('option');
+    o.value = imei; o.textContent = imei;
+    sel.appendChild(o);
+  });
+  sel.value = current;
+}
+
+// Non-fatal like pushSheetUpdates()/pushDeviceSwaps()/pushIssueClose() —
+// only fires for ติดตั้งใหม่ with an IMEI actually picked; the report
+// still sends either way.
+async function pushMdvrInstall(){
+  if(state.tpl !== 'new_install' || !state.mdvrImei) return null;
+  const res = await fetch(MDVR_INSTALL_ENDPOINT, {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({
+      imei: state.mdvrImei, deviceId: state.mdvrDeviceId, server: state.mdvrServer,
+      plate: state.plate, customer: state.customer, date: state.date, technician: tester.techName,
+    })
+  });
+  const data = await res.json();
+  if(!res.ok || !data.ok) throw new Error(data.error || ('HTTP ' + res.status));
+  return data;
 }
 
 // Reference list of everything the vehicle currently has on file, shown
@@ -1358,6 +1448,7 @@ async function saveReport(){
     // local base64 bytes, which would bloat/overflow a Firestore doc.
     photos: state.photos.filter(p=> p.driveUrl).map(p=> ({ name: p.name, driveUrl: p.driveUrl })),
     driveFolderUrl: state.driveFolderUrl || null,
+    mdvrImei: state.mdvrImei || '', mdvrDeviceId: state.mdvrDeviceId || '', mdvrServer: state.mdvrServer || '',
     techUid: tester.uid, techName: tester.techName,
     updatedAt: Date.now(),
   };
@@ -1389,6 +1480,9 @@ function loadReportIntoForm(doc){
       previewUrl: null, base64: null, mimeType: null, uploading: false, error: null,
     })),
     driveFolderUrl: doc.driveFolderUrl || null,
+    mdvrImei: doc.mdvrImei || '',
+    mdvrDeviceId: doc.mdvrDeviceId || '',
+    mdvrServer: doc.mdvrServer || '',
   };
   syncFormInputsFromState();
   const dateStr = state.date ? state.date.split('-').reverse().join('/') : '(ไม่ระบุวันที่)';
@@ -1590,6 +1684,10 @@ function defaultState(){
     checklist: {},
     photos: [],
     driveFolderUrl: null,
+    // ติดตั้งใหม่ only — see loadMdvrAvailable()/pushMdvrInstall() below.
+    mdvrImei: "",
+    mdvrDeviceId: "",
+    mdvrServer: "",
   };
 }
 let state = defaultState();
@@ -1607,6 +1705,9 @@ function syncFormInputsFromState(){
   document.getElementById('jobCustomer').value = state.customer || '';
   document.getElementById('jobFleet').value = state.fleet || '';
   document.getElementById('jobPlate').value = state.plate || '';
+  document.getElementById('mdvrDeviceId').value = state.mdvrDeviceId || '';
+  document.getElementById('mdvrServerSelect').value = state.mdvrServer || '';
+  renderMdvrImeiOptions();
 }
 
 const TPL_ICON = { upgrade: '⬆️', new_install: '✨', repair: '🛠️' };
@@ -1628,6 +1729,7 @@ function renderTabs(){
     wrap.appendChild(b);
   });
   document.getElementById('problemsCard').classList.toggle('app-hidden', !tplHasProblems(state.tpl));
+  document.getElementById('mdvrInstallCard').classList.toggle('app-hidden', state.tpl !== 'new_install');
   document.getElementById('fixesCardTitle').textContent = FIXES_CARD_LABEL[state.tpl] || 'แก้ไข';
   document.getElementById('addFixBtn').textContent = FIXES_ADD_BTN_LABEL[state.tpl] || '+ เพิ่มรายการแก้ไข';
   renderVehicleEquipmentBanner();
@@ -2349,6 +2451,9 @@ document.getElementById('jobCustomer').addEventListener('input', e=>{ state.cust
 document.getElementById('jobFleet').addEventListener('input', e=>{ state.fleet = e.target.value; updatePreview(); });
 document.getElementById('jobPlate').addEventListener('input', e=>{ state.plate = e.target.value; updatePreview(); scheduleStockLockCheck(); });
 document.getElementById('jobAssignSelect').addEventListener('change', e=>{ onAssignmentSelect(e.target.value); });
+document.getElementById('mdvrImeiSelect').addEventListener('change', e=>{ state.mdvrImei = e.target.value; updatePreview(); });
+document.getElementById('mdvrDeviceId').addEventListener('input', e=>{ state.mdvrDeviceId = e.target.value; updatePreview(); });
+document.getElementById('mdvrServerSelect').addEventListener('change', e=>{ state.mdvrServer = e.target.value; updatePreview(); });
 
 function showToast(msg){
   const t = document.getElementById('toast');
@@ -2494,6 +2599,19 @@ async function sendToLine(){
     }catch(e){
       console.error('[Issue close]', e);
       saveSuffix += ` (ปิด Issue ไม่สำเร็จ: ${e.message})`;
+    }
+
+    // ติดตั้งใหม่: write the picked MDVR unit's plate/Device ID/Server (and
+    // customer/date/technician) into the MDVR Tracking sheet. No-ops for
+    // every other job type, or if no IMEI was picked.
+    try{
+      const mdvrRes = await pushMdvrInstall();
+      if(mdvrRes){
+        saveSuffix += ` · อัปเดตเครื่อง MDVR ✓`;
+      }
+    }catch(e){
+      console.error('[MDVR install]', e);
+      saveSuffix += ` (อัปเดตเครื่อง MDVR ไม่สำเร็จ: ${e.message})`;
     }
 
     if(!endpoint){

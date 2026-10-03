@@ -57,6 +57,50 @@ machines/sessions (not just in chat history).
     the one production endpoint before/after deploying (it's a
     read-only lookup, no write-path risk).
 
+## Capture IMEI/Device ID/Server for ติดตั้งใหม่ (v1.30.0)
+
+ติดตั้งใหม่ previously had no way to record which physical MDVR unit was
+installed — Device ID and Server had no field anywhere, and the
+equipment picker's SN field only exists for AI Box/ADAS/DMS. Confirmed
+architecture: each MDVR unit is already a row in the "MDVR Tracking"
+sheet (added at stock intake, matched by IMEI, `Vehicle No.` still
+empty) — not a separate spreadsheet, and not something this app creates
+rows for.
+
+- **songdee-vehicle-lookup**: new `GET /mdvr-available` (unassigned IMEI
+  rows — empty `Vehicle No.`) and `POST /mdvr-install` (`installMdvrDevice()`
+  — finds the row by IMEI, 404s as `"imei not found"` if it doesn't exist
+  rather than creating one, and writes `Vehicle No.`/`Device ID`/`Server`
+  plus the same `Customer`/`Installed Date`/`Technician1` columns
+  `swapDevice()` already writes, each skipped individually if the sheet
+  doesn't have that column). `Server` is validated server-side against a
+  fixed list (`60`/`63`/`73`/`75`/`90`, the sheet's own dropdown values) —
+  rejected before it reaches the sheet instead of silently failing that
+  column's validation after a successful write.
+- **form.html**: new "ข้อมูลเครื่อง MDVR" card, shown only for ติดตั้งใหม่
+  — IMEI dropdown (populated from `/mdvr-available`, loaded once at
+  startup independent of ทะเบียน), Device ID (free text — unlike IMEI,
+  there's no pre-existing value to pick from), Server dropdown (the 5
+  fixed options). `pushMdvrInstall()` fires in `sendToLine()`, non-fatal
+  like the other sheet write-backs, only when an IMEI was actually
+  picked. Persisted to `qc_reports` and restored by `loadReportIntoForm()`
+  like every other field, so reopening a ติดตั้งใหม่ report to correct it
+  keeps its IMEI/Device ID/Server.
+
+Verified via a Node test against the Worker with a mocked gviz CSV +
+Sheets API (a throwaway RSA keypair stands in for the service account
+key, since `getGoogleAccessToken()` needs a syntactically valid PKCS8
+key to sign with — the real token exchange is mocked, so the key's
+actual validity doesn't matter): `/mdvr-available` lists only the
+empty-plate row; a valid install writes exactly the 6 expected cells; an
+unknown IMEI and an invalid Server value both reject with 500; a
+non-allowed origin gets 403. Playwright on the form side: the card
+shows/hides correctly per tab, `pushMdvrInstall()` no-ops with no IMEI
+picked or on any other job type, the real POST body matches what was
+entered through the actual `<select>`/`<input>` elements, and
+`loadReportIntoForm()`/`startNewReport()` restore/clear the three fields
+correctly.
+
 ## Color the resend card amber too (v1.29.1)
 
 Follow-up on the resend badge above — asked for the resent card to stand
