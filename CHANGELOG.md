@@ -57,6 +57,34 @@ machines/sessions (not just in chat history).
     the one production endpoint before/after deploying (it's a
     read-only lookup, no write-path risk).
 
+## Require at least one ปัญหา/แก้ไข row (v1.31.0)
+
+`getMissingFields()` already blocked "ส่งเข้า LINE" (disabled button +
+"ยังไม่ครบ" badge) until วันที่/ทะเบียน/stickers/checklist were filled —
+but ปัญหา and แก้ไข had no completeness check at all. A repair report
+could send with zero ปัญหา logged, and any report could send with zero
+รายการแก้ไข/อุปกรณ์ที่ติดตั้ง, and still pass.
+
+Now reuses `problemLine()`/`fixLine()` — the same functions
+`buildMessage()`/`buildLineCard()` already use to decide whether a row
+produces real text — to require: at least 1 ปัญหา for repair (the only
+template `tplHasProblems()` is true for), and at least 1 แก้ไข/
+อุปกรณ์ที่ติดตั้ง row for every template, labeled per-template via the
+existing `FIXES_CARD_LABEL` map.
+
+Deliberately did NOT add the new MDVR IMEI field (v1.30.0) to this list
+yet — songdee-vehicle-lookup's `/mdvr-available` isn't deployed (no CI
+there, needs a manual `wrangler deploy`), so the IMEI dropdown has
+nothing to select from on live right now; requiring it would hard-block
+every ติดตั้งใหม่ submission until that deploy happens. Left a comment
+at the spot to add it once that backend is confirmed live.
+
+Verified via Playwright: repair with empty ปัญหา+แก้ไข blocks on both;
+filling ปัญหา only still blocks on แก้ไข; filling both clears the list;
+upgrade doesn't require ปัญหา (not in `tplHasProblems`) but does require
+แก้ไข, labeled "ถอด/ติดตั้งอย่างน้อย 1 รายการ" via `FIXES_CARD_LABEL`;
+new_install with an empty MDVR IMEI is correctly NOT blocked.
+
 ## Capture IMEI/Device ID/Server for ติดตั้งใหม่ (v1.30.0)
 
 ติดตั้งใหม่ previously had no way to record which physical MDVR unit was

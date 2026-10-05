@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.30.0">
+<meta name="app-version" content="1.31.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -2429,6 +2429,25 @@ function getMissingFields(){
   TEMPLATES[state.tpl].checklist.forEach(item=>{
     if(!state.checklist[item.key]) missing.push(item.text);
   });
+  // ปัญหา/แก้ไข had no completeness check at all before this — a repair
+  // report could send with zero ปัญหา logged, or any report with zero
+  // รายการแก้ไข/อุปกรณ์ที่ติดตั้ง, and still pass. Reuse problemLine()/
+  // fixLine() (the same functions buildMessage()/buildLineCard() already
+  // use to decide whether a row produces real text) instead of a second,
+  // separately-maintained "is this row filled in" check.
+  if(tplHasProblems(state.tpl) && !state.problems.some(r=> problemLine(r))){
+    missing.push('ปัญหาอย่างน้อย 1 รายการ');
+  }
+  if(!state.fixes.some(r=> fixLine(r))){
+    missing.push((FIXES_CARD_LABEL[state.tpl] || 'แก้ไข') + 'อย่างน้อย 1 รายการ');
+  }
+  // MDVR IMEI/Device ID/Server (ติดตั้งใหม่) deliberately NOT required
+  // here yet — songdee-vehicle-lookup's /mdvr-available endpoint isn't
+  // deployed yet (no CI there, needs a manual `wrangler deploy`), so the
+  // IMEI dropdown has nothing to select from on live right now. Requiring
+  // it would hard-block every ติดตั้งใหม่ submission until that deploy
+  // happens. Add `if(state.tpl === 'new_install' && !state.mdvrImei)
+  // missing.push(...)` here once that backend is confirmed live.
   return missing;
 }
 
