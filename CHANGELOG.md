@@ -57,6 +57,44 @@ machines/sessions (not just in chat history).
     the one production endpoint before/after deploying (it's a
     read-only lookup, no write-path risk).
 
+## Show ใบเบิก AND Spare stock together, grouped (v1.32.0)
+
+Follow-up on v1.31.1 (which made switching technician override/clear
+the ใบเบิก lock). Asked for something different instead: show BOTH
+sources together — this ทะเบียน's ใบเบิก and the selected technician's
+own Spare stock — split into separate groups, rather than either one
+replacing the other.
+
+`renderFixRows()`'s equipment `<select>` now renders two `<optgroup>`
+sections when both sources have something ("จากใบเบิก {noStock}" and
+"ของ Spare ({techStockOwnerName})"), falling back to a single group
+(no change in behavior) when only one source applies, or the free-pick
+catalog when neither does. `remainingFor()`'s per-row accounting now
+sums both sources into one combined pool per product name first — so a
+product appearing in both groups (e.g. both the ใบเบิก and this tech's
+Spare stock happen to include "เสาอากาศ GPS") tracks one shared
+remaining count across every row and every occurrence of that name,
+instead of each source tracking its own separate count.
+
+Reverted the v1.31.1 "clear stockLock on technician switch" change —
+no longer needed/correct now that both sources show together rather
+than compete; switching technician only needs to recompute the Spare
+side, the ใบเบิก side is untouched (it's tied to ทะเบียน, not
+technician). `updateProductBanner()` now describes both sources
+together when both are active, in addition to the existing
+single-source and neither-source messages.
+
+Verified via Playwright: both sources active renders two correctly
+labeled optgroups with correct per-item remaining counts including a
+deliberately overlapping product name; only-lock and only-Spare each
+still render their one group correctly; neither source falls back to
+the flat, ungrouped catalog; claiming an overlapping-name item in one
+row correctly reduces the remaining count shown in every other row's
+occurrence of that name in BOTH groups (combined-pool accounting), while
+the claiming row's own dropdown still excludes its own claim per the
+existing remainingFor() design; all three banner-text variants render
+correctly.
+
 ## Switching technician didn't change the equipment picker (v1.31.1)
 
 Reported as: "เวลาเปลี่ยนชื่อช่างแล้วของที่สามารถเลือกได้ไม่เปลี่ยนตาม"

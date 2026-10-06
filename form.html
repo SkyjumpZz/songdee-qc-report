@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.31.1">
+<meta name="app-version" content="1.32.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -871,16 +871,11 @@ function wireTechStockSearch(){
   // from whichever job gets picked there — see checkStockLock()).
   select.onchange = ()=>{
     const name = select.value;
-    // Picking a technician here is a deliberate request to see THAT
-    // person's own Spare stock — but lockSource in renderFixRows()
-    // always prefers an active ใบเบิก lock (stockLock) over techStock,
-    // so without this, switching technician silently did nothing
-    // whenever a ทะเบียน already had a matched ใบเบิก: the picker stayed
-    // stuck on that ใบเบิก's items no matter who got selected. Clearing
-    // stockLock here lets the switch actually take effect immediately;
-    // re-typing/blurring ทะเบียน re-triggers checkStockLock() and can
-    // re-lock it if that's what's wanted again.
-    stockLock = null;
+    // ใบเบิก (stockLock) and Spare stock now show together in
+    // renderFixRows() as separate optgroups instead of one replacing the
+    // other — so switching technician here only needs to recompute the
+    // Spare side; the ใบเบิก side (tied to ทะเบียน, not technician) is
+    // untouched.
     applyTechStockName(name);
     loadAssignments(name);
   };
@@ -900,12 +895,16 @@ async function loadTechStock(){
 
 // Shared by checkStockLock() (plate typed/changed) and loadTechStock()
 // (resolves independently, may land after or before a plate check) —
-// whichever source currently "wins" per the priority above decides what
-// the banner says and what renderFixRows() offers.
+// both sources show together now (see renderFixRows()), so the banner
+// describes whichever combination is currently active.
 function updateProductBanner(){
   const banner = document.getElementById('stockLockBanner');
   const plateTyped = !!(state.plate || '').trim();
-  if(stockLock){
+  if(stockLock && techStock){
+    const scope = stockLock.matchedByJob ? 'ที่จัดไว้สำหรับใบงานนี้โดยเฉพาะ' : 'ล่าสุดที่ตรงทะเบียนนี้';
+    banner.textContent = `แสดงอุปกรณ์จากใบเบิก${scope} ${stockLock.noStock} (${Object.keys(stockLock.items).length} รายการ) และของ Spare ของ ${techStockOwnerName} (${Object.keys(techStock).length} รายการ)`;
+    banner.className = 'stock-lock-banner locked';
+  } else if(stockLock){
     const scope = stockLock.matchedByJob ? 'ที่จัดไว้สำหรับใบงานนี้โดยเฉพาะ' : 'ล่าสุดที่ตรงทะเบียนนี้';
     banner.textContent = `ล็อกรายการติดตั้งตามใบเบิก${scope} ${stockLock.noStock} (${Object.keys(stockLock.items).length} รายการ)`;
     banner.className = 'stock-lock-banner locked';
@@ -1787,14 +1786,24 @@ function removeFixRow(idx){
 }
 function renderFixRows(){
   const container = document.getElementById('fixRows');
-  // Priority: this ทะเบียน's ใบเบิก > this technician's own Stock spare
-  // items > the full catalog (free pick). See the comment above
-  // checkStockLock() for why/how each source is matched.
-  const lockSource = stockLock ? 'plate' : (techStock ? 'tech' : null);
-  const locked = !!lockSource;
-  const lockItems = lockSource === 'plate' ? stockLock.items : techStock;
-  const lockQtyLabel = lockSource === 'plate' ? 'เบิก' : 'คงเหลือ';
-  const options = locked ? Object.keys(lockItems) : [...(liveCatalog || PRODUCTS), "อื่นๆ (พิมพ์เอง)"];
+  // Both sources can apply at once now: this ทะเบียน's ใบเบิก AND this
+  // technician's own Stock spare items, shown as separate <optgroup>
+  // sections in the same dropdown instead of one replacing the other
+  // (used to be stockLock > techStock > free-pick catalog, priority
+  // order — a tech with their own Spare stock couldn't see it at all
+  // once a ใบเบิก matched the ทะเบียน). Falls back to the free-pick
+  // catalog only when neither source has anything.
+  const hasLock = !!stockLock;
+  const hasTechStock = !!techStock;
+  const locked = hasLock || hasTechStock;
+  // Combined pool for "how much is left" accounting below — summed if
+  // the same product name happens to appear in both sources, so
+  // remainingFor() doesn't need to know which optgroup an option came
+  // from.
+  const lockItems = {};
+  if(hasLock) Object.entries(stockLock.items).forEach(([k,v])=>{ lockItems[k] = (lockItems[k]||0) + (v||0); });
+  if(hasTechStock) Object.entries(techStock).forEach(([k,v])=>{ lockItems[k] = (lockItems[k]||0) + (v||0); });
+  const options = locked ? [] : [...(liveCatalog || PRODUCTS), "อื่นๆ (พิมพ์เอง)"];
 
   // ล็อกรายการจากใบเบิก/ของ Spare มีจำนวนจำกัดต่อชิ้น — ถ้ามีของชิ้นเดียวกัน
   // แต่ต้องใช้หลายแถว (เช่น Motor เหลือ 1) ต้องหักจำนวนที่แถวอื่นเลือกไปแล้ว
@@ -1822,12 +1831,37 @@ function renderFixRows(){
     sel.required = true;
     const blank = document.createElement('option');
     blank.value=''; blank.textContent='-- เลือกอุปกรณ์ --'; sel.appendChild(blank);
-    options.forEach(p=>{
-      const o = document.createElement('option');
-      o.value=p; o.textContent = locked ? `${p} (${lockQtyLabel} ${remainingFor(p, idx)})` : p;
-      if(p===row.product) o.selected=true;
-      sel.appendChild(o);
-    });
+    if(locked){
+      if(hasLock){
+        const og = document.createElement('optgroup');
+        og.label = `จากใบเบิก ${stockLock.noStock}`;
+        Object.keys(stockLock.items).forEach(p=>{
+          const o = document.createElement('option');
+          o.value=p; o.textContent = `${p} (เบิก ${remainingFor(p, idx)})`;
+          if(p===row.product) o.selected=true;
+          og.appendChild(o);
+        });
+        sel.appendChild(og);
+      }
+      if(hasTechStock){
+        const og = document.createElement('optgroup');
+        og.label = `ของ Spare (${techStockOwnerName})`;
+        Object.keys(techStock).forEach(p=>{
+          const o = document.createElement('option');
+          o.value=p; o.textContent = `${p} (คงเหลือ ${remainingFor(p, idx)})`;
+          if(p===row.product) o.selected=true;
+          og.appendChild(o);
+        });
+        sel.appendChild(og);
+      }
+    } else {
+      options.forEach(p=>{
+        const o = document.createElement('option');
+        o.value=p; o.textContent = p;
+        if(p===row.product) o.selected=true;
+        sel.appendChild(o);
+      });
+    }
     sel.onchange = ()=>{ row.product = sel.value; row.qty = locked ? (remainingFor(row.product, idx)||1) : row.qty; updatePreview(); renderFixRows(); };
 
     const qty = document.createElement('input');
