@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.31.0">
+<meta name="app-version" content="1.31.1">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -871,6 +871,16 @@ function wireTechStockSearch(){
   // from whichever job gets picked there — see checkStockLock()).
   select.onchange = ()=>{
     const name = select.value;
+    // Picking a technician here is a deliberate request to see THAT
+    // person's own Spare stock — but lockSource in renderFixRows()
+    // always prefers an active ใบเบิก lock (stockLock) over techStock,
+    // so without this, switching technician silently did nothing
+    // whenever a ทะเบียน already had a matched ใบเบิก: the picker stayed
+    // stuck on that ใบเบิก's items no matter who got selected. Clearing
+    // stockLock here lets the switch actually take effect immediately;
+    // re-typing/blurring ทะเบียน re-triggers checkStockLock() and can
+    // re-lock it if that's what's wanted again.
+    stockLock = null;
     applyTechStockName(name);
     loadAssignments(name);
   };

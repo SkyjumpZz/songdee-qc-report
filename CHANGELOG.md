@@ -57,6 +57,33 @@ machines/sessions (not just in chat history).
     the one production endpoint before/after deploying (it's a
     read-only lookup, no write-path risk).
 
+## Switching technician didn't change the equipment picker (v1.31.1)
+
+Reported as: "เวลาเปลี่ยนชื่อช่างแล้วของที่สามารถเลือกได้ไม่เปลี่ยนตาม"
+(switching technician doesn't change the selectable items). Root cause:
+`renderFixRows()`'s `lockSource` always prefers an active ใบเบิก lock
+(`stockLock`, matched by ทะเบียน) over a technician's own Spare stock
+(`techStock`) — by design, since a ใบเบิก is tied to the job/plate. But
+nothing re-checked or cleared `stockLock` when the "ช่างที่กำลังทำ
+รายงานนี้" select changed, so whenever a ทะเบียน already had a matched
+ใบเบิก, switching technician silently did nothing — the picker stayed
+stuck on that ใบเบิก's items no matter who got selected. Confirmed via
+Playwright before fixing: switching between two technicians with
+different Spare stock showed the same ใบเบิก items both times.
+
+Asked which behavior was wanted — switching technician immediately
+override to that person's own Spare stock, or keep the ใบเบิก priority
+and just explain it better — and the answer was override. The
+select's `onchange` now clears `stockLock = null` before applying the
+new technician's stock, so the switch takes effect right away;
+re-typing/blurring ทะเบียน re-triggers `checkStockLock()` and can
+re-lock it if that's wanted again.
+
+Verified via Playwright: with an active ใบเบิก lock, switching
+technician now clears it and shows each technician's own distinct
+Spare stock; the no-lock case (nothing changed here) still works as
+before.
+
 ## Require at least one ปัญหา/แก้ไข row (v1.31.0)
 
 `getMissingFields()` already blocked "ส่งเข้า LINE" (disabled button +
