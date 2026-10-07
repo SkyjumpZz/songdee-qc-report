@@ -57,6 +57,32 @@ machines/sessions (not just in chat history).
     the one production endpoint before/after deploying (it's a
     read-only lookup, no write-path risk).
 
+## ชื่อลูกค้า/Fleet/ทะเบียน เป็น dropdown ค้นหาได้ (v1.34.0)
+
+Asked to make ชื่อลูกค้า, Fleet, and ทะเบียน dropdowns so they're easier
+to search. ชื่อลูกค้า/Fleet already had a custom filtered dropdown
+(`wireSuggestInput()`), but it only showed matches after typing at
+least one character — clicking into an empty field showed nothing.
+ทะเบียน used a native `<input list="plateList">` datalist instead,
+which has inconsistent/poor UX on mobile (no reliable "show full list"
+affordance, can't be styled to match).
+
+Fixed both: `wireSuggestInput()` now also renders on `focus`, showing
+the first 20 options unfiltered when the field is empty, so clicking in
+opens a full browsable dropdown immediately — typing still narrows it
+down as before. Converted ทะเบียน from the native datalist to the same
+`wireSuggestInput()` widget as ชื่อลูกค้า/Fleet (new `plateSuggestions`
+array + `jobPlateSuggestions` suggest-dropdown div, picking a plate
+still sets `state.plate` and re-triggers `scheduleStockLockCheck()`
+same as typing it manually) — all three fields now behave identically.
+Still free text everywhere; the dropdown only suggests values seen
+before, nothing is locked to the list.
+
+Verified via Playwright: focusing each of the three fields with no
+value shows its full suggestion list; typing filters it; clicking an
+item fills the field and updates state; the old `<datalist>` element
+is gone from the page.
+
 ## ถอดย้ายอุปกรณ์ template + 3G/4G network selector (v1.33.0)
 
 Two asks: a 4th job-type template for equipment removal/relocation jobs

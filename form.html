@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.33.0">
+<meta name="app-version" content="1.34.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -587,10 +587,10 @@
         <input type="text" id="jobFleet" placeholder="เช่น Fleet A" autocomplete="off">
         <div class="suggest-dropdown app-hidden" id="jobFleetSuggestions"></div>
       </div>
-      <div>
+      <div class="suggest-field">
         <label>ทะเบียน<span class="req">*</span></label>
-        <input type="text" id="jobPlate" placeholder="เช่น 1กก-1234" list="plateList" autocomplete="off">
-        <datalist id="plateList"></datalist>
+        <input type="text" id="jobPlate" placeholder="เช่น 1กก-1234" autocomplete="off">
+        <div class="suggest-dropdown app-hidden" id="jobPlateSuggestions"></div>
       </div>
     </div>
   </div>
@@ -1201,20 +1201,21 @@ function fillProblemFromIssue(){
   updatePreview();
 }
 
-// ทะเบียน autocomplete — suggests known plates from the same sheet while
-// typing (still free text, not a hard lock, so a vehicle not yet in the
-// sheet can still be entered). Loaded once per session, not per keystroke.
+// ทะเบียน autocomplete — suggests known plates from the same sheet, shown
+// as the same custom dropdown as ชื่อลูกค้า/Fleet below (คลิกเพื่อดูทั้งลิสต์
+// ค้นหาได้ง่ายกว่า native <input list> datalist ที่ UX ไม่ดีบนมือถือ) —
+// still free text, not a hard lock, so a vehicle not yet in the sheet can
+// still be entered. Loaded once per session, not per keystroke.
+let plateSuggestions = [];
 async function loadPlateSuggestions(){
   try{
     const res = await fetch('https://songdee-vehicle-lookup.songdeegps.workers.dev/plates');
     const data = await res.json();
-    const plates = Array.isArray(data.plates) ? data.plates : [];
-    const list = document.getElementById('plateList');
-    list.innerHTML = '';
-    plates.forEach(p=>{
-      const o = document.createElement('option');
-      o.value = p;
-      list.appendChild(o);
+    plateSuggestions = (Array.isArray(data.plates) ? data.plates : []).sort();
+    wireSuggestInput('jobPlate', 'jobPlateSuggestions', ()=>plateSuggestions, plate=>{
+      state.plate = plate;
+      updatePreview();
+      scheduleStockLockCheck();
     });
   }catch(e){
     console.error('[Plate suggestions]', e);
@@ -1280,11 +1281,14 @@ function wireSuggestInput(inputId, boxId, getList, onPick){
   const input = document.getElementById(inputId);
   const box = document.getElementById(boxId);
   if(!input || !box) return;
-  input.addEventListener('input', ()=>{
+  // แสดงทั้งลิสต์ตอนคลิก/focus (ไม่ต้องพิมพ์ก่อน) เพื่อให้เปิดดู/เลือกจาก
+  // dropdown ได้ทันทีเหมือนเลือกจาก select — พิมพ์ต่อเพื่อกรองให้แคบลงได้
+  // ตามปกติ. ถ้าลิสต์ยังไม่โหลด (ว่าง) ไม่ต้องโชว์กล่องเปล่า.
+  function render(){
     const q = input.value.trim().toLowerCase();
+    const all = getList();
+    const matches = (q ? all.filter(n=> n.toLowerCase().includes(q)) : all).slice(0, 20);
     box.innerHTML = '';
-    if(!q){ box.classList.add('app-hidden'); return; }
-    const matches = getList().filter(n=> n.toLowerCase().includes(q)).slice(0, 8);
     if(!matches.length){ box.classList.add('app-hidden'); return; }
     matches.forEach(n=>{
       const item = document.createElement('div');
@@ -1293,7 +1297,9 @@ function wireSuggestInput(inputId, boxId, getList, onPick){
       box.appendChild(item);
     });
     box.classList.remove('app-hidden');
-  });
+  }
+  input.addEventListener('input', render);
+  input.addEventListener('focus', render);
   box.addEventListener('click', e=>{
     const item = e.target.closest('.item');
     if(!item) return;
