@@ -57,6 +57,47 @@ machines/sessions (not just in chat history).
     the one production endpoint before/after deploying (it's a
     read-only lookup, no write-path risk).
 
+## Fix ทะเบียน/ชื่อลูกค้า/Fleet dropdown race + move 3G/4G into checklist (v1.36.0)
+
+Two reports from real usage, sent as screenshots.
+
+**Dropdown bug**: "กดช่องทะเบียนแล้วรายการไม่ขึ้น" — `wireSuggestInput()`
+used to only get called *after* its data finished loading
+(`loadPlateSuggestions()`'s `/plates` fetch, `loadCustomerFleetSuggestions()`'s
+Firestore reads — all real network round trips). A technician tapping into
+ทะเบียน/ชื่อลูกค้า/Fleet quickly after page load — very plausible, these are
+some of the first fields filled — got no event listeners yet, so the tap
+did nothing; once the data *did* arrive, nothing re-opened a field that
+was already sitting focused, so the dropdown stayed stuck closed until
+they clicked away and back in. Reproduced with Playwright using a
+deliberately slow (800ms) `/plates` response: focusing the field at 150ms
+correctly found it empty, but it never auto-populated once the data
+landed at ~950ms.
+
+Fixed by splitting "wire the input" from "load the data": `wireSuggestInput()`
+now returns its internal `render()`, and is called immediately for all
+three fields (its `getList` closure reads the live suggestions array, so
+it's safe to wire before that array has anything in it). Each loader
+calls the returned `render()` once its data arrives, but only if that
+field still has focus — so a field opened before data was ready now pops
+open the moment it's available, instead of requiring a second click.
+Verified the same test passes after the fix (and fails again against the
+pre-fix code, confirming it reproduces the real bug).
+
+**3G/4G relocated**: moved from a selector under every individual
+equipment row (v1.33.0) into the "รายการตรวจสอบ" (checklist) card as one
+`state.network` field for the whole report, rendered as an extra row
+alongside the per-template checklist items. Removed the per-row
+`network` field from fix rows entirely (all three default-object
+locations, `renderFixRows()`'s selector, `fixLine()`'s tag) — still
+optional, still not in `getMissingFields()`. `buildMessage()` and
+`buildLineCard()` both include "เครือข่ายอุปกรณ์: 3G/4G" under the
+checklist section when set. Verified via Playwright: no per-row selects
+remain anywhere, the checklist card shows exactly one network select,
+picking a value updates both message builders' output, survives
+switching template tabs (state-level, not per-template), and fix rows no
+longer carry a `network` key at all.
+
 ## Warn on cross-device duplicate submission (v1.35.0)
 
 Follow-up to v1.34.1. That fix only closes the gap *within one browser

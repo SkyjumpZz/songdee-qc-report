@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.35.0">
+<meta name="app-version" content="1.36.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -1206,17 +1206,30 @@ function fillProblemFromIssue(){
 // ค้นหาได้ง่ายกว่า native <input list> datalist ที่ UX ไม่ดีบนมือถือ) —
 // still free text, not a hard lock, so a vehicle not yet in the sheet can
 // still be entered. Loaded once per session, not per keystroke.
+//
+// Bug fixed: wireSuggestInput() used to only get called AFTER the /plates
+// fetch resolved — a real network round trip. A technician who tapped into
+// ทะเบียน (often one of the very first fields filled) before that fetch
+// finished got no listeners at all yet, so the click did nothing; once the
+// fetch DID resolve, nothing re-opened the box for a field that was
+// already focused, so it stayed stuck closed until they clicked away and
+// back. Now wireSuggestInput() is called immediately (its getList callback
+// reads the live plateSuggestions variable, so it's safe to wire before
+// the data arrives), and once the fetch resolves, if ทะเบียน still has
+// focus, the box is explicitly re-rendered so it pops open right away
+// instead of silently waiting for another click.
 let plateSuggestions = [];
+const renderPlateSuggest = wireSuggestInput('jobPlate', 'jobPlateSuggestions', ()=>plateSuggestions, plate=>{
+  state.plate = plate;
+  updatePreview();
+  scheduleStockLockCheck();
+});
 async function loadPlateSuggestions(){
   try{
     const res = await fetch('https://songdee-vehicle-lookup.songdeegps.workers.dev/plates');
     const data = await res.json();
     plateSuggestions = (Array.isArray(data.plates) ? data.plates : []).sort();
-    wireSuggestInput('jobPlate', 'jobPlateSuggestions', ()=>plateSuggestions, plate=>{
-      state.plate = plate;
-      updatePreview();
-      scheduleStockLockCheck();
-    });
+    if(document.activeElement && document.activeElement.id === 'jobPlate') renderPlateSuggest();
   }catch(e){
     console.error('[Plate suggestions]', e);
   }
@@ -1231,6 +1244,16 @@ async function loadPlateSuggestions(){
 // retyping from scratch every time.
 let customerSuggestions = [];
 let fleetSuggestions = [];
+// Same race as plateSuggestions above: wire immediately (reads the live
+// array), re-render after data loads only if that field is still focused.
+const renderCustomerSuggest = wireSuggestInput('jobCustomer', 'jobCustomerSuggestions', ()=>customerSuggestions, name=>{
+  state.customer = name;
+  updatePreview();
+});
+const renderFleetSuggest = wireSuggestInput('jobFleet', 'jobFleetSuggestions', ()=>fleetSuggestions, name=>{
+  state.fleet = name;
+  updatePreview();
+});
 
 async function loadCustomerFleetSuggestions(){
   const customers = new Set();
@@ -1258,29 +1281,27 @@ async function loadCustomerFleetSuggestions(){
   }
   customerSuggestions = [...customers].sort();
   fleetSuggestions = [...fleets].sort();
-  wireSuggestInput('jobCustomer', 'jobCustomerSuggestions', ()=>customerSuggestions, name=>{
-    state.customer = name;
-    updatePreview();
-  });
-  wireSuggestInput('jobFleet', 'jobFleetSuggestions', ()=>fleetSuggestions, name=>{
-    state.fleet = name;
-    updatePreview();
-  });
+  if(document.activeElement && document.activeElement.id === 'jobCustomer') renderCustomerSuggest();
+  if(document.activeElement && document.activeElement.id === 'jobFleet') renderFleetSuggest();
   assignedTechNames = [...techNames];
   refreshTechStockNames();
 }
 
 // Custom filtered dropdown instead of a native <input list> datalist —
-// same reasoning as the technician picker earlier: a datalist dumps every
-// option the moment the field is focused, even with nothing typed. This
-// stays hidden until there's at least one character to filter by. onPick
+// same reasoning as the technician picker earlier: a datalist's UX is poor
+// on mobile. Shows the full list (up to 20) on focus even with nothing
+// typed yet, like opening a <select>; typing narrows it down. onPick
 // mirrors whatever the field's own plain 'input' listener already does
 // (rather than dispatching a synthetic event, which would also re-trigger
 // this same suggestion box's own input listener and pop it back open).
+// Returns the internal render() function so a caller whose suggestion
+// data loads asynchronously (a fetch/Firestore read) can force a refresh
+// once that data arrives, in case the field already has focus by then —
+// see loadPlateSuggestions()/loadCustomerFleetSuggestions() below.
 function wireSuggestInput(inputId, boxId, getList, onPick){
   const input = document.getElementById(inputId);
   const box = document.getElementById(boxId);
-  if(!input || !box) return;
+  if(!input || !box) return ()=>{};
   // แสดงทั้งลิสต์ตอนคลิก/focus (ไม่ต้องพิมพ์ก่อน) เพื่อให้เปิดดู/เลือกจาก
   // dropdown ได้ทันทีเหมือนเลือกจาก select — พิมพ์ต่อเพื่อกรองให้แคบลงได้
   // ตามปกติ. ถ้าลิสต์ยังไม่โหลด (ว่าง) ไม่ต้องโชว์กล่องเปล่า.
@@ -1312,6 +1333,7 @@ function wireSuggestInput(inputId, boxId, getList, onPick){
     // Delay so a click on a suggestion item registers before it disappears.
     setTimeout(()=>{ box.classList.add('app-hidden'); }, 150);
   });
+  return render;
 }
 
 // ---------------------------------------------------------------
@@ -1464,6 +1486,7 @@ async function saveReport(){
     photos: state.photos.filter(p=> p.driveUrl).map(p=> ({ name: p.name, driveUrl: p.driveUrl })),
     driveFolderUrl: state.driveFolderUrl || null,
     mdvrImei: state.mdvrImei || '', mdvrDeviceId: state.mdvrDeviceId || '', mdvrServer: state.mdvrServer || '',
+    network: state.network || '',
     techUid: tester.uid, techName: tester.techName,
     updatedAt: Date.now(),
   };
@@ -1487,7 +1510,7 @@ function loadReportIntoForm(doc){
     fleet: doc.fleet || '',
     plate: doc.plate || '',
     problems: (doc.problems && doc.problems.length) ? doc.problems : [{symptom:''}],
-    fixes: (doc.fixes && doc.fixes.length) ? doc.fixes : [{product:'', qty:1, custom:'', oldModel:'', oldModelCustom:'', newSN:'', oldSN:'', network:''}],
+    fixes: (doc.fixes && doc.fixes.length) ? doc.fixes : [{product:'', qty:1, custom:'', oldModel:'', oldModelCustom:'', newSN:'', oldSN:''}],
     stickers: doc.stickers || {},
     checklist: doc.checklist || {},
     photos: (doc.photos || []).map(p=> ({
@@ -1498,6 +1521,7 @@ function loadReportIntoForm(doc){
     mdvrImei: doc.mdvrImei || '',
     mdvrDeviceId: doc.mdvrDeviceId || '',
     mdvrServer: doc.mdvrServer || '',
+    network: doc.network || '',
   };
   syncFormInputsFromState();
   const dateStr = state.date ? state.date.split('-').reverse().join('/') : '(ไม่ระบุวันที่)';
@@ -1707,7 +1731,7 @@ function defaultState(){
     fleet: "",
     plate: "",
     problems: [{symptom:""}],
-    fixes: [{product:"", qty:1, custom:"", oldModel:"", oldModelCustom:"", newSN:"", oldSN:"", network:""}],
+    fixes: [{product:"", qty:1, custom:"", oldModel:"", oldModelCustom:"", newSN:"", oldSN:""}],
     stickers: {},
     checklist: {},
     photos: [],
@@ -1716,6 +1740,9 @@ function defaultState(){
     mdvrImei: "",
     mdvrDeviceId: "",
     mdvrServer: "",
+    // เครือข่ายของอุปกรณ์ที่ติดตั้ง/ตรวจสอบ — เป็นค่าเดียวต่อทั้งรายงาน ไม่ใช่
+    // ต่อแถวอุปกรณ์ (ย้ายมาจากการ์ด "รายการตรวจสอบ" ตามที่ขอ) ดู renderChecklist().
+    network: "",
   };
 }
 let state = defaultState();
@@ -1794,7 +1821,7 @@ function renderProblemRows(){
 }
 
 function addFixRow(){
-  state.fixes.push({product:"", qty:1, custom:"", oldModel:"", oldModelCustom:"", newSN:"", oldSN:"", network:""});
+  state.fixes.push({product:"", qty:1, custom:"", oldModel:"", oldModelCustom:"", newSN:"", oldSN:""});
   renderFixRows();
   updatePreview();
 }
@@ -1903,22 +1930,6 @@ function renderFixRows(){
 
     line.appendChild(sel); line.appendChild(qty); line.appendChild(rm);
     wrap.appendChild(line);
-
-    const netWrap = document.createElement('div');
-    netWrap.className = 'network-row';
-    netWrap.style.marginTop = '6px';
-    const netLabel = document.createElement('label');
-    netLabel.textContent = 'เครือข่าย (ถ้ามี) ';
-    const netSel = document.createElement('select');
-    [{v:'', t:'-- ไม่ระบุ --'}, {v:'3G', t:'3G'}, {v:'4G', t:'4G'}].forEach(opt=>{
-      const o = document.createElement('option');
-      o.value = opt.v; o.textContent = opt.t;
-      if((row.network||'') === opt.v) o.selected = true;
-      netSel.appendChild(o);
-    });
-    netSel.onchange = ()=>{ row.network = netSel.value; updatePreview(); };
-    netWrap.appendChild(netLabel); netWrap.appendChild(netSel);
-    wrap.appendChild(netWrap);
 
     if(!locked && row.product === "อื่นๆ (พิมพ์เอง)"){
       const custom = document.createElement('input');
@@ -2044,6 +2055,30 @@ function renderChecklist(){
     box.appendChild(lbl); box.appendChild(toggle);
     wrap.appendChild(box);
   });
+
+  // เครือข่ายของอุปกรณ์ (3G/4G) — ค่าเดียวต่อทั้งรายงาน ไม่ใช่ต่อแถวอุปกรณ์
+  // (ตามที่ขอให้ย้ายมาอยู่ในการ์ด "รายการตรวจสอบ" แทนที่จะอยู่ใต้แต่ละแถวใน
+  // "รายการแก้ไข") ไม่บังคับเลือก เพราะอุปกรณ์หลายอย่างไม่เกี่ยวกับเครือข่าย —
+  // ดู getMissingFields() ที่ไม่ได้เช็คฟิลด์นี้.
+  const netBox = document.createElement('div');
+  netBox.className = 'check-item';
+  const netLbl = document.createElement('div');
+  netLbl.className = 'lbl';
+  netLbl.innerHTML = `<span class="mark">🔺</span><span>เครือข่ายอุปกรณ์ (ถ้ามี)</span>`;
+  const netFooter = document.createElement('div');
+  netFooter.className = 'check-toggle';
+  const netSel = document.createElement('select');
+  netSel.style.cssText = 'flex:1; background:transparent; border:none; color:inherit; font:inherit;';
+  [{v:'', t:'-- ไม่ระบุ --'}, {v:'3G', t:'3G'}, {v:'4G', t:'4G'}].forEach(opt=>{
+    const o = document.createElement('option');
+    o.value = opt.v; o.textContent = opt.t;
+    if((state.network||'') === opt.v) o.selected = true;
+    netSel.appendChild(o);
+  });
+  netSel.onchange = ()=>{ state.network = netSel.value; updatePreview(); };
+  netFooter.appendChild(netSel);
+  netBox.appendChild(netLbl); netBox.appendChild(netFooter);
+  wrap.appendChild(netBox);
 }
 
 // ---------------------------------------------------------------
@@ -2271,11 +2306,10 @@ function fixLine(row){
     : "";
   const newTag = (DEVICE_TYPE_BY_PRODUCT[row.product] && row.newSN) ? ` (SN: ${row.newSN})` : '';
   const oldTag = (tplHasOldModel(state.tpl) && DEVICE_TYPE_BY_PRODUCT[row.oldModel] && row.oldSN) ? ` (SN เดิม: ${row.oldSN})` : '';
-  const netTag = row.network ? ` [${row.network}]` : '';
-  if(oldName && name) return `- ทำการเปลี่ยน ${oldName}${oldTag} เป็น ${name}${newTag}${netTag}`;
+  if(oldName && name) return `- ทำการเปลี่ยน ${oldName}${oldTag} เป็น ${name}${newTag}`;
   if(name){
     const qty = row.qty ? ` x${row.qty}` : '';
-    return `- ทำการติดตั้ง ${name}${qty}${newTag}${netTag}`;
+    return `- ทำการติดตั้ง ${name}${qty}${newTag}`;
   }
   if(oldName) return `- ทำการถอด ${oldName}${oldTag}`;
   return null;
@@ -2423,6 +2457,10 @@ function buildMessage(){
     lines.push(`🔺${item.text}`);
     lines.push(`: ${done ? CHECK_PASS_LABEL[item.type] : '(ยังไม่ตรวจสอบ)'}`);
   });
+  if(state.network){
+    lines.push(`🔺เครือข่ายอุปกรณ์`);
+    lines.push(`: ${state.network}`);
+  }
 
   const uploadedPhotos = state.photos.filter(p=> p.driveUrl);
   if(uploadedPhotos.length){
@@ -2466,10 +2504,13 @@ function buildLineCard(){
   });
   sections.push({
     heading: '✅ รายการตรวจสอบ',
-    lines: TEMPLATES[state.tpl].checklist.map(item=>{
-      const done = !!state.checklist[item.key];
-      return `• ${item.text}: ${done ? CHECK_PASS_LABEL[item.type] : '(ยังไม่ตรวจสอบ)'}`;
-    })
+    lines: [
+      ...TEMPLATES[state.tpl].checklist.map(item=>{
+        const done = !!state.checklist[item.key];
+        return `• ${item.text}: ${done ? CHECK_PASS_LABEL[item.type] : '(ยังไม่ตรวจสอบ)'}`;
+      }),
+      ...(state.network ? [`• เครือข่ายอุปกรณ์: ${state.network}`] : []),
+    ]
   });
 
   // Photos go out as separate native LINE image messages (tap to view/
