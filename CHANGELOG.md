@@ -57,6 +57,41 @@ machines/sessions (not just in chat history).
     the one production endpoint before/after deploying (it's a
     read-only lookup, no write-path risk).
 
+## ถอดย้ายอุปกรณ์ template + 3G/4G network selector (v1.33.0)
+
+Two asks: a 4th job-type template for equipment removal/relocation jobs
+(previously there was no tab for a job that's just "ถอด" with nothing
+installed in its place — `repair`/`upgrade`/`new_install` all assume
+something ends up installed), and a way to record whether a device is
+3G or 4G.
+
+Added `remove` to `TEMPLATES` ("ถอดย้ายอุปกรณ์") with its own checklist
+(ถอดครบตามรายการ / เก็บสาย-ปิดช่อง / ไม่มีความเสียหาย) — no ปัญหา section
+(`tplHasProblems` stays false for it, same as `new_install`), and
+`tplHasOldModel` is already `true` for any non-`new_install` template so
+the "รุ่นเก่าที่เปลี่ยน" picker works for it with zero extra code — a fix
+row with only `oldModel` set and no `product` already renders as
+"- ทำการถอด {oldName}" via the existing `fixLine()` branching. Added
+matching entries to `CHECK_PASS_LABEL`, `FIXES_CARD_LABEL`,
+`FIXES_ADD_BTN_LABEL`, `TPL_ICON` (📤). Also added `remove: "ถอดย้ายอุปกรณ์"`
+to songdee-line-proxy's `QC_TEMPLATE_LABELS` so `/ล่าสุด` shows the right
+Thai label instead of falling back to the raw key.
+
+Item wording/order for `remove`'s checklist (and the pre-existing
+`new_install`/`repair` ones) is still a starting draft, not yet checked
+against a real reference report the way `upgrade`'s was.
+
+3G/4G: added a `network` field (`""`/`"3G"`/`"4G"`) to every fix row,
+with a `<select>` rendered under every row in `renderFixRows()` —
+universal across all 4 templates and every row, not scoped to specific
+device types, since there's no reliable product-name signal for which
+rows are network-capable devices. Left optional on purpose (not added to
+`getMissingFields()`) — most equipment isn't a SIM-based device, so
+making it required would block submission on rows where it doesn't
+apply. When set, `fixLine()` appends it as a `[3G]`/`[4G]` tag after the
+SN tag so it shows up in both the on-screen preview and the LINE
+message text.
+
 ## Show ใบเบิก AND Spare stock together, grouped (v1.32.0)
 
 Follow-up on v1.31.1 (which made switching technician override/clear

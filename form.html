@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.32.0">
+<meta name="app-version" content="1.33.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -1481,7 +1481,7 @@ function loadReportIntoForm(doc){
     fleet: doc.fleet || '',
     plate: doc.plate || '',
     problems: (doc.problems && doc.problems.length) ? doc.problems : [{symptom:''}],
-    fixes: (doc.fixes && doc.fixes.length) ? doc.fixes : [{product:'', qty:1, custom:'', oldModel:'', oldModelCustom:'', newSN:'', oldSN:''}],
+    fixes: (doc.fixes && doc.fixes.length) ? doc.fixes : [{product:'', qty:1, custom:'', oldModel:'', oldModelCustom:'', newSN:'', oldSN:'', network:''}],
     stickers: doc.stickers || {},
     checklist: doc.checklist || {},
     photos: (doc.photos || []).map(p=> ({
@@ -1608,7 +1608,9 @@ const CHECK_PASS_LABEL = {
   cable: "ล็อคเรียบร้อย / เก็บสายเรียบร้อย",
   signal: "สัญญาณปกติ ทดสอบผ่าน",
   camera: "ภาพชัดเจน ทดสอบผ่าน",
-  symptom: "แก้ไขตามอาการที่แจ้งเรียบร้อย"
+  symptom: "แก้ไขตามอาการที่แจ้งเรียบร้อย",
+  uninstall: "ถอดครบตามรายการ",
+  damage: "ไม่มีความเสียหาย"
 };
 
 // Which sections apply per job type:
@@ -1622,17 +1624,19 @@ function tplHasProblems(tpl){ return tpl === "repair"; }
 function tplHasOldModel(tpl){ return tpl !== "new_install"; }
 
 // The "แก้ไข" card holds a different kind of entry per job type (pure
-// install vs a remove+install swap vs an actual repair fix) — label it
-// accordingly instead of always saying "แก้ไข".
+// install vs a remove+install swap vs an actual repair fix vs a pure
+// removal) — label it accordingly instead of always saying "แก้ไข".
 const FIXES_CARD_LABEL = {
   new_install: "อุปกรณ์ที่ติดตั้ง",
   upgrade: "ถอด/ติดตั้ง",
   repair: "แก้ไข",
+  remove: "อุปกรณ์ที่ถอด",
 };
 const FIXES_ADD_BTN_LABEL = {
   new_install: "+ เพิ่มอุปกรณ์ที่ติดตั้ง",
   upgrade: "+ เพิ่มรายการถอด/ติดตั้ง",
   repair: "+ เพิ่มรายการแก้ไข",
+  remove: "+ เพิ่มอุปกรณ์ที่ถอด",
 };
 
 // Checklist templates per job type. "อัปเกรด" matches the reference report format.
@@ -1668,11 +1672,20 @@ const TEMPLATES = {
       {key:"signal",  text:"ทดสอบสัญญาณหลังซ่อม", type:"signal"},
       {key:"cable",   text:"ตรวจสอบ การเก็บ/ล็อคสาย", type:"cable"},
     ]
+  },
+  remove: {
+    label: "ถอดย้ายอุปกรณ์",
+    checklist: [
+      {key:"uninstall", text:"ตรวจสอบถอดอุปกรณ์ครบตามรายการ", type:"uninstall"},
+      {key:"cable",     text:"ตรวจสอบเก็บสาย/ปิดช่องที่ถอดเรียบร้อย", type:"cable"},
+      {key:"damage",    text:"ตรวจสอบไม่มีความเสียหายต่อตัวรถจากการถอด", type:"damage"},
+    ]
   }
 };
-// NOTE for whoever edits this next: item text/order for "new_install" and
-// "repair" are starting drafts (not confirmed against a real reference report
-// like the "upgrade" one was) — swap in the real wording per template.
+// NOTE for whoever edits this next: item text/order for "new_install",
+// "repair", and "remove" are starting drafts (not confirmed against a real
+// reference report like the "upgrade" one was) — swap in the real wording
+// per template.
 
 const STICKERS = [
   {key:"front", text:"หน้ารถ"},
@@ -1688,7 +1701,7 @@ function defaultState(){
     fleet: "",
     plate: "",
     problems: [{symptom:""}],
-    fixes: [{product:"", qty:1, custom:"", oldModel:"", oldModelCustom:"", newSN:"", oldSN:""}],
+    fixes: [{product:"", qty:1, custom:"", oldModel:"", oldModelCustom:"", newSN:"", oldSN:"", network:""}],
     stickers: {},
     checklist: {},
     photos: [],
@@ -1719,7 +1732,7 @@ function syncFormInputsFromState(){
   renderMdvrImeiOptions();
 }
 
-const TPL_ICON = { upgrade: '⬆️', new_install: '✨', repair: '🛠️' };
+const TPL_ICON = { upgrade: '⬆️', new_install: '✨', repair: '🛠️', remove: '📤' };
 
 function renderTabs(){
   const wrap = document.getElementById('tplTabs');
@@ -1775,7 +1788,7 @@ function renderProblemRows(){
 }
 
 function addFixRow(){
-  state.fixes.push({product:"", qty:1, custom:"", oldModel:"", oldModelCustom:"", newSN:"", oldSN:""});
+  state.fixes.push({product:"", qty:1, custom:"", oldModel:"", oldModelCustom:"", newSN:"", oldSN:"", network:""});
   renderFixRows();
   updatePreview();
 }
@@ -1884,6 +1897,22 @@ function renderFixRows(){
 
     line.appendChild(sel); line.appendChild(qty); line.appendChild(rm);
     wrap.appendChild(line);
+
+    const netWrap = document.createElement('div');
+    netWrap.className = 'network-row';
+    netWrap.style.marginTop = '6px';
+    const netLabel = document.createElement('label');
+    netLabel.textContent = 'เครือข่าย (ถ้ามี) ';
+    const netSel = document.createElement('select');
+    [{v:'', t:'-- ไม่ระบุ --'}, {v:'3G', t:'3G'}, {v:'4G', t:'4G'}].forEach(opt=>{
+      const o = document.createElement('option');
+      o.value = opt.v; o.textContent = opt.t;
+      if((row.network||'') === opt.v) o.selected = true;
+      netSel.appendChild(o);
+    });
+    netSel.onchange = ()=>{ row.network = netSel.value; updatePreview(); };
+    netWrap.appendChild(netLabel); netWrap.appendChild(netSel);
+    wrap.appendChild(netWrap);
 
     if(!locked && row.product === "อื่นๆ (พิมพ์เอง)"){
       const custom = document.createElement('input');
@@ -2236,10 +2265,11 @@ function fixLine(row){
     : "";
   const newTag = (DEVICE_TYPE_BY_PRODUCT[row.product] && row.newSN) ? ` (SN: ${row.newSN})` : '';
   const oldTag = (tplHasOldModel(state.tpl) && DEVICE_TYPE_BY_PRODUCT[row.oldModel] && row.oldSN) ? ` (SN เดิม: ${row.oldSN})` : '';
-  if(oldName && name) return `- ทำการเปลี่ยน ${oldName}${oldTag} เป็น ${name}${newTag}`;
+  const netTag = row.network ? ` [${row.network}]` : '';
+  if(oldName && name) return `- ทำการเปลี่ยน ${oldName}${oldTag} เป็น ${name}${newTag}${netTag}`;
   if(name){
     const qty = row.qty ? ` x${row.qty}` : '';
-    return `- ทำการติดตั้ง ${name}${qty}${newTag}`;
+    return `- ทำการติดตั้ง ${name}${qty}${newTag}${netTag}`;
   }
   if(oldName) return `- ทำการถอด ${oldName}${oldTag}`;
   return null;
