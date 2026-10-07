@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.34.0">
+<meta name="app-version" content="1.34.1">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -2625,13 +2625,17 @@ async function sendToLine(){
   const endpoint = LINE_ENDPOINT.trim();
   const sendBtn = document.getElementById('sendBtn');
 
-  // Photo uploads (compress+POST to Drive per photo, sequential) can easily
-  // take several seconds with nothing else happening on screen — show
-  // immediate feedback and block a second tap instead of leaving the button
-  // looking unresponsive. Always re-enabled in the finally block below.
+  // Disable immediately and unconditionally — a double-tap/double-click on
+  // "ส่งเข้า LINE" used to only get blocked when there were pending photos
+  // to upload (sendBtn.disabled was set inside that `if`), so a report with
+  // no photos (or photos already uploaded) left the button clickable for
+  // the entire save+push duration. Two fast taps (or even just a slow
+  // connection) raced two full sendToLine() calls — two qc_reports docs
+  // saved and two duplicate LINE cards pushed for the same report. Always
+  // re-enabled in the finally block below.
+  sendBtn.disabled = true;
   const pendingPhotoCount = state.photos.filter(p=> !p.driveUrl && p.base64).length;
   if(pendingPhotoCount){
-    sendBtn.disabled = true;
     showToast(`กำลังอัปโหลดรูป (${pendingPhotoCount} รูป)...`);
   }
 

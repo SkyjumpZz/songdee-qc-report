@@ -57,6 +57,37 @@ machines/sessions (not just in chat history).
     the one production endpoint before/after deploying (it's a
     read-only lookup, no write-path risk).
 
+## Fix: double-tap on "ส่งเข้า LINE" sent duplicate reports (v1.34.1)
+
+Asked to test for a bug around multiple submits happening at the same
+time. Found and reproduced a real one: `sendToLine()` only set
+`sendBtn.disabled = true` *inside* the `if(pendingPhotoCount)` branch —
+a report with no pending photos (the common case: no photos attached,
+or already uploaded from a previous attempt) left the button clickable
+for the entire save+push duration. Two fast taps (easy to do on a slow
+connection, waiting to see if the first tap "took") raced two full
+`sendToLine()` calls: two `qc_reports` docs saved and two duplicate
+LINE Flex cards pushed into the group for the same report.
+
+Reproduced with Playwright: dispatched two `sendBtn.click()` calls in
+the same tick against a mocked Firestore `.add()`/LINE-push endpoint —
+before the fix, both went through (`addCallCount: 2`,
+`LINE_PUSH_COUNT: 2`); native `.click()` on an already-disabled button
+doesn't dispatch a click event at all, so once `sendBtn.disabled` is
+set unconditionally and *synchronously* at the very top of
+`sendToLine()` (before any `await`), the second same-tick click is
+swallowed by the browser before the handler ever runs again — verified
+after the fix: `addCallCount: 1`, `LINE_PUSH_COUNT: 1`. Still safe for
+a real double-tap specifically because JS is single-threaded: the
+first click's synchronous disable always completes before the event
+loop can process a second input event, no matter how fast the two taps
+land.
+
+This only guards one browser tab/session against itself — two
+different technicians each submitting their own separate report from
+their own device at the same time is normal, expected concurrency
+(separate docs, separate cards) and isn't affected.
+
 ## ชื่อลูกค้า/Fleet/ทะเบียน เป็น dropdown ค้นหาได้ (v1.34.0)
 
 Asked to make ชื่อลูกค้า, Fleet, and ทะเบียน dropdowns so they're easier
