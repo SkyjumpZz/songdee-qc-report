@@ -57,6 +57,49 @@ machines/sessions (not just in chat history).
     the one production endpoint before/after deploying (it's a
     read-only lookup, no write-path risk).
 
+## Warn on cross-device duplicate submission (v1.35.0)
+
+Follow-up to v1.34.1. That fix only closes the gap *within one browser
+tab* — `sendBtn.disabled`/`currentReportId` are in-memory JS variables,
+invisible to a second computer. A technician opening the same ทะเบียน
++ วันที่ + ประเภทงาน on two machines (e.g. started on a phone, forgot,
+opened it again on a laptop) and submitting both isn't caught by that
+fix at all: confirmed via Playwright with two separate browser
+contexts acting as "two computers" — before this change, both created
+a Firestore doc and both pushed a LINE card (2 of each) with nothing
+stopping it.
+
+Also checked a related, different scenario first: two *different*
+technicians pushing *unrelated* reports into the *same* LINE group at
+the same time. That one needed no fix — ran the real
+songdee-line-proxy worker module directly in Node with two concurrent
+requests; it has no shared mutable state across requests (everything
+is request-scoped), so concurrent pushes to the same group never
+cross-contaminate, confirmed down to verifying each push's card only
+ever contains its own ทะเบียน/ช่าง, never the other request's, and that
+one request failing (simulated a 429) doesn't affect the other.
+
+For the real gap (same person/job, different computer), added
+`findRecentDuplicateReport()`: before saving a *new* report (skipped
+entirely when `currentReportId` is already set — i.e. editing/resending
+from history, which is an intentional repeat, not a slip-up), queries
+`qc_reports` by `where('plate','==', state.plate)` only — deliberately
+a single equality filter with no `orderBy` mixed in, so it needs no new
+Firestore composite index — then filters by date/tpl and a 15-minute
+recency window in JS. A match triggers a native `confirm()`: "ส่งไปแล้ว
+X นาทีที่แล้ว (โดย {techName}) — ส่งซ้ำอีกหรือไม่?" — cancelling aborts
+the send (no save, no push); confirming proceeds as a normal second
+report. This warns, it doesn't hard-block, since a tech legitimately
+returning to the same vehicle same day for the same job type is a real
+(if rare) case.
+
+Verified via Playwright across three scenarios: Computer B warned and
+declined → only Computer A's doc/push exist (1 of each, not 2);
+Computer B warned and confirmed anyway → both go through normally (2
+of each, correctly, since that's now an intentional duplicate); and
+resending/editing an existing report (`currentReportId` set) never
+triggers the check at all, even when a matching "duplicate" exists.
+
 ## Fix: double-tap on "ส่งเข้า LINE" sent duplicate reports (v1.34.1)
 
 Asked to test for a bug around multiple submits happening at the same

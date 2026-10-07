@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.34.1">
+<meta name="app-version" content="1.35.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -2621,6 +2621,40 @@ function copyText(){
     .catch(()=> showToast('คัดลอกไม่สำเร็จ ลองแตะค้างที่ข้อความแทน'));
 }
 
+// กันส่งซ้ำข้ามเครื่อง — v1.34.1 ปิดปุ่มกันกดซ้ำได้แค่ในแท็บ/เครื่องเดียวกัน
+// (currentReportId/sendBtn.disabled เป็นแค่ตัวแปรในหน่วยความจำของเบราว์เซอร์
+// เครื่องนั้น) ถ้าช่างคนเดียวกันเปิดฟอร์มทะเบียน+วันที่+ประเภทงานเดียวกันจาก
+// สองเครื่อง (เช่น เผลอเปิดทิ้งไว้ทั้งมือถือและโน้ตบุ๊ก) แล้วกดส่งทั้งคู่ ไม่มี
+// อะไรเชื่อมสองเครื่องนั้นเลย — ต้องเช็คกับ Firestore (ที่เครื่องทั้งคู่เขียนร่วม
+// กันจริง) ก่อนถึงจะรู้ทัน ใช้ where('plate','==',...) เงื่อนไขเดียวเท่านั้น
+// (ไม่ผสม orderBy/where อื่น) เพื่อไม่ต้องสร้าง composite index เพิ่มใน
+// Firestore — กรองวันที่/ประเภทงาน/ความใหม่ของเวลาเอาเองฝั่ง JS หลังดึงมาแล้ว.
+// แค่เตือนให้ยืนยันซ้ำ ไม่ได้บล็อกการส่งจริง (เผื่อตั้งใจกลับไปแก้ไขซ้ำจริงๆ ในวันเดียวกัน)
+// ใช้งานเฉพาะตอนเป็นรายงานใหม่ (currentReportId ยังไม่ถูกตั้ง) — รายงานที่เปิดมา
+// แก้ไข/ส่งซ้ำอยู่แล้วตั้งใจส่งซ้ำอยู่แล้ว ไม่ต้องเตือน. fail-open: เช็คพลาด
+// (query error) ก็ให้ส่งต่อไปได้ตามปกติ ไม่บล็อกการทำงานจริงเพราะฟีเจอร์กันเผื่อนี้.
+const DUPLICATE_CHECK_WINDOW_MS = 15 * 60 * 1000;
+async function findRecentDuplicateReport(){
+  if(!state.plate || !state.date) return null;
+  try{
+    const snap = await _db.collection('qc_reports').where('plate', '==', state.plate).get();
+    const now = Date.now();
+    let best = null;
+    snap.docs.forEach(d=>{
+      if(d.id === currentReportId) return;
+      const v = d.data();
+      if(v.date !== state.date || v.tpl !== state.tpl) return;
+      const ts = v.updatedAt || v.createdAt || 0;
+      if(now - ts > DUPLICATE_CHECK_WINDOW_MS) return;
+      if(!best || ts > best.ts) best = { id: d.id, techName: v.techName || '-', ts };
+    });
+    return best;
+  }catch(e){
+    console.error('[Duplicate check]', e);
+    return null;
+  }
+}
+
 async function sendToLine(){
   const endpoint = LINE_ENDPOINT.trim();
   const sendBtn = document.getElementById('sendBtn');
@@ -2640,6 +2674,19 @@ async function sendToLine(){
   }
 
   try{
+    // ยังไม่มี currentReportId แปลว่าเป็นรายงานใหม่ (ไม่ใช่กำลังแก้ไข/ส่งซ้ำ
+    // รายงานที่เปิดมาจากประวัติ) — เช็คว่ามีรายงานทะเบียน+วันที่+ประเภทงาน
+    // เดียวกันถูกส่งไปแล้วเมื่อไม่นานนี้หรือไม่ (น่าจะมาจากอีกเครื่อง เพราะ
+    // ถ้าเครื่องเดียวกันปุ่มจะถูกปิดกันไว้แล้ว) ก่อนส่งจริง.
+    if(!currentReportId){
+      const dup = await findRecentDuplicateReport();
+      if(dup){
+        const minsAgo = Math.max(1, Math.round((Date.now() - dup.ts) / 60000));
+        const ok = confirm(`พบว่าทะเบียน ${state.plate} ประเภทงานนี้ถูกส่งไปแล้วเมื่อ ${minsAgo} นาทีที่แล้ว (โดย ${dup.techName}) — อาจเป็นการส่งซ้ำจากอีกเครื่อง\n\nต้องการส่งรายงานนี้ซ้ำอีกหรือไม่?`);
+        if(!ok){ showToast('ยกเลิกการส่ง (ตรวจพบรายงานซ้ำ)'); return; }
+      }
+    }
+
     // Upload any photos still pending first — buildMessage()/buildLineCard()
     // and saveReport() below all read state.photos[].driveUrl, so this has
     // to finish before them. Non-fatal: a failed upload just leaves that
