@@ -57,6 +57,41 @@ machines/sessions (not just in chat history).
     the one production endpoint before/after deploying (it's a
     read-only lookup, no write-path risk).
 
+## Fix: dropdown clipped/hidden by its own card (v1.36.1)
+
+Follow-up bug report on v1.36.0's fix: "dropdown โดนบังมองไม่เห็น" — the
+race-condition fix above wasn't the whole story. `.card` sets
+`overflow:hidden` (so its rounded corners and the colored left-edge bar
+don't poke out past the border-radius), and `.suggest-dropdown` was
+`position:absolute` relative to `.suggest-field` *inside* that card — so
+whenever the dropdown's height pushed past the card's bottom edge
+(routine on a short card or a small screen, and exactly what the
+ทะเบียน field hits since it's near the bottom of the ข้อมูลงาน card),
+the overflowing part was clipped and invisible, even though it still
+occupied layout space.
+
+`getBoundingClientRect()` doesn't reveal this — an ancestor's
+`overflow:hidden` doesn't shrink a descendant's own box, it just stops
+painting the part outside the clip region. Confirmed the real bug with
+`document.elementFromPoint()`: a point inside the dropdown's reported
+rect but past the card's bottom edge hit-tested to the *next* card's
+`.stock-lock-banner` instead of the dropdown item — proof the item was
+there in the DOM but not actually visible or clickable.
+
+Fixed by computing the dropdown's position in JS from
+`input.getBoundingClientRect()` and rendering it `position:fixed`
+instead of `position:absolute`, so it's positioned relative to the
+viewport and escapes any ancestor's `overflow:hidden` entirely (safe
+here since nothing animates a `transform` on an ancestor by the time a
+user actually opens the dropdown — the card's one-time entrance
+animation finishes within the first second of page load).
+`wireSuggestInput()` now also repositions on scroll/resize while a
+dropdown is open, since `position:fixed` no longer tracks the input
+automatically the way `position:absolute` did.
+
+Re-ran the same `elementFromPoint()` hit-test after the fix: the same
+point now correctly resolves back to the dropdown's own `.item` div.
+
 ## Fix ทะเบียน/ชื่อลูกค้า/Fleet dropdown race + move 3G/4G into checklist (v1.36.0)
 
 Two reports from real usage, sent as screenshots.

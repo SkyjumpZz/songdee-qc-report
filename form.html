@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.36.0">
+<meta name="app-version" content="1.36.1">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -1302,6 +1302,22 @@ function wireSuggestInput(inputId, boxId, getList, onPick){
   const input = document.getElementById(inputId);
   const box = document.getElementById(boxId);
   if(!input || !box) return ()=>{};
+  // ตำแหน่งดรอปดาวน์คำนวณเองด้วย position:fixed แทนที่จะพึ่ง position:absolute
+  // ของ CSS เดิม (ซึ่งอิงกับ .suggest-field ที่อยู่ใน .card) — .card ตั้ง
+  // overflow:hidden ไว้ (ให้มุมโค้ง/แถบสีด้านข้างไม่ล้นออกมา) ผลคือดรอปดาวน์
+  // ที่ยื่นต่ำกว่าขอบล่างการ์ดถูกตัด/บังมองไม่เห็น โดยเฉพาะช่องที่อยู่ใกล้
+  // ขอบล่างการ์ด (เช่น ทะเบียน) — position:fixed คำนวณพิกัดจริงจาก
+  // getBoundingClientRect() หลุดพ้นการตัดของ ancestor ไหนๆที่ overflow:hidden
+  // ไปเลย (การ์ดมี transform แค่ตอน animation เข้าหน้าแรกโหลดไม่กี่ร้อย ms
+  // ซึ่งจบไปนานแล้วตอนผู้ใช้จะกดเปิดดรอปดาวน์จริง).
+  function positionBox(){
+    const r = input.getBoundingClientRect();
+    box.style.position = 'fixed';
+    box.style.left = r.left + 'px';
+    box.style.top = (r.bottom + 4) + 'px';
+    box.style.width = r.width + 'px';
+    box.style.right = 'auto';
+  }
   // แสดงทั้งลิสต์ตอนคลิก/focus (ไม่ต้องพิมพ์ก่อน) เพื่อให้เปิดดู/เลือกจาก
   // dropdown ได้ทันทีเหมือนเลือกจาก select — พิมพ์ต่อเพื่อกรองให้แคบลงได้
   // ตามปกติ. ถ้าลิสต์ยังไม่โหลด (ว่าง) ไม่ต้องโชว์กล่องเปล่า.
@@ -1311,6 +1327,7 @@ function wireSuggestInput(inputId, boxId, getList, onPick){
     const matches = (q ? all.filter(n=> n.toLowerCase().includes(q)) : all).slice(0, 20);
     box.innerHTML = '';
     if(!matches.length){ box.classList.add('app-hidden'); return; }
+    positionBox();
     matches.forEach(n=>{
       const item = document.createElement('div');
       item.className = 'item';
@@ -1333,6 +1350,12 @@ function wireSuggestInput(inputId, boxId, getList, onPick){
     // Delay so a click on a suggestion item registers before it disappears.
     setTimeout(()=>{ box.classList.add('app-hidden'); }, 150);
   });
+  // position:fixed ไม่ขยับตามช่องอินพุตเองเวลาหน้าเลื่อน/ปรับขนาด (ต่างจาก
+  // position:absolute เดิมที่เกาะกับ .suggest-field อัตโนมัติ) — ต้องคำนวณ
+  // ตำแหน่งใหม่เองตอนนั้น มิฉะนั้นกล่องจะค้างอยู่ตำแหน่งเดิมไม่ตรงกับช่องแล้ว.
+  // capture:true เผื่อมี ancestor อื่นที่ scroll ได้ (scroll event ไม่ bubble).
+  window.addEventListener('scroll', ()=>{ if(!box.classList.contains('app-hidden')) positionBox(); }, true);
+  window.addEventListener('resize', ()=>{ if(!box.classList.contains('app-hidden')) positionBox(); });
   return render;
 }
 
