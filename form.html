@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.36.1">
+<meta name="app-version" content="1.37.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -1500,6 +1500,82 @@ function onAssignmentSelect(id){
 // The history list itself lives on its own page (history.html), which
 // links back here as index.html?report=<id> to open one for editing.
 // ---------------------------------------------------------------
+// Change log — every create/edit gets a "qc_report_logs" entry diffed
+// field-by-field against what was last loaded/saved, so the admin
+// change-history view (history.html) can show exactly what changed
+// without storing a full doc snapshot per edit.
+function checklistLabel(tpl, key){
+  const item = (TEMPLATES[tpl] && TEMPLATES[tpl].checklist || []).find(i=>i.key===key);
+  return item ? item.text : key;
+}
+function fixRowSummaryForDiff(row){
+  if(!row) return '';
+  const parts = [];
+  if(row.product) parts.push(row.product === 'อื่นๆ (พิมพ์เอง)' ? (row.custom||'') : row.product);
+  if(row.qty && row.qty !== 1) parts.push(`x${row.qty}`);
+  if(row.newSN) parts.push(`SN:${row.newSN}`);
+  if(row.oldModel) parts.push(`เดิม:${row.oldModel === 'อื่นๆ (พิมพ์เอง)' ? (row.oldModelCustom||'') : row.oldModel}`);
+  if(row.oldSN) parts.push(`SNเดิม:${row.oldSN}`);
+  return parts.join(' ') || '(ว่าง)';
+}
+const REPORT_FIELD_LABELS = {
+  tpl: 'ประเภทงาน', date: 'วันที่', customer: 'ลูกค้า', fleet: 'Fleet', plate: 'ทะเบียน',
+  network: 'เครือข่ายอุปกรณ์', mdvrImei: 'IMEI', mdvrDeviceId: 'Device ID', mdvrServer: 'Server',
+};
+function diffReportFields(oldDoc, payload){
+  const changes = [];
+  const tplForLabels = payload.tpl || oldDoc.tpl;
+  Object.keys(REPORT_FIELD_LABELS).forEach(key=>{
+    let a = oldDoc[key] || '', b = payload[key] || '';
+    if(key === 'tpl'){ a = (TEMPLATES[a]||{}).label || a; b = (TEMPLATES[b]||{}).label || b; }
+    if(String(a) !== String(b)){
+      changes.push({ label: REPORT_FIELD_LABELS[key], from: a || '(ไม่ระบุ)', to: b || '(ไม่ระบุ)' });
+    }
+  });
+  const oldChecklist = oldDoc.checklist || {}, newChecklist = payload.checklist || {};
+  new Set([...Object.keys(oldChecklist), ...Object.keys(newChecklist)]).forEach(key=>{
+    const a = !!oldChecklist[key], b = !!newChecklist[key];
+    if(a !== b){
+      changes.push({ label: `รายการตรวจสอบ: ${checklistLabel(tplForLabels, key)}`, from: a ? 'ทำแล้ว' : 'ยังไม่ทำ', to: b ? 'ทำแล้ว' : 'ยังไม่ทำ' });
+    }
+  });
+  const oldStickers = oldDoc.stickers || {}, newStickers = payload.stickers || {};
+  STICKERS.forEach(s=>{
+    const a = oldStickers[s.key] || '', b = newStickers[s.key] || '';
+    if(a !== b){
+      changes.push({ label: `สติ๊กเกอร์: ${s.text}`, from: a || '(ยังไม่ระบุ)', to: b || '(ยังไม่ระบุ)' });
+    }
+  });
+  const oldProblems = oldDoc.problems || [], newProblems = payload.problems || [];
+  for(let i=0;i<Math.max(oldProblems.length, newProblems.length);i++){
+    const a = (oldProblems[i]||{}).symptom || '', b = (newProblems[i]||{}).symptom || '';
+    if(a !== b) changes.push({ label: `ปัญหา #${i+1}`, from: oldProblems[i] ? (a||'(ว่าง)') : '(ไม่มี)', to: newProblems[i] ? (b||'(ว่าง)') : '(ลบแล้ว)' });
+  }
+  const oldFixes = oldDoc.fixes || [], newFixes = payload.fixes || [];
+  for(let i=0;i<Math.max(oldFixes.length, newFixes.length);i++){
+    const a = fixRowSummaryForDiff(oldFixes[i]), b = fixRowSummaryForDiff(newFixes[i]);
+    if(a !== b) changes.push({ label: `รายการที่ ${i+1}`, from: oldFixes[i] ? a : '(ไม่มี)', to: newFixes[i] ? b : '(ลบแล้ว)' });
+  }
+  const oldPhotoNames = (oldDoc.photos||[]).map(p=>p.name).filter(Boolean);
+  const newPhotoNames = (payload.photos||[]).map(p=>p.name).filter(Boolean);
+  if(oldPhotoNames.join(',') !== newPhotoNames.join(',')){
+    const added = newPhotoNames.filter(n=>!oldPhotoNames.includes(n));
+    const removed = oldPhotoNames.filter(n=>!newPhotoNames.includes(n));
+    changes.push({ label: 'รูปภาพ', from: removed.length ? `ลบ ${removed.length} รูป` : '-', to: added.length ? `เพิ่ม ${added.length} รูป` : '-' });
+  }
+  return changes;
+}
+async function logReportChange(action, payload, changes){
+  try{
+    await _db.collection('qc_report_logs').add({
+      reportId: currentReportId, action, at: Date.now(),
+      actorUid: tester.uid, actorName: tester.techName || '',
+      tpl: payload.tpl || '', customer: payload.customer || '', fleet: payload.fleet || '', plate: payload.plate || '',
+      changes: changes || [],
+    });
+  }catch(e){ console.error('[qc_report_logs]', e); }
+}
+
 async function saveReport(){
   const payload = {
     tpl: state.tpl, date: state.date, customer: state.customer, fleet: state.fleet, plate: state.plate,
@@ -1513,17 +1589,22 @@ async function saveReport(){
     techUid: tester.uid, techName: tester.techName,
     updatedAt: Date.now(),
   };
+  const changes = (currentReportId && originalReportDoc) ? diffReportFields(originalReportDoc, payload) : [];
   if(currentReportId){
     await _db.collection('qc_reports').doc(currentReportId).set(payload, {merge:true});
+    if(changes.length) await logReportChange('update', payload, changes);
   } else {
     payload.createdAt = Date.now();
     const ref = await _db.collection('qc_reports').add(payload);
     currentReportId = ref.id;
+    await logReportChange('create', payload, []);
   }
+  originalReportDoc = { ...payload, id: currentReportId };
 }
 
 function loadReportIntoForm(doc){
   currentReportId = doc.id;
+  originalReportDoc = { ...doc };
   isResendOfExistingReport = true;
   selectedAssignmentId = null;
   state = {
@@ -1576,6 +1657,7 @@ async function loadReportFromUrlIfAny(){
 
 function startNewReport(){
   currentReportId = null;
+  originalReportDoc = null;
   isResendOfExistingReport = false;
   state = defaultState();
   document.getElementById('editingBanner').classList.add('app-hidden');
@@ -1601,6 +1683,7 @@ function startNextVehicle(){
   const keepFleet = state.fleet;
   const keepTpl = state.tpl;
   currentReportId = null;
+  originalReportDoc = null;
   isResendOfExistingReport = false;
   state = defaultState();
   state.date = keepDate;
@@ -1770,6 +1853,10 @@ function defaultState(){
 }
 let state = defaultState();
 let currentReportId = null;
+// Snapshot of the qc_reports doc as loaded/last saved — diffed against the
+// next save's payload to build the "qc_report_logs" change entry. See
+// saveReport()/diffReportFields() above.
+let originalReportDoc = null;
 // True once a previously-saved report has been reopened for editing
 // (loadReportIntoForm()) — LINE's push API can't edit/replace a message
 // already sent, so resending shows up as a brand-new card with no link

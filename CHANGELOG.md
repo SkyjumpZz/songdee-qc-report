@@ -57,6 +57,78 @@ machines/sessions (not just in chat history).
     the one production endpoint before/after deploying (it's a
     read-only lookup, no write-path risk).
 
+## Admin change-history + delete (history.html v1.1.0, form.html v1.37.0)
+
+User asked whether the ประวัติ (history) page could show everything that's
+changed across the system — edits, deletes, additions — not just each
+tester's own current list of reports. Two things didn't exist yet to
+support that: history.html only ever queried `qc_reports.where('techUid',
+'==', user.uid)` (your own reports only), and there was no delete feature
+or change-tracking of any kind anywhere in the app — every edit just
+overwrote the same doc via `.set(payload, {merge:true})`, so nothing
+recorded what it used to say.
+
+Added a new `qc_report_logs` Firestore collection, written by form.html's
+`saveReport()` on every create/edit and by history.html's new admin delete
+action:
+- **Create**: one `{action:'create', changes:[]}` entry — the report's own
+  existence in the "สร้างใหม่" feed entry is the record.
+- **Update**: `diffReportFields(originalReportDoc, payload)` (new) compares
+  the doc as loaded (`originalReportDoc`, captured in `loadReportIntoForm()`
+  and refreshed after every save) against the new payload field-by-field —
+  scalar fields (ทะเบียน/ลูกค้า/Fleet/ประเภทงาน/เครือข่าย/IMEI/Device
+  ID/Server) by plain comparison, `checklist`/`stickers` key-by-key (with
+  Thai labels pulled from `TEMPLATES[tpl].checklist`/`STICKERS`), `problems`/
+  `fixes` index-by-index (fix rows summarized via a diff-only
+  `fixRowSummaryForDiff()`, kept separate from `fixLine()` since that one
+  depends on live `state.tpl`), and `photos` by added/removed filename. If
+  nothing actually changed (e.g. a plain resend), no log entry is written —
+  confirmed via a direct no-op save in testing.
+- **Delete**: there was no delete feature at all, so one was added —
+  admin-only, from history.html's new "ทั้งหมด (แอดมิน)" scope. Writes a
+  `{action:'delete', ...}` log entry (including `ownerTechName`/`ownerUid`
+  so the feed shows whose report it was) *before* calling
+  `qc_reports.doc(id).delete()`, so the deleted report's identity survives
+  in the log even though the doc itself is gone. Confirmed via
+  `confirm()`, same pattern as the existing duplicate-submission dialog in
+  form.html.
+
+history.html itself gained, admin-only (`role.role === 'admin'`, same gate
+`index.html` already uses for its Dashboard cards):
+- A "รายงานของฉัน / ทั้งหมด (แอดมิน)" scope toggle. "ทั้งหมด" drops the
+  `techUid` filter (`qc_reports.limit(300)`, sorted client-side like
+  before) and shows every tester's reports with an owner tag and a 🗑️
+  delete button per row.
+- A "ประวัติการเปลี่ยนแปลง" card: `qc_report_logs.orderBy('at',
+  'desc').limit(200)`, rendered as actor + action badge (เพิ่มใหม่/
+  แก้ไข/ลบ) + timestamp + subject line, with the update entries' field
+  diffs shown inline (`จาก → เป็น`, strikethrough/green).
+
+Also fixed in passing: history.html had its own separate, smaller copy of
+`TEMPLATE_LABELS`/`TEMPLATE_ICONS` that was never updated when the
+`remove` ("ถอดย้ายอุปกรณ์") template was added to form.html's `TEMPLATES`
+back in v1.33.0 — a `remove`-type report showed the generic 📄 icon and
+raw `"remove"` text in the history list. Added the missing entry (same
+📤 icon form.html's `TPL_ICON` uses).
+
+**Needs a manual Firestore Console step** before the log actually writes,
+same as `qc_reports` originally needed (see "Firestore rules for
+qc_reports" below) — add `allow read, write: if request.auth != null;` for
+the new `qc_report_logs` collection too, or every create/edit/delete will
+silently fail to log (the report itself still saves/deletes fine either
+way — `logReportChange()`/the delete path swallow their own errors to
+`console.error` rather than blocking the user-facing save).
+
+Verified with Playwright: a unit test drives form.html's actual
+`saveReport()`/`state`/`currentReportId` globals directly (create → edit →
+no-op resave) and checks the exact `qc_report_logs` payloads written,
+including the human-readable checklist diff labels; a separate test mocks
+both an admin and non-admin login against history.html, checking the scope
+toggle/change-log card are hidden for non-admins, that the admin "ทั้งหมด"
+view shows all testers' reports with owner tags and delete buttons, and
+that clicking delete writes the log entry, removes the Firestore doc, and
+refreshes both lists.
+
 ## Edit ชื่อช่าง inline from the tester roster (index.html v1.16.0)
 
 Follow-up to the songdee-stock techName/role fix (v5.94): a user set up

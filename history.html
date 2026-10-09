@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<meta name="app-version" content="1.1.0">
 <title>ประวัติรายงาน · SONGDEE GPS</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -155,19 +156,61 @@
   .page-tabs .active{
     background:rgba(255,176,32,0.16); border-color:var(--accent); color:var(--accent); cursor:default;
   }
+  .app-hidden{display:none !important;}
+  .scope-toggle{margin-bottom:14px;}
+
+  .history-item-wrap{display:flex; gap:8px; align-items:stretch; margin-bottom:10px;}
+  .history-item-wrap .history-item{flex:1; margin:0;}
+  .history-item-wrap .del-btn{
+    flex-shrink:0; width:40px; border:1px solid var(--line-soft); border-radius:var(--r-md);
+    background:var(--bg-panel-2); color:var(--danger); font-size:15px; cursor:pointer;
+    transition:background .15s ease, border-color .15s ease;
+  }
+  .history-item-wrap .del-btn:hover{background:rgba(255,92,92,.1); border-color:var(--danger);}
+  .history-item .owner{font-size:11px; color:var(--hue-purple); font-weight:600; margin-top:3px;}
+
+  .card{
+    --card-hue:var(--hue-purple);
+    position:relative; overflow:hidden;
+    background:linear-gradient(165deg, rgba(255,255,255,.025), transparent 45%), var(--bg-panel);
+    border:1px solid var(--line-soft); border-radius:var(--r-lg);
+    padding:18px; margin-top:22px;
+    box-shadow:var(--shadow-sm), var(--shadow-md);
+  }
+  .card::before{
+    content:''; position:absolute; top:0; left:0; bottom:0; width:3px;
+    background:var(--card-hue); opacity:.6;
+  }
+  .card h2{font-family:'Kanit',sans-serif; font-weight:600; font-size:15.5px; margin:0 0 12px;}
+  #changeLogRows .log-row{border:1px solid var(--line-soft); border-radius:var(--r-sm); padding:10px 12px; margin-bottom:8px; background:var(--bg-panel-2);}
+  #changeLogRows .log-head{display:flex; align-items:center; justify-content:space-between; gap:8px; font-size:12.5px; flex-wrap:wrap;}
+  #changeLogRows .log-actor{font-weight:600; color:var(--text);}
+  #changeLogRows .log-time{color:var(--text-faint); font-size:11px; font-family:'IBM Plex Mono',monospace;}
+  #changeLogRows .log-subject{font-size:12.5px; color:var(--text-dim); margin-top:5px;}
+  #changeLogRows .action-badge{font-size:10.5px; font-weight:700; padding:2px 8px; border-radius:var(--r-pill); text-transform:uppercase; letter-spacing:.03em;}
+  #changeLogRows .action-badge.create{background:rgba(61,220,151,.14); color:var(--accent-2); border:1px solid rgba(61,220,151,.3);}
+  #changeLogRows .action-badge.update{background:rgba(91,141,239,.14); color:var(--hue-blue); border:1px solid rgba(91,141,239,.3);}
+  #changeLogRows .action-badge.delete{background:rgba(255,92,92,.14); color:var(--danger); border:1px solid rgba(255,92,92,.3);}
+  #changeLogRows .diff-list{margin:8px 0 0; padding-left:0; list-style:none; font-size:12px;}
+  #changeLogRows .diff-list li{padding:5px 0; border-top:1px dashed var(--line-soft);}
+  #changeLogRows .diff-list li:first-child{border-top:none;}
+  #changeLogRows .diff-list .f-label{color:var(--text-faint); font-weight:600; display:block; margin-bottom:1px;}
+  #changeLogRows .diff-list .f-from{color:var(--danger); text-decoration:line-through; opacity:.8;}
+  #changeLogRows .diff-list .f-to{color:var(--accent-2);}
+  #changeLogRows .diff-list .f-arrow{color:var(--text-faint); margin:0 4px;}
 
   /* ลูกเล่น — matches form.html/index.html's entrance touch. Skipped
      entirely under prefers-reduced-motion, not just shortened. */
   @keyframes cardRise{ from{opacity:0; transform:translateY(10px);} to{opacity:1; transform:translateY(0);} }
-  .history-item{animation:cardRise .45s cubic-bezier(.22,.9,.32,1) backwards;}
-  .history-item:nth-child(1){animation-delay:.02s;}
-  .history-item:nth-child(2){animation-delay:.06s;}
-  .history-item:nth-child(3){animation-delay:.1s;}
-  .history-item:nth-child(4){animation-delay:.14s;}
-  .history-item:nth-child(5){animation-delay:.18s;}
-  .history-item:nth-child(6){animation-delay:.22s;}
+  .history-item-wrap{animation:cardRise .45s cubic-bezier(.22,.9,.32,1) backwards;}
+  .history-item-wrap:nth-child(1){animation-delay:.02s;}
+  .history-item-wrap:nth-child(2){animation-delay:.06s;}
+  .history-item-wrap:nth-child(3){animation-delay:.1s;}
+  .history-item-wrap:nth-child(4){animation-delay:.14s;}
+  .history-item-wrap:nth-child(5){animation-delay:.18s;}
+  .history-item-wrap:nth-child(6){animation-delay:.22s;}
   @media (prefers-reduced-motion: reduce){
-    .history-item{animation:none !important;}
+    .history-item-wrap{animation:none !important;}
   }
 
   /* จอกว้าง: 640px แคบเกินไป ดูเหมือนแอพมือถือลอยกลางจอเปล่าๆ ขยายเนื้อหา
@@ -177,7 +220,7 @@
        เฉยๆแล้วเหลือขอบว่างโล่งๆ ทั้งสองข้างบนจอที่ใหญ่กว่านั้นมาก */
     .header-inner, main{max-width:min(1400px, 94vw);}
     #list{display:grid; grid-template-columns:repeat(auto-fill, minmax(300px,1fr)); gap:10px;}
-    .history-item{margin-bottom:0;}
+    .history-item-wrap{margin-bottom:0;}
     .date-group{grid-column:1 / -1;}
   }
 </style>
@@ -206,7 +249,15 @@
 </header>
 
 <main>
+  <div class="page-tabs scope-toggle app-hidden" id="scopeToggle">
+    <span class="tab active" id="scopeMine" onclick="setScope('mine')">รายงานของฉัน</span>
+    <span class="tab" id="scopeAll" onclick="setScope('all')">ทั้งหมด (แอดมิน)</span>
+  </div>
   <div id="list" class="loading">กำลังตรวจสอบสิทธิ์...</div>
+  <div class="card app-hidden" id="changeLogCard">
+    <h2>ประวัติการเปลี่ยนแปลง (แอดมิน)</h2>
+    <div id="changeLogRows" class="loading">กำลังโหลด...</div>
+  </div>
 </main>
 
 <script>
@@ -222,8 +273,13 @@ firebase.initializeApp(FIREBASE_CONFIG);
 const _auth = firebase.auth();
 const _db = firebase.firestore();
 
-const TEMPLATE_LABELS = { upgrade:"อัปเกรด", new_install:"ติดตั้งใหม่", repair:"ซ่อม" };
-const TEMPLATE_ICONS = { upgrade:"⬆️", new_install:"✨", repair:"🛠️" };
+const TEMPLATE_LABELS = { upgrade:"อัปเกรด", new_install:"ติดตั้งใหม่", repair:"ซ่อม", remove:"ถอดย้ายอุปกรณ์" };
+const TEMPLATE_ICONS = { upgrade:"⬆️", new_install:"✨", repair:"🛠️", remove:"📤" };
+const ACTION_LABELS = { create:"เพิ่มใหม่", update:"แก้ไข", delete:"ลบ" };
+
+let currentUser = null;
+let isAdmin = false;
+let viewScope = 'mine'; // 'mine' | 'all' (admin only)
 
 function escapeHtmlLite(s){
   return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -253,25 +309,71 @@ _auth.onAuthStateChanged(async user=>{
       listEl.innerHTML = '<div class="err">บัญชีนี้ยังไม่ได้กำหนดชื่อช่าง กรุณาให้แอดมินตั้งค่าในระบบ Stock ก่อน</div>';
       return;
     }
+    currentUser = user;
+    isAdmin = role.role === 'admin';
     document.getElementById('testerName').textContent = role.techName;
     document.getElementById('testerBar').style.display = 'flex';
     document.getElementById('pageTabs').style.display = 'flex';
 
-    renderSkeleton(listEl, 4);
-    // where()+orderBy() on different fields needs a composite index we don't
-    // have — filter by techUid only, sort client-side instead.
-    const snap = await _db.collection('qc_reports')
-      .where('techUid', '==', user.uid)
-      .limit(200)
-      .get();
-    const list = snap.docs
-      .map(d=>({id:d.id, ...d.data()}))
-      .sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
-    renderList(list);
+    if(isAdmin){
+      document.getElementById('scopeToggle').classList.remove('app-hidden');
+      document.getElementById('changeLogCard').classList.remove('app-hidden');
+      loadChangeLog();
+    }
+    await loadReports();
   }catch(e){
     listEl.innerHTML = `<div class="err">โหลดประวัติไม่สำเร็จ: ${escapeHtmlLite(e.message)}</div>`;
   }
 });
+
+function setScope(scope){
+  if(scope === viewScope) return;
+  viewScope = scope;
+  document.getElementById('scopeMine').classList.toggle('active', scope === 'mine');
+  document.getElementById('scopeAll').classList.toggle('active', scope === 'all');
+  loadReports();
+}
+
+// where()+orderBy() on different fields needs a composite index we don't
+// have — filter server-side (or not at all for the admin "all" view), sort
+// client-side instead.
+async function loadReports(){
+  const listEl = document.getElementById('list');
+  renderSkeleton(listEl, 4);
+  try{
+    const showAll = isAdmin && viewScope === 'all';
+    const query = showAll
+      ? _db.collection('qc_reports').limit(300)
+      : _db.collection('qc_reports').where('techUid', '==', currentUser.uid).limit(200);
+    const snap = await query.get();
+    const list = snap.docs
+      .map(d=>({id:d.id, ...d.data()}))
+      .sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
+    renderList(list, showAll);
+  }catch(e){
+    listEl.innerHTML = `<div class="err">โหลดประวัติไม่สำเร็จ: ${escapeHtmlLite(e.message)}</div>`;
+  }
+}
+
+async function deleteReportAsAdmin(doc){
+  const tplLabel = TEMPLATE_LABELS[doc.tpl] || doc.tpl || '';
+  const ok = confirm(`ลบรายงานนี้ทิ้งหรือไม่?\n\n${tplLabel} · ${doc.customer||''} · ทะเบียน ${doc.plate||'-'}\nผู้ทดสอบ: ${doc.techName||'-'}\n\nการลบไม่สามารถย้อนกลับได้ (แต่จะถูกบันทึกไว้ในประวัติการเปลี่ยนแปลง)`);
+  if(!ok) return;
+  try{
+    await _db.collection('qc_report_logs').add({
+      reportId: doc.id, action: 'delete', at: Date.now(),
+      actorUid: currentUser.uid, actorName: (document.getElementById('testerName').textContent || ''),
+      tpl: doc.tpl || '', customer: doc.customer || '', fleet: doc.fleet || '', plate: doc.plate || '',
+      ownerTechName: doc.techName || '', ownerUid: doc.techUid || '',
+      changes: [],
+    });
+    await _db.collection('qc_reports').doc(doc.id).delete();
+    await loadReports();
+    loadChangeLog();
+  }catch(e){
+    alert('ลบไม่สำเร็จ: ' + e.message);
+  }
+}
 
 // "วันนี้"/"เมื่อวาน" instead of a bare date — doc.date is already YYYY-MM-DD
 // (same format used to build today's/yesterday's comparison strings), so a
@@ -285,7 +387,7 @@ function relativeDateLabel(dateStr){
   return dateStr.split('-').reverse().join('/');
 }
 
-function renderList(list){
+function renderList(list, showAdmin){
   const listEl = document.getElementById('list');
   if(!list.length){
     listEl.innerHTML = '<div class="empty">ยังไม่มีรายงาน</div>';
@@ -305,11 +407,79 @@ function renderList(list){
     }
     const tplLabel = TEMPLATE_LABELS[doc.tpl] || doc.tpl || '';
     const tplIcon = TEMPLATE_ICONS[doc.tpl] || '📄';
+    const wrap = document.createElement('div');
+    wrap.className = 'history-item-wrap';
     const a = document.createElement('a');
     a.className = 'history-item' + (doc.tpl ? ' tpl-' + doc.tpl : '');
     a.href = `form.html?report=${encodeURIComponent(doc.id)}`;
-    a.innerHTML = `<div class="hi-row"><div class="hi-icon">${tplIcon}</div><div class="hi-text"><div class="title">${escapeHtmlLite(tplLabel)} ${escapeHtmlLite(doc.customer||'')}</div><div class="meta">ทะเบียน: ${escapeHtmlLite(doc.plate||'-')}</div></div></div>`;
-    listEl.appendChild(a);
+    const ownerLine = showAdmin ? `<div class="owner">ผู้ทดสอบ: ${escapeHtmlLite(doc.techName||'-')}</div>` : '';
+    a.innerHTML = `<div class="hi-row"><div class="hi-icon">${tplIcon}</div><div class="hi-text"><div class="title">${escapeHtmlLite(tplLabel)} ${escapeHtmlLite(doc.customer||'')}</div><div class="meta">ทะเบียน: ${escapeHtmlLite(doc.plate||'-')}</div>${ownerLine}</div></div>`;
+    wrap.appendChild(a);
+    if(showAdmin){
+      const delBtn = document.createElement('button');
+      delBtn.className = 'del-btn';
+      delBtn.type = 'button';
+      delBtn.title = 'ลบรายงาน';
+      delBtn.textContent = '🗑️';
+      delBtn.onclick = (e)=>{ e.preventDefault(); deleteReportAsAdmin(doc); };
+      wrap.appendChild(delBtn);
+    }
+    listEl.appendChild(wrap);
+  });
+}
+
+function formatLogTime(ts){
+  if(!ts) return '-';
+  const d = new Date(ts);
+  const pad = n => String(n).padStart(2,'0');
+  return `${pad(d.getDate())}/${pad(d.getMonth()+1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+async function loadChangeLog(){
+  const wrap = document.getElementById('changeLogRows');
+  renderSkeleton(wrap, 3);
+  try{
+    const snap = await _db.collection('qc_report_logs').orderBy('at', 'desc').limit(200).get();
+    const rows = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    renderChangeLog(rows);
+  }catch(e){
+    wrap.className = 'err';
+    wrap.textContent = 'โหลดประวัติการเปลี่ยนแปลงไม่สำเร็จ: ' + e.message;
+  }
+}
+
+function renderChangeLog(rows){
+  const wrap = document.getElementById('changeLogRows');
+  if(!rows.length){
+    wrap.className = 'empty';
+    wrap.textContent = 'ยังไม่มีการเปลี่ยนแปลง';
+    return;
+  }
+  wrap.className = '';
+  wrap.innerHTML = '';
+  rows.forEach(r=>{
+    const tplLabel = TEMPLATE_LABELS[r.tpl] || r.tpl || '';
+    const actionLabel = ACTION_LABELS[r.action] || r.action || '';
+    const row = document.createElement('div');
+    row.className = 'log-row';
+    const subjectBits = [tplLabel, r.customer, r.plate ? `ทะเบียน ${r.plate}` : ''].filter(Boolean).join(' · ');
+    const ownerNote = r.action === 'delete' && r.ownerTechName ? ` (ของ ${escapeHtmlLite(r.ownerTechName)})` : '';
+    let diffHtml = '';
+    if(r.action === 'update' && Array.isArray(r.changes) && r.changes.length){
+      diffHtml = '<ul class="diff-list">' + r.changes.map(c=>
+        `<li><span class="f-label">${escapeHtmlLite(c.label)}</span><span class="f-from">${escapeHtmlLite(c.from)}</span><span class="f-arrow">→</span><span class="f-to">${escapeHtmlLite(c.to)}</span></li>`
+      ).join('') + '</ul>';
+    }
+    row.innerHTML = `
+      <div class="log-head">
+        <span class="log-actor">${escapeHtmlLite(r.actorName||'-')}</span>
+        <span class="action-badge ${escapeHtmlLite(r.action||'')}">${escapeHtmlLite(actionLabel)}</span>
+        <span class="log-time">${formatLogTime(r.at)}</span>
+      </div>
+      <div class="log-subject">${escapeHtmlLite(subjectBits)}${ownerNote}</div>
+      ${diffHtml}
+    `;
+    wrap.appendChild(row);
   });
 }
 </script>
