@@ -57,6 +57,36 @@ machines/sessions (not just in chat history).
     the one production endpoint before/after deploying (it's a
     read-only lookup, no write-path risk).
 
+## Edit ชื่อช่าง inline from the tester roster (index.html v1.16.0)
+
+Follow-up to the songdee-stock techName/role fix (v5.94): a user set up
+an account with role="แอดมิน" in Stock's user manager, and because that
+UI used to hide/clear the techName field for any role other than
+"ช่าง"/"กำหนดเอง", several other accounts (รายชื่อผู้ทดสอบ card showed
+them) were stuck with no techName — and since this app's own login
+check only cares about `role.techName`, not `role.role`, those accounts
+couldn't log in at all. The admin asked whether this could be fixed
+directly from this card instead of going back to songdee-stock each
+time.
+
+`loadTesterRoster()` (the admin-only "รายชื่อผู้ทดสอบ" card on the
+Dashboard) was read-only — it just rendered each `roles/{uid}` doc's
+email/techName/role as plain text, with a red "ยังไม่ผูกชื่อช่าง" label
+for anyone missing one. Replaced the static techName text with an
+editable `<input>` per row, writing straight back to that same
+`roles/{uid}.techName` field (same Firestore project/collection this
+app already reads from for login — no new backend needed) on blur,
+skipping the write entirely if the value didn't change. Enter key also
+blurs/saves. Status line ("กำลังบันทึก.../บันทึกแล้ว ✓/บันทึกไม่สำเร็จ")
+reuses the same `.name-map-status` pattern the "จัดการชื่อช่าง" card
+right below it already uses, for consistency.
+
+Verified via Playwright: card renders one editable input per user with
+the current techName (or the red placeholder when empty); editing and
+blurring a previously-empty field writes exactly the expected
+`{techName: "..."}` to the correct uid and shows the success status;
+blurring an unchanged field triggers no extra write.
+
 ## Fix: dropdown clipped/hidden by its own card (v1.36.1)
 
 Follow-up bug report on v1.36.0's fix: "dropdown โดนบังมองไม่เห็น" — the

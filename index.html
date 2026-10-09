@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>Dashboard · SONGDEE GPS</title>
-<meta name="app-version" content="1.15.0">
+<meta name="app-version" content="1.16.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -403,6 +403,12 @@
      แต่ยอมตกไปบรรทัดถัดไปทั้งกลุ่มแทนที่จะบีบตัวเอง */
   .tester-roster-row .email{font-size:13px; color:var(--text); flex:1 1 180px; min-width:0; overflow-wrap:break-word;}
   .tester-roster-row .tech{font-size:13px; color:var(--accent-2); font-weight:600; text-align:right; flex-shrink:0; white-space:nowrap;}
+  .tester-roster-tech-input{
+    font-size:13px; font-weight:600; text-align:right; color:var(--accent-2);
+    flex:0 1 160px; min-width:110px; margin:0; background:var(--bg-input); border:1px solid var(--line);
+    border-radius:var(--r-sm); padding:6px 9px; box-shadow:inset 0 1px 2px rgba(0,0,0,.25);
+  }
+  .tester-roster-tech-input::placeholder{color:var(--danger); opacity:.85;}
   .tester-roster-row .role-badge{
     font-size:10px; text-transform:uppercase; letter-spacing:.06em;
     padding:3px 8px; border-radius:var(--r-pill); background:var(--bg-panel-2); color:var(--text-dim);
@@ -541,8 +547,9 @@
 <main>
   <div class="card app-hidden" id="testerRosterCard">
     <div class="card-title"><span class="dot">👤</span>รายชื่อผู้ทดสอบ</div>
-    <div class="admin-hint">บัญชีที่ล็อกอินเข้าระบบนี้ (อีเมล) และชื่อช่างที่ใช้ทดสอบของแต่ละคน</div>
+    <div class="admin-hint">บัญชีที่ล็อกอินเข้าระบบนี้ (อีเมล) และชื่อช่างที่ใช้ทดสอบของแต่ละคน — แก้ชื่อตรงนี้ได้เลย พิมพ์แล้วคลิกออกนอกช่องเพื่อบันทึก (ไม่ต้องไปที่ songdee-stock)</div>
     <div id="testerRosterRows" class="loading">กำลังโหลด...</div>
+    <div class="name-map-status" id="testerRosterStatus"></div>
   </div>
 
   <div class="card app-hidden" id="adminNameMapCard">
@@ -931,7 +938,7 @@ async function loadTesterRoster(){
   renderSkeleton(wrap, 2);
   try{
     const snap = await _db.collection('roles').get();
-    const rows = snap.docs.map(d=>d.data());
+    const rows = snap.docs.map(d=>({id: d.id, ...d.data()}));
     rows.sort((a,b)=>(a.techName||a.email||'').localeCompare(b.techName||b.email||''));
     if(!rows.length){
       wrap.className = 'empty';
@@ -939,19 +946,56 @@ async function loadTesterRoster(){
       return;
     }
     wrap.className = '';
-    wrap.innerHTML = rows.map(r=>{
-      const tech = r.techName
-        ? escapeHtmlLite(r.techName)
-        : '<span style="color:var(--danger)">ยังไม่ผูกชื่อช่าง</span>';
-      return `<div class="tester-roster-row">
-        <span class="email">${escapeHtmlLite(r.email || '(ไม่มีอีเมล)')}</span>
-        <span class="tech">${tech}</span>
-        <span class="role-badge">${escapeHtmlLite(r.role || '-')}</span>
-      </div>`;
-    }).join('');
+    wrap.innerHTML = '';
+    rows.forEach(r=>{
+      const row = document.createElement('div');
+      row.className = 'tester-roster-row';
+
+      const email = document.createElement('span');
+      email.className = 'email'; email.textContent = r.email || '(ไม่มีอีเมล)';
+
+      // แก้ไขชื่อช่างตรงนี้ได้เลย (เขียนกลับไปที่ roles/{uid}.techName ใน
+      // songdee-stock — collection เดียวกับที่หน้า login เช็คอยู่แล้ว) แทนที่
+      // จะเป็นแค่ข้อความ "ยังไม่ผูกชื่อช่าง" ที่ต้องออกไปแก้ที่ songdee-stock
+      // เอง — บันทึกตอนคลิกออกนอกช่อง (onblur) เหมือนรูปแบบของการ์ด "จัดการ
+      // ชื่อช่าง" ด้านล่างนี้ ข้ามการบันทึกถ้าค่าไม่เปลี่ยนเพื่อลด write ที่ไม่จำเป็น
+      const techInput = document.createElement('input');
+      techInput.type = 'text';
+      techInput.className = 'tester-roster-tech-input';
+      techInput.value = r.techName || '';
+      techInput.placeholder = 'ยังไม่ผูกชื่อช่าง';
+      techInput.dataset.orig = r.techName || '';
+      techInput.onblur = ()=>{
+        const val = techInput.value.trim();
+        if(val === techInput.dataset.orig) return;
+        techInput.dataset.orig = val;
+        persistTesterTechName(r.id, val);
+      };
+      techInput.onkeydown = (e)=>{ if(e.key==='Enter') techInput.blur(); };
+
+      const badge = document.createElement('span');
+      badge.className = 'role-badge'; badge.textContent = r.role || '-';
+
+      row.appendChild(email); row.appendChild(techInput); row.appendChild(badge);
+      wrap.appendChild(row);
+    });
   }catch(e){
     wrap.className = 'err';
     wrap.textContent = 'โหลดรายชื่อไม่สำเร็จ: ' + e.message;
+  }
+}
+
+async function persistTesterTechName(uid, techName){
+  const statusEl = document.getElementById('testerRosterStatus');
+  statusEl.textContent = 'กำลังบันทึก...';
+  statusEl.className = 'name-map-status';
+  try{
+    await _db.collection('roles').doc(uid).set({techName}, {merge:true});
+    statusEl.textContent = 'บันทึกแล้ว ✓';
+    statusEl.className = 'name-map-status ok';
+  }catch(e){
+    statusEl.textContent = 'บันทึกไม่สำเร็จ: ' + e.message;
+    statusEl.className = 'name-map-status err';
   }
 }
 
