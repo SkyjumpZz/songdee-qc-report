@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.37.0">
+<meta name="app-version" content="1.38.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -1235,13 +1235,16 @@ async function loadPlateSuggestions(){
   }
 }
 
-// ชื่อลูกค้า / Fleet autocomplete — pulled from this app's own report
-// history (qc_reports) plus every customer name in Admin web's own
-// "assignments" collection (not just the currently-picked technician's —
-// a customer can be typed by any tech). Still free text either way (a
-// brand-new customer not seen before can always just be typed); the
-// dropdown only suggests names seen before so the same one doesn't need
-// retyping from scratch every time.
+// ชื่อลูกค้า / Fleet autocomplete — primary source is Stock's own master
+// lists (sd:customers / sd:fleet in the shared "sd" collection — same
+// project, same doc shape Stock's sg()/ss() use: {v: JSON.stringify(...)}
+// under doc id "sd_customers"/"sd_fleet", colons swapped for underscores
+// same as Stock's own _id()). Unioned with this app's own report history
+// (qc_reports) and every customer name in Admin web's "assignments"
+// collection, so nothing already typed here disappears just because it
+// isn't (yet) in Stock's list. Still free text either way — a brand-new
+// name not seen anywhere can always just be typed; the dropdown only
+// suggests names seen before so the same one doesn't need retyping.
 let customerSuggestions = [];
 let fleetSuggestions = [];
 // Same race as plateSuggestions above: wire immediately (reads the live
@@ -1258,6 +1261,20 @@ const renderFleetSuggest = wireSuggestInput('jobFleet', 'jobFleetSuggestions', (
 async function loadCustomerFleetSuggestions(){
   const customers = new Set();
   const fleets = new Set();
+  try{
+    const snap = await _db.collection('sd').doc('sd_customers').get();
+    const list = snap.exists ? JSON.parse(snap.data().v || '[]') : [];
+    list.forEach(c=>{ if(c && c.trim()) customers.add(c.trim()); });
+  }catch(e){
+    console.error('[Customer/Fleet suggestions] sd_customers', e);
+  }
+  try{
+    const snap = await _db.collection('sd').doc('sd_fleet').get();
+    const list = snap.exists ? JSON.parse(snap.data().v || '[]') : [];
+    list.forEach(f=>{ if(f && f.trim()) fleets.add(f.trim()); });
+  }catch(e){
+    console.error('[Customer/Fleet suggestions] sd_fleet', e);
+  }
   try{
     const snap = await _db.collection('qc_reports').orderBy('createdAt', 'desc').limit(500).get();
     snap.docs.forEach(d=>{

@@ -57,6 +57,33 @@ machines/sessions (not just in chat history).
     the one production endpoint before/after deploying (it's a
     read-only lookup, no write-path risk).
 
+## ชื่อลูกค้า/Fleet dropdown now pulls from Stock's own lists (form.html v1.38.0)
+
+User asked for ชื่อลูกค้า/Fleet suggestions to come from songdee-stock
+directly ("เอาข้อมูลมาจาก web stock เลย") instead of only this app's own
+`qc_reports` history, which only ever had whatever had already been typed
+here before — missing Stock's much larger, deliberately-maintained
+`CUSTOMERS` list, and not using Stock's `FLEET` list at all.
+
+`loadCustomerFleetSuggestions()` now also reads `sd_customers`/`sd_fleet`
+docs from the shared `sd` Firestore collection (same project, same doc
+shape Stock's own `sg()`/`ss()` helpers use — `{v: JSON.stringify(list)}`,
+colons swapped for underscores in the doc id, same as Stock's `_id()`) and
+unions them with the existing qc_reports-history and Admin
+assignments-collection sources, so nothing already typed here disappears.
+
+**Needed a matching change in songdee-stock** (separate PR): `FLEET` was
+never actually persisted to Firestore there — just an in-memory default
+array — so `sd_fleet` didn't exist yet for this app to read. Added
+seed-on-first-load persistence there (`sd:fleet`, same pattern
+`sd:importtotals` already uses), mirroring how `CUSTOMERS`/`sd:customers`
+already worked.
+
+Verified with a Playwright unit test driving `loadCustomerFleetSuggestions()`
+directly against mocked `sd`/`qc_reports`/`assignments` collections: the
+resulting `customerSuggestions`/`fleetSuggestions` arrays contain names
+from all sources, unioned.
+
 ## Admin change-history + delete (history.html v1.1.0, form.html v1.37.0)
 
 User asked whether the ประวัติ (history) page could show everything that's
