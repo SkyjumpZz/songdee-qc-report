@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.38.0">
+<meta name="app-version" content="1.39.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -1604,6 +1604,13 @@ async function saveReport(){
     mdvrImei: state.mdvrImei || '', mdvrDeviceId: state.mdvrDeviceId || '', mdvrServer: state.mdvrServer || '',
     network: state.network || '',
     techUid: tester.uid, techName: tester.techName,
+    // Which Admin-app assignment (if any) this report is for — lets Admin
+    // check whether a job it marked "done" actually has a QC report.
+    // Falls back to whatever the doc already had: loadReportIntoForm()
+    // clears selectedAssignmentId on open (it's "which job was picked this
+    // session", not a property of the loaded report), so re-saving an
+    // edit without re-picking a job must not blank out the original link.
+    assignmentId: selectedAssignmentId || (originalReportDoc && originalReportDoc.assignmentId) || null,
     updatedAt: Date.now(),
   };
   const changes = (currentReportId && originalReportDoc) ? diffReportFields(originalReportDoc, payload) : [];

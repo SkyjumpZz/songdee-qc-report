@@ -57,6 +57,27 @@ machines/sessions (not just in chat history).
     the one production endpoint before/after deploying (it's a
     read-only lookup, no write-path risk).
 
+## Save which Admin assignment a report is for (form.html v1.39.0)
+
+Follow-up to a recommendations review of the whole system: Admin's own
+"มอบหมายงาน" assignments and this app's qc_reports had no durable link
+between them. `selectedAssignmentId` was already tracked locally (set
+when a tech picks a job from Admin's list to prefill ทะเบียน/ลูกค้า) but
+never saved into the report document — so there was no way to check
+afterward whether a given Admin job actually got a QC report, or which
+report belonged to which job.
+
+`saveReport()`'s payload now includes `assignmentId`. Careful with edits:
+`loadReportIntoForm()` resets `selectedAssignmentId` to null on open (it
+means "which job was picked THIS session", not a property of the loaded
+report) — so a plain edit-and-resave without re-picking a job would have
+blanked out the original link via `.set(payload, {merge:true})`. Falls
+back to `originalReportDoc.assignmentId` (the doc as loaded) whenever
+nothing was freshly picked, so re-saving an edit preserves it. Verified
+with a Playwright test: create-with-assignment → reopen for edit (confirms
+`selectedAssignmentId` really does reset to null) → edit an unrelated
+field → resave → `assignmentId` still intact.
+
 ## ชื่อลูกค้า/Fleet dropdown now pulls from Stock's own lists (form.html v1.38.0)
 
 User asked for ชื่อลูกค้า/Fleet suggestions to come from songdee-stock
