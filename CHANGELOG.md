@@ -57,6 +57,47 @@ machines/sessions (not just in chat history).
     the one production endpoint before/after deploying (it's a
     read-only lookup, no write-path risk).
 
+## Pick which MDVR channel (CH) each new-install camera is on (form.html v1.43.0)
+
+User: when going to an install job, need to pick which CH a camera is
+wired to, so the tracking system can match it correctly.
+
+Investigated songdee-vehicle-lookup's worker.js (added read access this
+session to check) to find the real mechanism rather than guess: the
+"MDVR Tracking" sheet already has fixed `Ch1`..`Ch9` columns
+(`EQUIPMENT_COLUMNS`), already used for the "รุ่นเก่าที่เปลี่ยน" dropdown on
+replacement jobs — but `buildSheetUpdates()` only ever populates that
+dropdown-replacement path (`tplHasOldModel(state.tpl)`, which is false
+for `new_install`), and `/mdvr-install`'s own handler only ever writes
+plate/deviceId/server/customer/date/technician — neither path ever
+touches `Ch1`-`Ch9` for a brand-new install. So a fresh camera install
+had no route to the sheet's channel columns at all.
+
+Fix is entirely in this app, no Worker change needed — `/update`
+(songdee-vehicle-lookup) already takes generic `{column, value}` pairs,
+the same endpoint `pushSheetUpdates()` already calls for the replacement
+case. Added, ติดตั้งใหม่ only:
+- Each fix row gets an optional "Ch1".."Ch9" picker (not every row is a
+  camera, so nothing's forced) — confirmed with user: no preset
+  restriction on which product names need a channel vs not, left to the
+  tech's own judgment per row rather than guessing from the product
+  catalog.
+- `buildSheetUpdates()` gained a second path (only one ever runs per
+  report, `tplHasOldModel` vs `new_install` are mutually exclusive):
+  for new_install, any fix row with a channel picked sends
+  `{column: row.ch, value: productName}`.
+- `fixLine()` shows the picked channel inline (e.g. "ทำการติดตั้ง กล้อง AI
+  x1 (Ch3)"), and it's included in the admin change-log diff
+  (`fixRowSummaryForDiff()`) same as every other fix-row field.
+
+Verified with Playwright: the channel picker only renders for
+new_install (not upgrade/repair/remove — those still show the unrelated
+pre-existing "รุ่นเก่าที่เปลี่ยน" select, confirmed by inspecting its actual
+option list rather than just a select count); picking a channel updates
+`row.ch`, flows into `fixLine()`'s text and `buildSheetUpdates()`'s
+output; no update is sent when left blank; the pre-existing
+old-model-replacement write-back path is unaffected (regression-checked).
+
 ## 3 fixes from one batch of screenshots: qty default, free-text IMEI, new install-detail card (form.html v1.42.0)
 
 **จำนวนตั้งต้นที่ 1**: `renderFixRows()`'s product-picker `onchange` used to

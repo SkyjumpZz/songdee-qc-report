@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.42.0">
+<meta name="app-version" content="1.43.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -1579,6 +1579,7 @@ function fixRowSummaryForDiff(row){
   if(row.newSN) parts.push(`SN:${row.newSN}`);
   if(row.oldModel) parts.push(`เดิม:${row.oldModel === 'อื่นๆ (พิมพ์เอง)' ? (row.oldModelCustom||'') : row.oldModel}`);
   if(row.oldSN) parts.push(`SNเดิม:${row.oldSN}`);
+  if(row.ch) parts.push(`CH:${row.ch}`);
   return parts.join(' ') || '(ว่าง)';
 }
 const REPORT_FIELD_LABELS = {
@@ -1692,7 +1693,7 @@ function loadReportIntoForm(doc){
     fleet: doc.fleet || '',
     plate: doc.plate || '',
     problems: (doc.problems && doc.problems.length) ? doc.problems : [{symptom:''}],
-    fixes: (doc.fixes && doc.fixes.length) ? doc.fixes : [{product:'', qty:1, custom:'', oldModel:'', oldModelCustom:'', newSN:'', oldSN:''}],
+    fixes: (doc.fixes && doc.fixes.length) ? doc.fixes : [{product:'', qty:1, custom:'', oldModel:'', oldModelCustom:'', newSN:'', oldSN:'', ch:''}],
     stickers: doc.stickers || {},
     checklist: doc.checklist || {},
     photos: (doc.photos || []).map(p=> ({
@@ -1811,6 +1812,12 @@ const DEVICE_TYPE_BY_PRODUCT = {
   "DMS V.3": "dms",
 };
 
+// ต้องตรงตัวอักษรกับหัวคอลัมน์ "Ch1".."Ch9" ในชีต MDVR Tracking เป๊ะ (ดู
+// EQUIPMENT_COLUMNS ใน songdee-vehicle-lookup/src/worker.js) — ส่งกลับไป
+// เขียนชีตผ่าน /update ตอนติดตั้งใหม่ (buildSheetUpdates()) เพื่อให้ระบบ
+// Track รู้ว่ากล้อง/อุปกรณ์แต่ละตัวต่อช่องไหน
+const MDVR_CHANNEL_OPTIONS = ['Ch1','Ch2','Ch3','Ch4','Ch5','Ch6','Ch7','Ch8','Ch9'];
+
 const STATUS_OPTS = {
   sticker: ["-- เลือกผล --","ติดเรียบร้อย","ลูกค้าไม่ให้ติด"]
 };
@@ -1919,7 +1926,7 @@ function defaultState(){
     fleet: "",
     plate: "",
     problems: [{symptom:""}],
-    fixes: [{product:"", qty:1, custom:"", oldModel:"", oldModelCustom:"", newSN:"", oldSN:""}],
+    fixes: [{product:"", qty:1, custom:"", oldModel:"", oldModelCustom:"", newSN:"", oldSN:"", ch:""}],
     stickers: {},
     checklist: {},
     photos: [],
@@ -2022,7 +2029,7 @@ function renderProblemRows(){
 }
 
 function addFixRow(){
-  state.fixes.push({product:"", qty:1, custom:"", oldModel:"", oldModelCustom:"", newSN:"", oldSN:""});
+  state.fixes.push({product:"", qty:1, custom:"", oldModel:"", oldModelCustom:"", newSN:"", oldSN:"", ch:""});
   renderFixRows();
   updatePreview();
 }
@@ -2140,6 +2147,24 @@ function renderFixRows(){
 
     line.appendChild(sel); line.appendChild(qty); line.appendChild(rm);
     wrap.appendChild(line);
+
+    // ติดตั้งใหม่ only — เลือก CH (Ch1-Ch9) ที่กล้อง/อุปกรณ์แต่ละแถวต่ออยู่
+    // จริงหน้างาน ไม่บังคับเลือก (ไม่ใช่ทุกแถวเป็นกล้อง) ส่งกลับไปเขียนชีต
+    // MDVR Tracking คอลัมน์ตรงช่องนั้นให้ ดู buildSheetUpdates()
+    if(state.tpl === 'new_install'){
+      const chSel = document.createElement('select');
+      chSel.style.marginTop = '6px';
+      const chBlank = document.createElement('option');
+      chBlank.value=''; chBlank.textContent='-- ไม่ระบุช่อง (CH) --'; chSel.appendChild(chBlank);
+      MDVR_CHANNEL_OPTIONS.forEach(ch=>{
+        const o = document.createElement('option');
+        o.value=ch; o.textContent=ch;
+        if(ch===row.ch) o.selected=true;
+        chSel.appendChild(o);
+      });
+      chSel.onchange = ()=>{ row.ch = chSel.value; updatePreview(); };
+      wrap.appendChild(chSel);
+    }
 
     if(!locked && row.product === "อื่นๆ (พิมพ์เอง)"){
       const custom = document.createElement('input');
@@ -2516,30 +2541,44 @@ function fixLine(row){
     : "";
   const newTag = (DEVICE_TYPE_BY_PRODUCT[row.product] && row.newSN) ? ` (SN: ${row.newSN})` : '';
   const oldTag = (tplHasOldModel(state.tpl) && DEVICE_TYPE_BY_PRODUCT[row.oldModel] && row.oldSN) ? ` (SN เดิม: ${row.oldSN})` : '';
-  if(oldName && name) return `- ทำการเปลี่ยน ${oldName}${oldTag} เป็น ${name}${newTag}`;
+  const chTag = (state.tpl === 'new_install' && row.ch) ? ` (${row.ch})` : '';
+  if(oldName && name) return `- ทำการเปลี่ยน ${oldName}${oldTag} เป็น ${name}${newTag}${chTag}`;
   if(name){
     const qty = row.qty ? ` x${row.qty}` : '';
-    return `- ทำการติดตั้ง ${name}${qty}${newTag}`;
+    return `- ทำการติดตั้ง ${name}${qty}${newTag}${chTag}`;
   }
   if(oldName) return `- ทำการถอด ${oldName}${oldTag}`;
   return null;
 }
 
-// Sheet write-back — only for fix rows where รุ่นเก่า was picked from the
-// "จากประวัติทะเบียนนี้" group, because only then do we know which sheet
-// column to overwrite (the label carries its source column). Rows using a
-// generic PRODUCTS oldModel are skipped — we can't tell which cell they map
-// to. New value written = the newly installed product name.
+// Sheet write-back — two sources, never both (a report is one job type):
+// 1) รุ่นเก่า picked from the "จากประวัติทะเบียนนี้" group — only then do we
+//    know which sheet column to overwrite (the label carries its source
+//    column). Rows using a generic PRODUCTS oldModel are skipped — we
+//    can't tell which cell they map to.
+// 2) ติดตั้งใหม่: no "old model" to infer a column from (nothing there to
+//    replace), so the CH picked per row (see renderFixRows()) IS the
+//    column — otherwise a brand-new camera install never reached the
+//    sheet's Ch1-Ch9 columns at all, since case 1 never applies here.
+// New value written in both = the newly installed product name.
 function buildSheetUpdates(){
-  if(!tplHasOldModel(state.tpl)) return []; // this job type doesn't log an old model to swap
   const updates = [];
-  state.fixes.forEach(row=>{
-    const src = vehicleOldModels.find(m=> m.label === row.oldModel);
-    if(!src) return;
-    const newName = row.product === "อื่นๆ (พิมพ์เอง)" ? (row.custom || "") : row.product;
-    if(!newName) return;
-    updates.push({ column: src.column, value: newName });
-  });
+  if(tplHasOldModel(state.tpl)){
+    state.fixes.forEach(row=>{
+      const src = vehicleOldModels.find(m=> m.label === row.oldModel);
+      if(!src) return;
+      const newName = row.product === "อื่นๆ (พิมพ์เอง)" ? (row.custom || "") : row.product;
+      if(!newName) return;
+      updates.push({ column: src.column, value: newName });
+    });
+  } else if(state.tpl === 'new_install'){
+    state.fixes.forEach(row=>{
+      if(!row.ch) return;
+      const newName = row.product === "อื่นๆ (พิมพ์เอง)" ? (row.custom || "") : row.product;
+      if(!newName) return;
+      updates.push({ column: row.ch, value: newName });
+    });
+  }
   return updates;
 }
 
