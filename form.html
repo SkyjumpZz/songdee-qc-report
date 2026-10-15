@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.43.0">
+<meta name="app-version" content="1.43.1">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -3022,9 +3022,34 @@ async function sendToLine(){
     catch(e){ saveError = e; console.error('[Report save]', e); }
     let saveSuffix = (saveError ? ` (บันทึกลง database ไม่สำเร็จ: ${saveError.message})` : '') + photoSuffix;
 
+    // ติดตั้งใหม่: write the picked MDVR unit's plate/Device ID/Server (and
+    // customer/date/technician) into the MDVR Tracking sheet. No-ops for
+    // every other job type, or if no IMEI was picked.
+    //
+    // MUST run before pushSheetUpdates() below — this is what writes the
+    // plate into that MDVR row's "Vehicle No." cell for the very first
+    // time on a brand-new install. updateVehicle() (pushSheetUpdates'
+    // endpoint) finds its row BY PLATE, so on a true new install that
+    // plate cell is still empty until this runs; calling them in the
+    // other order made pushSheetUpdates() throw "plate not found" every
+    // time on new_install — silently dropping the Ch1-Ch9 channel writes,
+    // the one case this whole feature exists for. (Not an issue for
+    // upgrade/repair/remove: pushMdvrInstall() no-ops there, and the
+    // plate was already on the sheet from whenever it was first installed.)
+    try{
+      const mdvrRes = await pushMdvrInstall();
+      if(mdvrRes){
+        saveSuffix += ` · อัปเดตเครื่อง MDVR ✓`;
+      }
+    }catch(e){
+      console.error('[MDVR install]', e);
+      saveSuffix += ` (อัปเดตเครื่อง MDVR ไม่สำเร็จ: ${e.message})`;
+    }
+
     // Update the MDVR Tracking sheet for any equipment swapped from the
-    // vehicle-history picker. Failure here is non-fatal — the report still
-    // sends; we just note it in the toast.
+    // vehicle-history picker, or (new_install) a channel picked per fix
+    // row. Failure here is non-fatal — the report still sends; we just
+    // note it in the toast.
     try{
       const sheetRes = await pushSheetUpdates();
       if(sheetRes && sheetRes.updated && sheetRes.updated.length){
@@ -3064,19 +3089,6 @@ async function sendToLine(){
     }catch(e){
       console.error('[Issue close]', e);
       saveSuffix += ` (ปิด Issue ไม่สำเร็จ: ${e.message})`;
-    }
-
-    // ติดตั้งใหม่: write the picked MDVR unit's plate/Device ID/Server (and
-    // customer/date/technician) into the MDVR Tracking sheet. No-ops for
-    // every other job type, or if no IMEI was picked.
-    try{
-      const mdvrRes = await pushMdvrInstall();
-      if(mdvrRes){
-        saveSuffix += ` · อัปเดตเครื่อง MDVR ✓`;
-      }
-    }catch(e){
-      console.error('[MDVR install]', e);
-      saveSuffix += ` (อัปเดตเครื่อง MDVR ไม่สำเร็จ: ${e.message})`;
     }
 
     if(!endpoint){

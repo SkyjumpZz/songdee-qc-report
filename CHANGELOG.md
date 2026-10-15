@@ -57,6 +57,38 @@ machines/sessions (not just in chat history).
     the one production endpoint before/after deploying (it's a
     read-only lookup, no write-path risk).
 
+## Fix: CH write-back silently failed on every real new install (form.html v1.43.1)
+
+User asked "ลงข้อมูลครบถ้วนนะ" (make sure it's actually recording
+completely) right after v1.43.0 shipped — prompted a closer look rather
+than taking the earlier Playwright run at face value, and found a real
+bug the mocked test hadn't caught: `sendToLine()` called
+`pushSheetUpdates()` (writes the Ch1-Ch9 channel data, `updateVehicle()`
+on the Worker side finds its row **by plate**) BEFORE `pushMdvrInstall()`
+(writes that row's plate cell for the very first time on a new install,
+found **by IMEI**). On a genuinely brand-new install the plate cell is
+still empty when `pushSheetUpdates()` runs, so `updateVehicle()` throws
+"plate not found" every time — the exact scenario v1.43.0's whole feature
+was built for. Non-fatal (caught, appended to the toast suffix) so the
+report itself still sent fine, but the channel write silently never
+landed — a type of failure easy to miss since the LINE message still
+looks complete.
+
+Fix: moved `pushMdvrInstall()` before `pushSheetUpdates()`. Safe for
+every other job type — `pushMdvrInstall()` no-ops outside new_install,
+and for upgrade/repair/remove the plate was already on the sheet from
+whenever the vehicle was first installed, so the old order never broke
+those.
+
+Verified with a Playwright test that mocks the Worker's actual
+dependency (a shared "is the plate cell set yet" flag gating `/update`'s
+response, exactly like `updateVehicle()`'s real plate lookup) rather
+than just stubbing both calls as unconditionally successful — confirms
+`/mdvr-install` fires before `/update`, and that the final toast shows
+the sheet update actually succeeding instead of "plate not found".
+Re-ran the full existing CH/qty/IMEI/redirect test suites after the
+reorder — no regressions.
+
 ## Pick which MDVR channel (CH) each new-install camera is on (form.html v1.43.0)
 
 User: when going to an install job, need to pick which CH a camera is
