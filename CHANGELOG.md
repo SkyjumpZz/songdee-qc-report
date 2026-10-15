@@ -57,6 +57,55 @@ machines/sessions (not just in chat history).
     the one production endpoint before/after deploying (it's a
     read-only lookup, no write-path risk).
 
+## CH picker restricted to actual cameras + don't hide errors behind the redirect (form.html v1.44.0)
+
+User tested a real install job, typed an IMEI, and saw no tracking
+happen at all — plus asked for the CH picker to only show up when the
+row actually is a camera.
+
+**CH only for cameras**: added `cameraProductNames`, populated from
+Stock's own live catalog (`sd_cats`) — specifically its `"Camera"`
+category (confirmed by reading songdee-stock's `DEFAULT_CATS`: contains
+`DOME CPM`, `Reverse  608IR`, etc. — exactly what showed in the
+screenshots). DMS/ADAS/AI Box live under a separate `"AI"` category and
+are tracked by serial number via `DEVICE_TYPE_BY_PRODUCT`, not an MDVR
+video channel, so they're correctly excluded. The channel picker (and
+`buildSheetUpdates()`'s write-back) now only applies to a fix row whose
+picked product is in that set; switching a row's product away from a
+camera clears any `ch` it had, and `buildSheetUpdates()` ignores a stale
+`ch` on a non-camera row as a defensive second check (in case an older
+saved report has one from before this restriction existed).
+
+**Root-caused the "no tracking at all" report**: `/mdvr-install`
+requires the typed IMEI to already exist as a row in the "MDVR Tracking"
+sheet (added at stock intake) — it only *claims* an existing row by
+plate, it can't create a new one. A free-typed IMEI with no matching row
+throws `"imei not found"`, caught non-fatally — the report still sends,
+but nothing related to the install (plate, let alone any Ch1-Ch9 writes)
+ever lands. That failure was also very easy to miss: v1.43.0's
+redirect-to-Dashboard fired 1.4s after any successful LINE send,
+regardless of whether an auxiliary update like this one had actually
+failed — likely hiding the exact error that would've explained it.
+Fixed the second part at least: the redirect now only fires when
+`saveSuffix` carries no "ไม่สำเร็จ" failure text, so a partial failure
+stays on screen for its full normal toast duration instead of vanishing
+with the page. Still waiting to confirm with the user whether the IMEI
+they tested was genuinely new (never logged at stock intake, so no fix
+alone resolves it short of a Worker change to create rows) or an
+existing one the dropdown just hadn't caught up on yet.
+
+Verified with Playwright: `cameraProductNames` populates correctly from
+a mocked `sd_cats`; the CH select renders only for an in-catalog camera
+product and not for a non-camera one (checked by inspecting actual
+rendered select option text, not just a count); switching a row's
+product away from a camera clears its `ch`; `buildSheetUpdates()`
+produces the right `{column, value}` for a real camera row and ignores
+a non-camera row even with a stale `ch`; a simulated `/mdvr-install`
+failure (mirroring the real "imei not found" case) leaves the page on
+form.html well past the old redirect delay, with the toast naming the
+actual failure. Re-ran the full existing test suite (qty/IMEI/order/
+redirect-on-success) — no regressions.
+
 ## Fix: CH write-back silently failed on every real new install (form.html v1.43.1)
 
 User asked "ลงข้อมูลครบถ้วนนะ" (make sure it's actually recording

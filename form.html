@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.43.1">
+<meta name="app-version" content="1.44.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -824,6 +824,11 @@ _auth.onAuthStateChanged(async user=>{
 let stockLock = null; // { noStock, items: {name: qty} } or null
 let _stockLockTimer = null;
 let liveCatalog = null; // string[] once loaded, else null (fall back to PRODUCTS)
+// Product names under Stock's own "Camera" category (sd_cats) — only
+// these get the CH picker on new_install (not every fix row is a
+// camera; DMS/ADAS/AI Box live under a separate "AI" category and are
+// tracked by SN via DEVICE_TYPE_BY_PRODUCT, not an MDVR video channel).
+let cameraProductNames = new Set();
 let allTechStock = {}; // raw sd:tech blob: {techName: [{name,qty,used,ret,pend}, ...]}
 let techStock = null; // {name: remainingQty} for whichever name is active below, or null
 let techStockOwnerName = ''; // whose stock techStock currently shows
@@ -835,6 +840,10 @@ async function loadLiveCatalog(){
     const cats = snap.exists ? JSON.parse(snap.data().v || '[]') : [];
     const flat = cats.flatMap(c=> Array.isArray(c.items) ? c.items : []).filter(Boolean);
     if(flat.length) liveCatalog = flat;
+    const cameraCat = cats.find(c=> c.cat === 'Camera');
+    if(cameraCat && Array.isArray(cameraCat.items) && cameraCat.items.length){
+      cameraProductNames = new Set(cameraCat.items.filter(Boolean));
+    }
   }catch(e){
     console.error('[Stock catalog]', e);
   }
@@ -2125,7 +2134,14 @@ function renderFixRows(){
     // คงเหลือทั้งหมด (remainingFor) ทำให้เลือกของที่เหลือเยอะๆ แล้วจำนวน
     // เด้งไปเท่าที่มีในสต็อกทันทีโดยไม่ได้ตั้งใจ (เช่น เครื่องรูดบัตรเหลือ 23
     // แต่ใช้จริงแค่ 1) ยังปรับเพิ่มได้เองในช่องจำนวน ไม่เกิน max ที่กำหนดไว้แล้ว
-    sel.onchange = ()=>{ row.product = sel.value; row.qty = locked ? 1 : row.qty; updatePreview(); renderFixRows(); };
+    sel.onchange = ()=>{
+      row.product = sel.value;
+      row.qty = locked ? 1 : row.qty;
+      // เปลี่ยนไปเป็นของที่ไม่ใช่กล้อง — ล้างช่อง CH เดิมทิ้ง ไม่งั้นค่าเก่าจะ
+      // ค้างอยู่และหลุดไปเขียนทับคอลัมน์ Ch ผิดชิ้นตอน buildSheetUpdates()
+      if(!cameraProductNames.has(row.product)) row.ch = '';
+      updatePreview(); renderFixRows();
+    };
 
     const qty = document.createElement('input');
     qty.type = locked ? 'number' : 'text';
@@ -2148,10 +2164,10 @@ function renderFixRows(){
     line.appendChild(sel); line.appendChild(qty); line.appendChild(rm);
     wrap.appendChild(line);
 
-    // ติดตั้งใหม่ only — เลือก CH (Ch1-Ch9) ที่กล้อง/อุปกรณ์แต่ละแถวต่ออยู่
-    // จริงหน้างาน ไม่บังคับเลือก (ไม่ใช่ทุกแถวเป็นกล้อง) ส่งกลับไปเขียนชีต
-    // MDVR Tracking คอลัมน์ตรงช่องนั้นให้ ดู buildSheetUpdates()
-    if(state.tpl === 'new_install'){
+    // ติดตั้งใหม่ only, เฉพาะแถวที่เป็นกล้องจริง (อยู่ใน Stock's "Camera"
+    // category) — เลือก CH (Ch1-Ch9) ที่ต่ออยู่จริงหน้างาน ไม่บังคับเลือก
+    // ส่งกลับไปเขียนชีต MDVR Tracking คอลัมน์ตรงช่องนั้นให้ ดู buildSheetUpdates()
+    if(state.tpl === 'new_install' && cameraProductNames.has(row.product)){
       const chSel = document.createElement('select');
       chSel.style.marginTop = '6px';
       const chBlank = document.createElement('option');
@@ -2573,7 +2589,10 @@ function buildSheetUpdates(){
     });
   } else if(state.tpl === 'new_install'){
     state.fixes.forEach(row=>{
-      if(!row.ch) return;
+      // cameraProductNames check is defense-in-depth — renderFixRows()/the
+      // product picker already clear row.ch off a non-camera row, but a
+      // report saved before that guard existed could still have a stale ch.
+      if(!row.ch || !cameraProductNames.has(row.product)) return;
       const newName = row.product === "อื่นๆ (พิมพ์เอง)" ? (row.custom || "") : row.product;
       if(!newName) return;
       updates.push({ column: row.ch, value: newName });
@@ -3109,7 +3128,13 @@ async function sendToLine(){
         celebrateSuccess();
         // กลับไปหน้า Dashboard หลักหลังส่งสำเร็จ กันกดส่งซ้ำ/แก้ต่อโดยไม่ตั้งใจ
         // บนรายงานที่ส่งไปแล้ว — หน่วงไว้พอให้เห็นข้อความ/แอนิเมชันก่อนเปลี่ยนหน้า
-        setTimeout(()=>{ location.href = 'index.html'; }, 1400);
+        // แต่ถ้า saveSuffix มีงานย่อยที่ล้มเหลวอยู่ (เช่น อัปเดตชีต/เครื่อง MDVR
+        // ไม่สำเร็จ) ไม่เด้งออกไปทันที — ให้มีเวลาอ่านว่าอะไรพลาดไปจริงๆ ก่อน
+        // (เด้งเร็วไปซ่อน error ไว้ไม่ให้เห็นเลย พบจากเคสติดตั้งใหม่ที่ MDVR
+        // ไม่ถูก track แต่รายงานเองก็ยังส่งสำเร็จตามปกติ)
+        if(!saveSuffix.includes('ไม่สำเร็จ')){
+          setTimeout(()=>{ location.href = 'index.html'; }, 1400);
+        }
       }
       else{ showToast('ส่งไม่สำเร็จ (' + res.status + ') — คัดลอกข้อความสำรองไว้แล้ว' + saveSuffix); navigator.clipboard.writeText(text).catch(()=>{}); }
     }catch(err){
