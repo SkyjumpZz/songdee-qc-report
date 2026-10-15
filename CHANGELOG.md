@@ -57,6 +57,42 @@ machines/sessions (not just in chat history).
     the one production endpoint before/after deploying (it's a
     read-only lookup, no write-path risk).
 
+## Fix: "+เพิ่มรายการแก้ไข" permanently disabled under stock-lock (form.html v1.41.0); Dashboard label + stale template map (index.html v1.17.0)
+
+User reported the "+เพิ่มรายการแก้ไข" button not working, from a screenshot
+of the Dashboard's recent-reports list — which also surfaced a second,
+unrelated bug while investigating (see below).
+
+**The button bug**: `renderFixRows()` sets `options = []` whenever stock
+is locked (`stockLock`/`techStock` active) — that array is only ever used
+for the free-pick catalog `<select>`, since the locked case builds its
+dropdown straight from `stockLock.items`/`techStock` instead. But the
+add-button's disabled check still compared against `options.length`,
+which is therefore always `0` while locked — `state.fixes.length >=
+0` is always true, so the button was permanently disabled any time a
+ใบเบิก or Spare-stock match existed for the ทะเบียน (a very common case,
+exactly what the screenshot's cards show). Fixed by comparing against
+the actual number of distinct locked items instead
+(`Object.keys(lockItems).length`) — same shape of guard ("don't add more
+rows than there are distinct pickable things"), just computed from the
+right source for each branch.
+
+**The Dashboard label**: the "ทะเบียน: X · ช่าง: Y" meta line in
+index.html's own recent-reports list (`loadDashboard()`/`renderList()`
+— a separate, system-wide feed shown to everyone, distinct from
+history.html's own list) said "ช่าง" instead of "ผู้ทดสอบ", per the
+established convention (the techName field is labeled/used as tester,
+not technician, throughout the rest of the app). Also found and fixed
+the same stale `TEMPLATE_LABELS`/`TEMPLATE_ICONS` gap history.html had
+before v1.1.0 — a third independent copy of this map, also missing the
+`remove` ("ถอดย้ายอุปกรณ์") template added to form.html back in v1.33.0.
+
+Verified with Playwright: the add button is enabled with rows below the
+distinct-locked-item count, disabled once at/above it, unaffected when
+nothing is locked; clicking it (not just calling the function) actually
+appends a row. Dashboard list renders "ผู้ทดสอบ: Bird" (not "ช่าง:") and
+the correct icon/label for a `remove`-type report.
+
 ## Redirect to Dashboard after a successful send (form.html v1.40.0)
 
 User asked: after "ส่งเข้า LINE" succeeds, confirm it on screen and then
