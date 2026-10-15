@@ -57,6 +57,43 @@ machines/sessions (not just in chat history).
     the one production endpoint before/after deploying (it's a
     read-only lookup, no write-path risk).
 
+## 3 fixes from one batch of screenshots: qty default, free-text IMEI, new install-detail card (form.html v1.42.0)
+
+**จำนวนตั้งต้นที่ 1**: `renderFixRows()`'s product-picker `onchange` used to
+default `row.qty` to `remainingFor(product, idx)` — the full remaining
+stock count — whenever stock-lock was active, so picking an item with
+23 left pre-filled qty=23 instead of qty=1 (screenshot showed exactly
+this on "เครื่องรูดบัตร EFFON (คงเหลือ 23)"). Now always defaults to 1;
+still adjustable up to the existing per-row max.
+
+**IMEI free text**: `mdvrImeiInput` (ข้อมูลเครื่อง MDVR card) was a
+`<select>` limited to whatever `MDVR_AVAILABLE_ENDPOINT` currently lists
+as "available" — no way to enter a device the sheet hadn't caught up on
+yet. Converted to the same free-text + suggest-dropdown pattern already
+used for ทะเบียน/ลูกค้า/Fleet (`wireSuggestInput()`): type anything, or
+pick from the list.
+
+**New "ข้อมูลเพิ่มเติมการติดตั้ง" card** (ติดตั้งใหม่ only): 4 new fields —
+จุดวาง MDVR / จุดจ่ายไฟ / จุดติดตั้งลำโพง / จุดติดตั้งไมค์ — none existed
+before. Same free-text + suggest pattern as the IMEI field above, with no
+preset options: starts empty, suggestions accumulate from whatever's
+been typed in past reports (harvested in the same `qc_reports` read
+`loadCustomerFleetSuggestions()` already does for ชื่อลูกค้า/Fleet/IMEI,
+rather than a separate query). Appears in both `buildMessage()`
+(`จุดวาง MDVR : ...` one line per field, matching the exact format asked
+for) and `buildLineCard()`'s LINE Flex card as their own section; also
+added to `REPORT_FIELD_LABELS` so edits to them show up in the admin
+change-log diff same as every other field.
+
+Verified with Playwright: qty defaults to 1 regardless of remaining
+stock; IMEI field accepts free typing and dropdown picks alike, and
+still restores correctly when reopening a saved report; the new card's
+visibility follows ติดตั้งใหม่ only, its 4 suggestion lists populate from
+mocked report history, typed values flow through to both
+`buildMessage()`/`buildLineCard()` in the right format (and produce no
+section at all when empty), and `saveReport()`/`loadReportIntoForm()`
+round-trip the 4 new fields correctly.
+
 ## Fix: "+เพิ่มรายการแก้ไข" permanently disabled under stock-lock (form.html v1.41.0); Dashboard label + stale template map (index.html v1.17.0)
 
 User reported the "+เพิ่มรายการแก้ไข" button not working, from a screenshot

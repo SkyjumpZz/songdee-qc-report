@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.41.0">
+<meta name="app-version" content="1.42.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -598,11 +598,10 @@
   <div class="card app-hidden" id="mdvrInstallCard">
     <div class="card-title"><span class="dot">📡</span>ข้อมูลเครื่อง MDVR</div>
     <div class="row2">
-      <div>
+      <div class="suggest-field">
         <label>IMEI (เครื่องที่ยังไม่ผูกทะเบียน)</label>
-        <select id="mdvrImeiSelect">
-          <option value="">-- เลือก IMEI --</option>
-        </select>
+        <input type="text" id="mdvrImeiInput" placeholder="พิมพ์ หรือเลือกจากรายการ" autocomplete="off">
+        <div class="suggest-dropdown app-hidden" id="mdvrImeiSuggestions"></div>
       </div>
       <div>
         <label>Device ID</label>
@@ -619,6 +618,34 @@
         <option value="75">75</option>
         <option value="90">90</option>
       </select>
+    </div>
+  </div>
+
+  <div class="card app-hidden" id="installDetailCard">
+    <div class="card-title"><span class="dot">📍</span>ข้อมูลเพิ่มเติมการติดตั้ง</div>
+    <div class="row2">
+      <div class="suggest-field">
+        <label>จุดวาง MDVR</label>
+        <input type="text" id="installMdvrPlacementInput" placeholder="พิมพ์ หรือเลือกจากรายการ" autocomplete="off">
+        <div class="suggest-dropdown app-hidden" id="installMdvrPlacementSuggestions"></div>
+      </div>
+      <div class="suggest-field">
+        <label>จุดจ่ายไฟ</label>
+        <input type="text" id="installPowerSourceInput" placeholder="พิมพ์ หรือเลือกจากรายการ" autocomplete="off">
+        <div class="suggest-dropdown app-hidden" id="installPowerSourceSuggestions"></div>
+      </div>
+    </div>
+    <div class="row2">
+      <div class="suggest-field">
+        <label>จุดติดตั้งลำโพง</label>
+        <input type="text" id="installSpeakerPlacementInput" placeholder="พิมพ์ หรือเลือกจากรายการ" autocomplete="off">
+        <div class="suggest-dropdown app-hidden" id="installSpeakerPlacementSuggestions"></div>
+      </div>
+      <div class="suggest-field">
+        <label>จุดติดตั้งไมค์</label>
+        <input type="text" id="installMicPlacementInput" placeholder="พิมพ์ หรือเลือกจากรายการ" autocomplete="off">
+        <div class="suggest-dropdown app-hidden" id="installMicPlacementSuggestions"></div>
+      </div>
     </div>
   </div>
 
@@ -1032,6 +1059,29 @@ const MDVR_AVAILABLE_ENDPOINT = 'https://songdee-vehicle-lookup.songdeegps.worke
 const MDVR_INSTALL_ENDPOINT = 'https://songdee-vehicle-lookup.songdeegps.workers.dev/mdvr-install';
 let mdvrAvailableDevices = [];
 
+// ติดตั้งใหม่ only — จุดวาง MDVR/จุดจ่ายไฟ/จุดติดตั้งลำโพง/จุดติดตั้งไมค์:
+// ไม่มีตัวเลือกสำเร็จรูป เริ่มจากว่างเสมอ แล้วสะสมจากค่าที่เคยพิมพ์ไว้ในรายงาน
+// ก่อนหน้า (ดู loadCustomerFleetSuggestions() ที่โหลด qc_reports รอบเดียว
+// แล้วแจกจ่ายให้ suggestion หลายๆ ช่องพร้อมกัน รวมถึง 4 ช่องนี้ด้วย)
+let installMdvrPlacementSuggestions = [];
+let installPowerSourceSuggestions = [];
+let installSpeakerPlacementSuggestions = [];
+let installMicPlacementSuggestions = [];
+const renderInstallMdvrPlacementSuggest = wireSuggestInput('installMdvrPlacementInput', 'installMdvrPlacementSuggestions', ()=>installMdvrPlacementSuggestions, v=>{ state.installMdvrPlacement = v; updatePreview(); });
+const renderInstallPowerSourceSuggest = wireSuggestInput('installPowerSourceInput', 'installPowerSourceSuggestions', ()=>installPowerSourceSuggestions, v=>{ state.installPowerSource = v; updatePreview(); });
+const renderInstallSpeakerPlacementSuggest = wireSuggestInput('installSpeakerPlacementInput', 'installSpeakerPlacementSuggestions', ()=>installSpeakerPlacementSuggestions, v=>{ state.installSpeakerPlacement = v; updatePreview(); });
+const renderInstallMicPlacementSuggest = wireSuggestInput('installMicPlacementInput', 'installMicPlacementSuggestions', ()=>installMicPlacementSuggestions, v=>{ state.installMicPlacement = v; updatePreview(); });
+
+// IMEI used to be a <select> of only the "available" (not-yet-registered)
+// devices from MDVR_AVAILABLE_ENDPOINT — fine until the sheet lagged behind
+// reality (a device already in-hand but not synced as "available" yet), which
+// left the tech with no way to enter it at all. Now a free-text field with
+// the same list as suggestions (wireSuggestInput — same ทะเบียน/ลูกค้า/Fleet
+// pattern elsewhere in this form): pick one, or just type any IMEI.
+const renderMdvrImeiSuggest = wireSuggestInput('mdvrImeiInput', 'mdvrImeiSuggestions', ()=>mdvrAvailableDevices.map(d=>d.imei), imei=>{
+  state.mdvrImei = imei;
+  updatePreview();
+});
 async function loadMdvrAvailable(){
   try{
     const res = await fetch(MDVR_AVAILABLE_ENDPOINT);
@@ -1041,27 +1091,7 @@ async function loadMdvrAvailable(){
     console.error('[MDVR available]', e);
     mdvrAvailableDevices = [];
   }
-  renderMdvrImeiOptions();
-}
-
-function renderMdvrImeiOptions(){
-  const sel = document.getElementById('mdvrImeiSelect');
-  const current = state.mdvrImei || '';
-  sel.innerHTML = '';
-  const blank = document.createElement('option');
-  blank.value = ''; blank.textContent = '-- เลือก IMEI --';
-  sel.appendChild(blank);
-  // Keep the saved value selectable even if it's no longer "available"
-  // (already got installed elsewhere since this report was first saved) —
-  // reopening a past report shouldn't silently lose/blank out its IMEI.
-  const imeis = mdvrAvailableDevices.map(d=> d.imei);
-  if(current && !imeis.includes(current)) imeis.unshift(current);
-  imeis.forEach(imei=>{
-    const o = document.createElement('option');
-    o.value = imei; o.textContent = imei;
-    sel.appendChild(o);
-  });
-  sel.value = current;
+  if(document.activeElement && document.activeElement.id === 'mdvrImeiInput') renderMdvrImeiSuggest();
 }
 
 // Non-fatal like pushSheetUpdates()/pushDeviceSwaps()/pushIssueClose() —
@@ -1261,6 +1291,10 @@ const renderFleetSuggest = wireSuggestInput('jobFleet', 'jobFleetSuggestions', (
 async function loadCustomerFleetSuggestions(){
   const customers = new Set();
   const fleets = new Set();
+  const installMdvrPlacements = new Set();
+  const installPowerSources = new Set();
+  const installSpeakerPlacements = new Set();
+  const installMicPlacements = new Set();
   try{
     const snap = await _db.collection('sd').doc('sd_customers').get();
     const list = snap.exists ? JSON.parse(snap.data().v || '[]') : [];
@@ -1281,6 +1315,10 @@ async function loadCustomerFleetSuggestions(){
       const v = d.data();
       if(v.customer && v.customer.trim()) customers.add(v.customer.trim());
       if(v.fleet && v.fleet.trim()) fleets.add(v.fleet.trim());
+      if(v.installMdvrPlacement && v.installMdvrPlacement.trim()) installMdvrPlacements.add(v.installMdvrPlacement.trim());
+      if(v.installPowerSource && v.installPowerSource.trim()) installPowerSources.add(v.installPowerSource.trim());
+      if(v.installSpeakerPlacement && v.installSpeakerPlacement.trim()) installSpeakerPlacements.add(v.installSpeakerPlacement.trim());
+      if(v.installMicPlacement && v.installMicPlacement.trim()) installMicPlacements.add(v.installMicPlacement.trim());
     });
   }catch(e){
     console.error('[Customer/Fleet suggestions] qc_reports', e);
@@ -1298,8 +1336,16 @@ async function loadCustomerFleetSuggestions(){
   }
   customerSuggestions = [...customers].sort();
   fleetSuggestions = [...fleets].sort();
+  installMdvrPlacementSuggestions = [...installMdvrPlacements].sort();
+  installPowerSourceSuggestions = [...installPowerSources].sort();
+  installSpeakerPlacementSuggestions = [...installSpeakerPlacements].sort();
+  installMicPlacementSuggestions = [...installMicPlacements].sort();
   if(document.activeElement && document.activeElement.id === 'jobCustomer') renderCustomerSuggest();
   if(document.activeElement && document.activeElement.id === 'jobFleet') renderFleetSuggest();
+  if(document.activeElement && document.activeElement.id === 'installMdvrPlacementInput') renderInstallMdvrPlacementSuggest();
+  if(document.activeElement && document.activeElement.id === 'installPowerSourceInput') renderInstallPowerSourceSuggest();
+  if(document.activeElement && document.activeElement.id === 'installSpeakerPlacementInput') renderInstallSpeakerPlacementSuggest();
+  if(document.activeElement && document.activeElement.id === 'installMicPlacementInput') renderInstallMicPlacementSuggest();
   assignedTechNames = [...techNames];
   refreshTechStockNames();
 }
@@ -1538,6 +1584,8 @@ function fixRowSummaryForDiff(row){
 const REPORT_FIELD_LABELS = {
   tpl: 'ประเภทงาน', date: 'วันที่', customer: 'ลูกค้า', fleet: 'Fleet', plate: 'ทะเบียน',
   network: 'เครือข่ายอุปกรณ์', mdvrImei: 'IMEI', mdvrDeviceId: 'Device ID', mdvrServer: 'Server',
+  installMdvrPlacement: 'จุดวาง MDVR', installPowerSource: 'จุดจ่ายไฟ',
+  installSpeakerPlacement: 'จุดติดตั้งลำโพง', installMicPlacement: 'จุดติดตั้งไมค์',
 };
 function diffReportFields(oldDoc, payload){
   const changes = [];
@@ -1602,6 +1650,12 @@ async function saveReport(){
     photos: state.photos.filter(p=> p.driveUrl).map(p=> ({ name: p.name, driveUrl: p.driveUrl })),
     driveFolderUrl: state.driveFolderUrl || null,
     mdvrImei: state.mdvrImei || '', mdvrDeviceId: state.mdvrDeviceId || '', mdvrServer: state.mdvrServer || '',
+    // ติดตั้งใหม่ only — ตำแหน่งติดตั้งจริงหน้างาน (ไม่บังคับ พิมพ์เองหรือ
+    // เลือกจากของที่เคยพิมพ์มาก่อนก็ได้)
+    installMdvrPlacement: state.installMdvrPlacement || '',
+    installPowerSource: state.installPowerSource || '',
+    installSpeakerPlacement: state.installSpeakerPlacement || '',
+    installMicPlacement: state.installMicPlacement || '',
     network: state.network || '',
     techUid: tester.uid, techName: tester.techName,
     // Which Admin-app assignment (if any) this report is for — lets Admin
@@ -1649,6 +1703,10 @@ function loadReportIntoForm(doc){
     mdvrImei: doc.mdvrImei || '',
     mdvrDeviceId: doc.mdvrDeviceId || '',
     mdvrServer: doc.mdvrServer || '',
+    installMdvrPlacement: doc.installMdvrPlacement || '',
+    installPowerSource: doc.installPowerSource || '',
+    installSpeakerPlacement: doc.installSpeakerPlacement || '',
+    installMicPlacement: doc.installMicPlacement || '',
     network: doc.network || '',
   };
   syncFormInputsFromState();
@@ -1868,6 +1926,10 @@ function defaultState(){
     driveFolderUrl: null,
     // ติดตั้งใหม่ only — see loadMdvrAvailable()/pushMdvrInstall() below.
     mdvrImei: "",
+    installMdvrPlacement: "",
+    installPowerSource: "",
+    installSpeakerPlacement: "",
+    installMicPlacement: "",
     mdvrDeviceId: "",
     mdvrServer: "",
     // เครือข่ายของอุปกรณ์ที่ติดตั้ง/ตรวจสอบ — เป็นค่าเดียวต่อทั้งรายงาน ไม่ใช่
@@ -1896,7 +1958,11 @@ function syncFormInputsFromState(){
   document.getElementById('jobPlate').value = state.plate || '';
   document.getElementById('mdvrDeviceId').value = state.mdvrDeviceId || '';
   document.getElementById('mdvrServerSelect').value = state.mdvrServer || '';
-  renderMdvrImeiOptions();
+  document.getElementById('mdvrImeiInput').value = state.mdvrImei || '';
+  document.getElementById('installMdvrPlacementInput').value = state.installMdvrPlacement || '';
+  document.getElementById('installPowerSourceInput').value = state.installPowerSource || '';
+  document.getElementById('installSpeakerPlacementInput').value = state.installSpeakerPlacement || '';
+  document.getElementById('installMicPlacementInput').value = state.installMicPlacement || '';
 }
 
 const TPL_ICON = { upgrade: '⬆️', new_install: '✨', repair: '🛠️', remove: '📤' };
@@ -1919,6 +1985,7 @@ function renderTabs(){
   });
   document.getElementById('problemsCard').classList.toggle('app-hidden', !tplHasProblems(state.tpl));
   document.getElementById('mdvrInstallCard').classList.toggle('app-hidden', state.tpl !== 'new_install');
+  document.getElementById('installDetailCard').classList.toggle('app-hidden', state.tpl !== 'new_install');
   document.getElementById('fixesCardTitle').textContent = FIXES_CARD_LABEL[state.tpl] || 'แก้ไข';
   document.getElementById('addFixBtn').textContent = FIXES_ADD_BTN_LABEL[state.tpl] || '+ เพิ่มรายการแก้ไข';
   renderVehicleEquipmentBanner();
@@ -2047,7 +2114,11 @@ function renderFixRows(){
         sel.appendChild(o);
       });
     }
-    sel.onchange = ()=>{ row.product = sel.value; row.qty = locked ? (remainingFor(row.product, idx)||1) : row.qty; updatePreview(); renderFixRows(); };
+    // จำนวนตั้งต้นที่ 1 เสมอตอนเพิ่งเลือกอุปกรณ์ — เดิม default เป็นจำนวน
+    // คงเหลือทั้งหมด (remainingFor) ทำให้เลือกของที่เหลือเยอะๆ แล้วจำนวน
+    // เด้งไปเท่าที่มีในสต็อกทันทีโดยไม่ได้ตั้งใจ (เช่น เครื่องรูดบัตรเหลือ 23
+    // แต่ใช้จริงแค่ 1) ยังปรับเพิ่มได้เองในช่องจำนวน ไม่เกิน max ที่กำหนดไว้แล้ว
+    sel.onchange = ()=>{ row.product = sel.value; row.qty = locked ? 1 : row.qty; updatePreview(); renderFixRows(); };
 
     const qty = document.createElement('input');
     qty.type = locked ? 'number' : 'text';
@@ -2601,6 +2672,18 @@ function buildMessage(){
     lines.push(`: ${state.network}`);
   }
 
+  const installDetailLines = [
+    state.installMdvrPlacement ? `จุดวาง MDVR : ${state.installMdvrPlacement}` : null,
+    state.installPowerSource ? `จุดจ่ายไฟ : ${state.installPowerSource}` : null,
+    state.installSpeakerPlacement ? `จุดติดตั้งลำโพง : ${state.installSpeakerPlacement}` : null,
+    state.installMicPlacement ? `จุดติดตั้งไมค์ : ${state.installMicPlacement}` : null,
+  ].filter(Boolean);
+  if(installDetailLines.length){
+    lines.push('');
+    lines.push('ข้อมูลเพิ่มเติมการติดตั้ง');
+    lines.push(...installDetailLines);
+  }
+
   const uploadedPhotos = state.photos.filter(p=> p.driveUrl);
   if(uploadedPhotos.length){
     lines.push(`📷 รูปภาพแนบ: ${uploadedPhotos.length} รูป`);
@@ -2651,6 +2734,15 @@ function buildLineCard(){
       ...(state.network ? [`• เครือข่ายอุปกรณ์: ${state.network}`] : []),
     ]
   });
+  const installDetailCardLines = [
+    state.installMdvrPlacement ? `• จุดวาง MDVR: ${state.installMdvrPlacement}` : null,
+    state.installPowerSource ? `• จุดจ่ายไฟ: ${state.installPowerSource}` : null,
+    state.installSpeakerPlacement ? `• จุดติดตั้งลำโพง: ${state.installSpeakerPlacement}` : null,
+    state.installMicPlacement ? `• จุดติดตั้งไมค์: ${state.installMicPlacement}` : null,
+  ].filter(Boolean);
+  if(installDetailCardLines.length){
+    sections.push({ heading: '📍 ข้อมูลเพิ่มเติมการติดตั้ง', lines: installDetailCardLines });
+  }
 
   // Photos go out as separate native LINE image messages (tap to view/
   // save/share like a normal photo) rather than embedded in the card — see
@@ -2730,9 +2822,13 @@ document.getElementById('jobCustomer').addEventListener('input', e=>{ state.cust
 document.getElementById('jobFleet').addEventListener('input', e=>{ state.fleet = e.target.value; updatePreview(); });
 document.getElementById('jobPlate').addEventListener('input', e=>{ state.plate = e.target.value; updatePreview(); scheduleStockLockCheck(); });
 document.getElementById('jobAssignSelect').addEventListener('change', e=>{ onAssignmentSelect(e.target.value); });
-document.getElementById('mdvrImeiSelect').addEventListener('change', e=>{ state.mdvrImei = e.target.value; updatePreview(); });
+document.getElementById('mdvrImeiInput').addEventListener('input', e=>{ state.mdvrImei = e.target.value; updatePreview(); });
 document.getElementById('mdvrDeviceId').addEventListener('input', e=>{ state.mdvrDeviceId = e.target.value; updatePreview(); });
 document.getElementById('mdvrServerSelect').addEventListener('change', e=>{ state.mdvrServer = e.target.value; updatePreview(); });
+document.getElementById('installMdvrPlacementInput').addEventListener('input', e=>{ state.installMdvrPlacement = e.target.value; updatePreview(); });
+document.getElementById('installPowerSourceInput').addEventListener('input', e=>{ state.installPowerSource = e.target.value; updatePreview(); });
+document.getElementById('installSpeakerPlacementInput').addEventListener('input', e=>{ state.installSpeakerPlacement = e.target.value; updatePreview(); });
+document.getElementById('installMicPlacementInput').addEventListener('input', e=>{ state.installMicPlacement = e.target.value; updatePreview(); });
 
 function showToast(msg){
   const t = document.getElementById('toast');
