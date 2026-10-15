@@ -57,6 +57,29 @@ machines/sessions (not just in chat history).
     the one production endpoint before/after deploying (it's a
     read-only lookup, no write-path risk).
 
+## Redirect to Dashboard after a successful send (form.html v1.40.0)
+
+User asked: after "ส่งเข้า LINE" succeeds, confirm it on screen and then
+bounce back to the main Dashboard, to prevent mistakes. The on-screen
+confirmation already existed (the "ส่งเข้า LINE แล้ว ✓" toast +
+`celebrateSuccess()` confetti burst), so the actual gap was that nothing
+moved the tech off the form afterward — `sendBtn.disabled` gets reset to
+`false` in `sendToLine()`'s `finally` block regardless of outcome, so a
+report that just sent successfully left the button clickable again on
+the exact same filled-in form, one of the easier ways to end up with an
+accidental duplicate send.
+
+Only on the real success path (`res.ok`, the actual LINE push) —
+`location.href = 'index.html'`, delayed 1400ms so the toast/confetti are
+still visible when the page changes. Left alone on purpose: the
+"endpoint not configured" clipboard-copy fallback and the failure path
+(`res.ok` false) — redirecting away from a failed send would strand the
+tech with no easy way to retry on the same filled form.
+
+Verified with Playwright: right after calling `sendToLine()` the page is
+still on form.html with the success toast visible; past the delay it's
+navigated to index.html.
+
 ## Save which Admin assignment a report is for (form.html v1.39.0)
 
 Follow-up to a recommendations review of the whole system: Admin's own

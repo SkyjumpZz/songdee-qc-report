@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.39.0">
+<meta name="app-version" content="1.40.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -2952,7 +2952,13 @@ async function sendToLine(){
         headers:{'Content-Type':'application/json', 'X-Api-Key': LINE_API_KEY},
         body: JSON.stringify({ message: buildLineCard(), ...(groupId ? { groupId } : {}) })
       });
-      if(res.ok){ showToast('ส่งเข้า LINE แล้ว ✓' + saveSuffix); celebrateSuccess(); }
+      if(res.ok){
+        showToast('ส่งเข้า LINE แล้ว ✓' + saveSuffix);
+        celebrateSuccess();
+        // กลับไปหน้า Dashboard หลักหลังส่งสำเร็จ กันกดส่งซ้ำ/แก้ต่อโดยไม่ตั้งใจ
+        // บนรายงานที่ส่งไปแล้ว — หน่วงไว้พอให้เห็นข้อความ/แอนิเมชันก่อนเปลี่ยนหน้า
+        setTimeout(()=>{ location.href = 'index.html'; }, 1400);
+      }
       else{ showToast('ส่งไม่สำเร็จ (' + res.status + ') — คัดลอกข้อความสำรองไว้แล้ว' + saveSuffix); navigator.clipboard.writeText(text).catch(()=>{}); }
     }catch(err){
       showToast('เชื่อมต่อ endpoint ไม่ได้ — คัดลอกข้อความสำรองไว้แล้ว' + saveSuffix);
