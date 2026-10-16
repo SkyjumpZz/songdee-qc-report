@@ -57,6 +57,56 @@ machines/sessions (not just in chat history).
     the one production endpoint before/after deploying (it's a
     read-only lookup, no write-path risk).
 
+## CH selector now also covers DMS/ADAS, not just Stock's "Camera" category (form.html v1.45.0)
+
+User: screenshot of a locked fix row "DMS Camera V3 (คงเหลือ 17)" with no
+CH selector — DMS and ADAS need CH selection too, not just cameras.
+
+Also found and fixed the deeper reason it was missing *and* why the
+existing SN field was already broken for the same products:
+`DEVICE_TYPE_BY_PRODUCT` matched product names by exact string equality
+("AI Box"/"ADAS"/"DMS V.3") against names that don't actually exist in
+Stock's live catalog — the real entries are things like "DMS Camera V3",
+"ADAS Camera  V2", "AI BOX- SD  (LINDE)", with version suffixes and
+variants. Exact match against those 3 literal strings meant NEITHER the
+"SN เครื่องใหม่" field nor (now) the CH picker ever showed for any
+*real* DMS/ADAS/AI Box product a tech would actually pick.
+
+Replaced the exact-match object with `deviceTypeForProduct(name)` —
+case-insensitive substring match ("dms"/"adas"/"ai box"/"aibox") — and
+added `rowNeedsChannel(product)`: true for a Stock "Camera"-category
+product OR a `dms`/`adas` product (not `aibox` — it doesn't occupy an
+MDVR video channel, confirmed by user: only DMS and ADAS need CH).
+Updated all 7 call sites (the SN-field gate, old-model SN auto-fill, the
+CH-picker gate, `fixLine()`'s SN tag, `pushDeviceSwaps()`'s type
+detection) to use the new classifier.
+
+Verified with Playwright: `deviceTypeForProduct()` correctly classifies
+real catalog variant names including the exact screenshot's "DMS Camera
+V3"; the CH picker now shows for DMS and ADAS rows and still doesn't for
+AI Box; the pre-existing SN field still shows for all three (unaffected
+by the refactor); `buildSheetUpdates()` writes the right `{column,
+value}` for a DMS row with a channel picked. Full existing suite re-run
+clean.
+
+## ⚠️ Found separately: /mdvr-install likely never deployed to the live Worker
+
+While investigating a live error — "อัปเดตเครื่อง MDVR ไม่สำเร็จ: Unexpected
+token 'N', "Not found" is not valid JSON" — traced it to
+songdee-vehicle-lookup's own fallback `return new Response("Not found",
+{ status: 404, headers })`, which only fires when **no route matches at
+all**. songdee-vehicle-lookup has no CI/CD (no `.github/workflows`) —
+deploys are manual (`wrangler deploy`, no credentials available in this
+session to do it here) — and `/mdvr-install` was added in just the last
+2 commits to that repo. Everything points to the live Cloudflare Worker
+simply not having been redeployed since `/mdvr-install` was added to the
+source, which would also fully explain the earlier "ไม่เห็นระบบจะ track
+ให้เลย" report (the free-typed-IMEI theory investigated back then was
+very likely a red herring — every single install attempt would hit this
+same 404 regardless of the IMEI). This needs someone with Cloudflare
+access to run `wrangler deploy` for `songdee-vehicle-lookup` — nothing
+on the songdee-qc-report side can fix it.
+
 ## Fix: auto-redirect was bouncing techs out to Login every time (form.html v1.44.1)
 
 User: after sending, the app kept landing on the **Login** page instead

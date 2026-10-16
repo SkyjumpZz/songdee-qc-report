@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.44.1">
+<meta name="app-version" content="1.45.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -827,10 +827,10 @@ _auth.onAuthStateChanged(async user=>{
 let stockLock = null; // { noStock, items: {name: qty} } or null
 let _stockLockTimer = null;
 let liveCatalog = null; // string[] once loaded, else null (fall back to PRODUCTS)
-// Product names under Stock's own "Camera" category (sd_cats) — only
-// these get the CH picker on new_install (not every fix row is a
-// camera; DMS/ADAS/AI Box live under a separate "AI" category and are
-// tracked by SN via DEVICE_TYPE_BY_PRODUCT, not an MDVR video channel).
+// Product names under Stock's own "Camera" category (sd_cats) — combined
+// with DMS/ADAS (deviceTypeForProduct()) to decide which fix rows get the
+// CH picker on new_install. Not AI Box — tracked by SN same as DMS/ADAS,
+// but doesn't occupy an MDVR video channel.
 let cameraProductNames = new Set();
 let allTechStock = {}; // raw sd:tech blob: {techName: [{name,qty,used,ret,pend}, ...]}
 let techStock = null; // {name: remainingQty} for whichever name is active below, or null
@@ -1830,11 +1830,28 @@ const PRODUCTS = [
 // no per-unit identity) — maps to songdee-vehicle-lookup's /devices and
 // /device-swap `type` values. Selecting one of these shows an SN field so
 // the swap can move the right physical unit in the sheet.
-const DEVICE_TYPE_BY_PRODUCT = {
-  "AI Box": "aibox",
-  "ADAS": "adas",
-  "DMS V.3": "dms",
-};
+// เดิมเทียบชื่อ product แบบตรงตัวเป๊ะ ("AI Box"/"ADAS"/"DMS V.3") ซึ่งไม่ตรง
+// กับชื่อจริงใน catalog ของ Stock เลยสักชื่อ (เช่น "DMS Camera V3",
+// "ADAS Camera V2", "AI BOX- SD (LINDE)" ฯลฯ — มีหลายรุ่น/หลายส่วนต่อท้าย)
+// ทำให้ทั้งช่อง SN และช่อง CH ไม่โผล่ให้เลยทั้งที่ควรจะโผล่ — เปลี่ยนเป็นเช็ค
+// จากคำที่ชื่อสินค้ามีแทน (case-insensitive) ให้ตรงกับของจริงที่ใช้งาน
+function deviceTypeForProduct(name){
+  if(!name) return undefined;
+  const n = name.toLowerCase();
+  if(n.includes('dms')) return 'dms';
+  if(n.includes('adas')) return 'adas';
+  if(n.includes('ai box') || n.includes('aibox')) return 'aibox';
+  return undefined;
+}
+// กล้อง/อุปกรณ์ที่ต้องเลือกช่อง CH (Ch1-Ch9) ตอนติดตั้งใหม่ — ของใน Stock's
+// "Camera" category (DOME/Reverse ฯลฯ) บวก DMS/ADAS (ก็ต่อสายเข้าช่องกล้อง
+// ของ MDVR เหมือนกัน แค่ identity ติดตามด้วย SN คนละชีต) ไม่รวม AI Box (ไม่ได้
+// ต่อเข้าช่องกล้องช่องไหน เป็นตัวประมวลผลแยก)
+function rowNeedsChannel(product){
+  if(cameraProductNames.has(product)) return true;
+  const t = deviceTypeForProduct(product);
+  return t === 'dms' || t === 'adas';
+}
 
 // ต้องตรงตัวอักษรกับหัวคอลัมน์ "Ch1".."Ch9" ในชีต MDVR Tracking เป๊ะ (ดู
 // EQUIPMENT_COLUMNS ใน songdee-vehicle-lookup/src/worker.js) — ส่งกลับไป
@@ -2152,9 +2169,9 @@ function renderFixRows(){
     sel.onchange = ()=>{
       row.product = sel.value;
       row.qty = locked ? 1 : row.qty;
-      // เปลี่ยนไปเป็นของที่ไม่ใช่กล้อง — ล้างช่อง CH เดิมทิ้ง ไม่งั้นค่าเก่าจะ
+      // เปลี่ยนไปเป็นของที่ไม่ต้องมี CH — ล้างช่อง CH เดิมทิ้ง ไม่งั้นค่าเก่าจะ
       // ค้างอยู่และหลุดไปเขียนทับคอลัมน์ Ch ผิดชิ้นตอน buildSheetUpdates()
-      if(!cameraProductNames.has(row.product)) row.ch = '';
+      if(!rowNeedsChannel(row.product)) row.ch = '';
       updatePreview(); renderFixRows();
     };
 
@@ -2179,10 +2196,11 @@ function renderFixRows(){
     line.appendChild(sel); line.appendChild(qty); line.appendChild(rm);
     wrap.appendChild(line);
 
-    // ติดตั้งใหม่ only, เฉพาะแถวที่เป็นกล้องจริง (อยู่ใน Stock's "Camera"
-    // category) — เลือก CH (Ch1-Ch9) ที่ต่ออยู่จริงหน้างาน ไม่บังคับเลือก
-    // ส่งกลับไปเขียนชีต MDVR Tracking คอลัมน์ตรงช่องนั้นให้ ดู buildSheetUpdates()
-    if(state.tpl === 'new_install' && cameraProductNames.has(row.product)){
+    // ติดตั้งใหม่ only, เฉพาะแถวที่ต้องมี CH จริง (กล้องใน Stock's "Camera"
+    // category, หรือ DMS/ADAS — ไม่รวม AI Box ซึ่งไม่ได้ต่อช่องกล้องช่องไหน)
+    // เลือก CH (Ch1-Ch9) ที่ต่ออยู่จริงหน้างาน ไม่บังคับเลือก ส่งกลับไปเขียนชีต
+    // MDVR Tracking คอลัมน์ตรงช่องนั้นให้ ดู buildSheetUpdates()
+    if(state.tpl === 'new_install' && rowNeedsChannel(row.product)){
       const chSel = document.createElement('select');
       chSel.style.marginTop = '6px';
       const chBlank = document.createElement('option');
@@ -2205,7 +2223,7 @@ function renderFixRows(){
       wrap.appendChild(custom);
     }
 
-    if(DEVICE_TYPE_BY_PRODUCT[row.product]){
+    if(deviceTypeForProduct(row.product)){
       const newSN = document.createElement('input');
       newSN.type='text'; newSN.placeholder='SN เครื่องใหม่ (จาก Ai Box/ADAS/DMS Tracking)';
       newSN.value = row.newSN || ''; newSN.style.marginTop='6px';
@@ -2239,7 +2257,7 @@ function renderFixRows(){
       }
       oldSel.onchange = ()=>{
         row.oldModel = oldSel.value;
-        const type = DEVICE_TYPE_BY_PRODUCT[row.oldModel];
+        const type = deviceTypeForProduct(row.oldModel);
         if(type && !row.oldSN && deviceLookup[type]) row.oldSN = deviceLookup[type].sn || '';
         updatePreview(); renderFixRows();
       };
@@ -2253,7 +2271,7 @@ function renderFixRows(){
         oldWrap.appendChild(oldCustom);
       }
 
-      if(DEVICE_TYPE_BY_PRODUCT[row.oldModel]){
+      if(deviceTypeForProduct(row.oldModel)){
         const oldSN = document.createElement('input');
         oldSN.type='text'; oldSN.placeholder='SN เครื่องเดิม (auto จากประวัติทะเบียนถ้ามี)';
         oldSN.value = row.oldSN || ''; oldSN.style.marginTop='6px';
@@ -2570,8 +2588,8 @@ function fixLine(row){
   const oldName = tplHasOldModel(state.tpl)
     ? (row.oldModel === "อื่นๆ (พิมพ์เอง)" ? (row.oldModelCustom || "") : row.oldModel)
     : "";
-  const newTag = (DEVICE_TYPE_BY_PRODUCT[row.product] && row.newSN) ? ` (SN: ${row.newSN})` : '';
-  const oldTag = (tplHasOldModel(state.tpl) && DEVICE_TYPE_BY_PRODUCT[row.oldModel] && row.oldSN) ? ` (SN เดิม: ${row.oldSN})` : '';
+  const newTag = (deviceTypeForProduct(row.product) && row.newSN) ? ` (SN: ${row.newSN})` : '';
+  const oldTag = (tplHasOldModel(state.tpl) && deviceTypeForProduct(row.oldModel) && row.oldSN) ? ` (SN เดิม: ${row.oldSN})` : '';
   const chTag = (state.tpl === 'new_install' && row.ch) ? ` (${row.ch})` : '';
   if(oldName && name) return `- ทำการเปลี่ยน ${oldName}${oldTag} เป็น ${name}${newTag}${chTag}`;
   if(name){
@@ -2604,10 +2622,11 @@ function buildSheetUpdates(){
     });
   } else if(state.tpl === 'new_install'){
     state.fixes.forEach(row=>{
-      // cameraProductNames check is defense-in-depth — renderFixRows()/the
-      // product picker already clear row.ch off a non-camera row, but a
-      // report saved before that guard existed could still have a stale ch.
-      if(!row.ch || !cameraProductNames.has(row.product)) return;
+      // rowNeedsChannel check is defense-in-depth — renderFixRows()/the
+      // product picker already clear row.ch off a row that doesn't need one,
+      // but a report saved before that guard existed could still have a
+      // stale ch.
+      if(!row.ch || !rowNeedsChannel(row.product)) return;
       const newName = row.product === "อื่นๆ (พิมพ์เอง)" ? (row.custom || "") : row.product;
       if(!newName) return;
       updates.push({ column: row.ch, value: newName });
@@ -2648,8 +2667,8 @@ function buildDeviceSwaps(){
   const allowOld = tplHasOldModel(state.tpl);
   const swaps = [];
   state.fixes.forEach(row=>{
-    const newType = DEVICE_TYPE_BY_PRODUCT[row.product];
-    const oldType = allowOld ? DEVICE_TYPE_BY_PRODUCT[row.oldModel] : undefined;
+    const newType = deviceTypeForProduct(row.product);
+    const oldType = allowOld ? deviceTypeForProduct(row.oldModel) : undefined;
     const type = newType || oldType;
     if(!type) return;
     const oldSN = (oldType === type) ? (row.oldSN || '').trim() : '';
