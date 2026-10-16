@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.44.0">
+<meta name="app-version" content="1.44.1">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -694,6 +694,9 @@
   <div class="actionbar-inner">
     <button class="btn-secondary" onclick="copyText()">📋 คัดลอกข้อความ</button>
     <button class="btn-primary" id="sendBtn" onclick="sendToLine()">📤 ส่งเข้า LINE</button>
+  </div>
+  <div class="app-hidden" id="sentLinkWrap" style="text-align:center; margin-top:8px;">
+    <a href="index.html" style="color:var(--accent-2); font-size:13px; text-decoration:underline; text-underline-offset:2px;">✅ ส่งแล้ว — ไปหน้า Dashboard</a>
   </div>
 </div>
 
@@ -1720,6 +1723,7 @@ function loadReportIntoForm(doc){
     network: doc.network || '',
   };
   syncFormInputsFromState();
+  resetSendButton();
   const dateStr = state.date ? state.date.split('-').reverse().join('/') : '(ไม่ระบุวันที่)';
   const tplLabel = (TEMPLATES[state.tpl]||{}).label || state.tpl || '';
   document.getElementById('editingBannerText').textContent = `กำลังแก้ไขรายงาน: ${dateStr} ${tplLabel} ${state.plate || ''}`.trim();
@@ -1747,6 +1751,15 @@ async function loadReportFromUrlIfAny(){
   history.replaceState(null, '', location.pathname);
 }
 
+// ล้างปุ่ม "✅ ส่งแล้ว" + ลิงก์ไป Dashboard กลับเป็นสถานะปกติ — เรียกทุกครั้งที่
+// เริ่ม/เปิดรายงานใหม่ ไม่งั้นสถานะ "ส่งแล้ว" ของรายงานก่อนหน้าจะค้างข้ามมา
+function resetSendButton(){
+  const sendBtn = document.getElementById('sendBtn');
+  if(sendBtn){ sendBtn.disabled = false; sendBtn.textContent = '📤 ส่งเข้า LINE'; }
+  const linkWrap = document.getElementById('sentLinkWrap');
+  if(linkWrap) linkWrap.classList.add('app-hidden');
+}
+
 function startNewReport(){
   currentReportId = null;
   originalReportDoc = null;
@@ -1754,6 +1767,7 @@ function startNewReport(){
   state = defaultState();
   document.getElementById('editingBanner').classList.add('app-hidden');
   syncFormInputsFromState();
+  resetSendButton();
   stockLock = null;
   selectedAssignmentId = null;
   vehicleOldModels = [];
@@ -1784,6 +1798,7 @@ function startNextVehicle(){
   state.tpl = keepTpl;
   document.getElementById('editingBanner').classList.add('app-hidden');
   syncFormInputsFromState();
+  resetSendButton();
   stockLock = null;
   selectedAssignmentId = null;
   vehicleOldModels = [];
@@ -2992,6 +3007,7 @@ async function findRecentDuplicateReport(){
 async function sendToLine(){
   const endpoint = LINE_ENDPOINT.trim();
   const sendBtn = document.getElementById('sendBtn');
+  let sentSuccessfully = false;
 
   // Disable immediately and unconditionally — a double-tap/double-click on
   // "ส่งเข้า LINE" used to only get blocked when there were pending photos
@@ -3126,14 +3142,17 @@ async function sendToLine(){
       if(res.ok){
         showToast('ส่งเข้า LINE แล้ว ✓' + saveSuffix);
         celebrateSuccess();
-        // กลับไปหน้า Dashboard หลักหลังส่งสำเร็จ กันกดส่งซ้ำ/แก้ต่อโดยไม่ตั้งใจ
-        // บนรายงานที่ส่งไปแล้ว — หน่วงไว้พอให้เห็นข้อความ/แอนิเมชันก่อนเปลี่ยนหน้า
-        // แต่ถ้า saveSuffix มีงานย่อยที่ล้มเหลวอยู่ (เช่น อัปเดตชีต/เครื่อง MDVR
-        // ไม่สำเร็จ) ไม่เด้งออกไปทันที — ให้มีเวลาอ่านว่าอะไรพลาดไปจริงๆ ก่อน
-        // (เด้งเร็วไปซ่อน error ไว้ไม่ให้เห็นเลย พบจากเคสติดตั้งใหม่ที่ MDVR
-        // ไม่ถูก track แต่รายงานเองก็ยังส่งสำเร็จตามปกติ)
+        // กันกดส่งซ้ำ/แก้ต่อโดยไม่ตั้งใจบนรายงานที่ส่งไปแล้ว — เดิม (v1.43.0)
+        // ใช้ location.href เด้งไปหน้า Dashboard อัตโนมัติ แต่กลายเป็นเด้งออก
+        // ไปหน้า Login ทุกครั้งแทน (บัญชีที่ไม่ได้ติ๊ก "จดจำฉันไว้" ใช้ Firebase
+        // Auth แบบ SESSION persistence — การโหลดหน้าใหม่ทั้งหน้าแบบนี้เสี่ยง
+        // ทำให้ auth state หลุดได้ โดยเฉพาะบนมือถือ) เปลี่ยนมาไม่ reload หน้า
+        // เลยแทน — ปิดปุ่มค้างไว้ (ไม่ปล่อยให้ finally ด้านล่างเปิดกลับ) พร้อม
+        // โชว์ลิงก์ไปหน้า Dashboard ให้กดเองตอนพร้อม แทนที่จะบังคับเปลี่ยนหน้าทันที
         if(!saveSuffix.includes('ไม่สำเร็จ')){
-          setTimeout(()=>{ location.href = 'index.html'; }, 1400);
+          sentSuccessfully = true;
+          sendBtn.textContent = '✅ ส่งแล้ว';
+          document.getElementById('sentLinkWrap').classList.remove('app-hidden');
         }
       }
       else{ showToast('ส่งไม่สำเร็จ (' + res.status + ') — คัดลอกข้อความสำรองไว้แล้ว' + saveSuffix); navigator.clipboard.writeText(text).catch(()=>{}); }
@@ -3142,7 +3161,7 @@ async function sendToLine(){
       navigator.clipboard.writeText(text).catch(()=>{});
     }
   }finally{
-    sendBtn.disabled = false;
+    if(!sentSuccessfully) sendBtn.disabled = false;
   }
 }
 

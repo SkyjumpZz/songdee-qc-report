@@ -57,6 +57,45 @@ machines/sessions (not just in chat history).
     the one production endpoint before/after deploying (it's a
     read-only lookup, no write-path risk).
 
+## Fix: auto-redirect was bouncing techs out to Login every time (form.html v1.44.1)
+
+User: after sending, the app kept landing on the **Login** page instead
+of Dashboard — every single time.
+
+Root cause: v1.43.0's `location.href = 'index.html'` forces a full page
+reload. An account that hasn't ticked "จดจำฉันไว้" (remember me) on
+login uses Firebase Auth's `SESSION` persistence
+(`firebase.auth.Auth.Persistence.SESSION`, set in index.html's
+`doLogin()`) instead of `LOCAL` — session-scoped, and far more fragile
+across a hard page reload than `LOCAL` is, especially on mobile
+browsers/PWA contexts field techs are actually using. A full reload
+right after a burst of network activity (save, sheet updates, LINE
+push) is exactly the kind of navigation that risks losing that session
+before `index.html`'s fresh `onAuthStateChanged` sees it — bouncing to
+the login screen instead of the Dashboard.
+
+Rather than try to patch the underlying persistence/timing behavior
+(hard to verify without a real browser + real Firebase project), removed
+the forced navigation entirely — the actual goal ("prevent an accidental
+resubmit") doesn't need a page reload at all. On a clean successful send:
+`sendBtn` stays disabled (the `finally` block's unconditional re-enable
+is now skipped via a `sentSuccessfully` flag) and its label changes to
+"✅ ส่งแล้ว", with a plain `<a href="index.html">` link appearing next to
+it for the tech to tap when THEY'RE ready — same intent, zero automatic
+page reloads. `resetSendButton()` (new) restores the normal button/
+clears the link, called from `startNewReport()`/`startNextVehicle()`/
+`loadReportIntoForm()` so a later report doesn't inherit a previous one's
+"sent" state.
+
+Verified with Playwright: right after a successful send the page URL is
+unchanged (still form.html) even 2.5s later — no delayed navigation —
+with the button disabled, relabeled, and the Dashboard link visible;
+`startNewReport()` resets the label and hides the link, and the button
+correctly becomes clickable again once the new report's required fields
+are filled in (proving it's not permanently stuck from the earlier
+send). Full existing suite (CH/order/camera-restriction/error-visibility/
+qty/IMEI) re-run clean.
+
 ## CH picker restricted to actual cameras + don't hide errors behind the redirect (form.html v1.44.0)
 
 User tested a real install job, typed an IMEI, and saw no tracking
