@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
-<meta name="app-version" content="1.1.0">
+<meta name="app-version" content="1.2.0">
 <title>ประวัติรายงาน · SONGDEE GPS</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -12,23 +12,23 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <style>
   :root{
-    --bg:#080d18;
-    --bg-panel:#121c33;
-    --bg-panel-2:#0e1729;
-    --line:#26375a;
-    --line-soft:#1c2942;
-    --text:#f0f4fc;
-    --text-dim:#94a3c4;
-    --text-faint:#5f6f92;
-    --accent:#ffb020;
+    --bg:#ffffff;
+    --bg-panel:#ffffff;
+    --bg-panel-2:#f6f6f7;
+    --line:#e3e3e6;
+    --line-soft:#ececee;
+    --text:#161616;
+    --text-dim:#5c5c62;
+    --text-faint:#8c8c93;
+    --accent:#d81921;
     --accent-2:#3ddc97;
-    --danger:#ff5c5c;
+    --danger:#dc2626;
     --r-sm:12px;
     --r-md:16px;
     --r-lg:22px;
     --r-pill:999px;
-    --shadow-sm:0 1px 2px rgba(0,0,0,.3);
-    --shadow-md:0 14px 34px -18px rgba(0,0,0,.75);
+    --shadow-sm:0 1px 2px rgba(20,20,20,.06);
+    --shadow-md:0 14px 34px -18px rgba(20,20,20,.18);
     --hue-blue:#5b8def;
     --hue-purple:#a78bfa;
     --hue-pink:#f472b6;
@@ -38,9 +38,8 @@
   body{
     margin:0;
     background:
-      radial-gradient(1100px 520px at 12% -8%, rgba(255,176,32,.09) 0%, transparent 55%),
-      radial-gradient(900px 500px at 100% 0%, rgba(61,220,151,.06) 0%, transparent 55%),
-      radial-gradient(800px 460px at 0% 60%, rgba(91,141,239,.05) 0%, transparent 60%),
+      radial-gradient(1100px 520px at 12% -8%, rgba(216,25,33,.04) 0%, transparent 55%),
+      radial-gradient(900px 500px at 100% 0%, rgba(61,220,151,.04) 0%, transparent 55%),
       var(--bg);
     background-attachment:fixed;
     color:var(--text);
@@ -48,7 +47,7 @@
   }
   .ambient-orbs{position:fixed; inset:0; z-index:-1; overflow:hidden; pointer-events:none;}
   .ambient-orbs span{
-    position:absolute; border-radius:50%; filter:blur(70px); opacity:.32;
+    position:absolute; border-radius:50%; filter:blur(70px); opacity:.13;
     animation:orbDrift 26s ease-in-out infinite alternate;
   }
   .ambient-orbs span:nth-child(1){
@@ -77,7 +76,7 @@
   ::-webkit-scrollbar-thumb:hover{background:var(--text-dim);}
   header{
     border-bottom:1px solid var(--line-soft);
-    background:rgba(8,13,24,.72);
+    background:rgba(255,255,255,.82);
     position:sticky; top:0; z-index:10;
     backdrop-filter:blur(14px);
   }
@@ -94,8 +93,8 @@
     display:inline-flex; align-items:center; gap:6px;
     font-family:'IBM Plex Mono',monospace;
     font-size:10.5px; letter-spacing:.1em; text-transform:uppercase;
-    color:var(--accent); background:rgba(255,176,32,.1);
-    border:1px solid rgba(255,176,32,.22); border-radius:var(--r-pill);
+    color:var(--accent); background:rgba(216,25,33,.1);
+    border:1px solid rgba(216,25,33,.22); border-radius:var(--r-pill);
     padding:4px 10px; margin-bottom:10px;
   }
   header h1{
@@ -123,9 +122,9 @@
     display:flex; align-items:center; justify-content:center; font-size:15px;
     background:var(--bg-panel-2); border:1px solid var(--line-soft);
   }
-  .history-item.tpl-upgrade .hi-icon{background:linear-gradient(150deg, rgba(255,176,32,.22), rgba(255,176,32,.06)); border-color:rgba(255,176,32,.28);}
+  .history-item.tpl-upgrade .hi-icon{background:linear-gradient(150deg, rgba(216,25,33,.22), rgba(216,25,33,.06)); border-color:rgba(216,25,33,.28);}
   .history-item.tpl-new_install .hi-icon{background:linear-gradient(150deg, rgba(61,220,151,.22), rgba(61,220,151,.06)); border-color:rgba(61,220,151,.28);}
-  .history-item.tpl-repair .hi-icon{background:linear-gradient(150deg, rgba(255,92,92,.18), rgba(255,92,92,.06)); border-color:rgba(255,92,92,.26);}
+  .history-item.tpl-repair .hi-icon{background:linear-gradient(150deg, rgba(220,38,38,.18), rgba(220,38,38,.06)); border-color:rgba(220,38,38,.26);}
   .history-item .hi-text{flex:1; min-width:0;}
   .history-item .title{font-size:14px; font-weight:600; color:var(--text);}
   .history-item .meta{font-size:12px; color:var(--text-dim); margin-top:4px;}
@@ -154,7 +153,7 @@
   }
   .page-tabs a:hover{border-color:var(--text-dim); color:var(--text);}
   .page-tabs .active{
-    background:rgba(255,176,32,0.16); border-color:var(--accent); color:var(--accent); cursor:default;
+    background:rgba(216,25,33,0.16); border-color:var(--accent); color:var(--accent); cursor:default;
   }
   .app-hidden{display:none !important;}
   .scope-toggle{margin-bottom:14px;}
@@ -166,7 +165,7 @@
     background:var(--bg-panel-2); color:var(--danger); font-size:15px; cursor:pointer;
     transition:background .15s ease, border-color .15s ease;
   }
-  .history-item-wrap .del-btn:hover{background:rgba(255,92,92,.1); border-color:var(--danger);}
+  .history-item-wrap .del-btn:hover{background:rgba(220,38,38,.1); border-color:var(--danger);}
   .history-item .owner{font-size:11px; color:var(--hue-purple); font-weight:600; margin-top:3px;}
 
   .card{
@@ -190,7 +189,7 @@
   #changeLogRows .action-badge{font-size:10.5px; font-weight:700; padding:2px 8px; border-radius:var(--r-pill); text-transform:uppercase; letter-spacing:.03em;}
   #changeLogRows .action-badge.create{background:rgba(61,220,151,.14); color:var(--accent-2); border:1px solid rgba(61,220,151,.3);}
   #changeLogRows .action-badge.update{background:rgba(91,141,239,.14); color:var(--hue-blue); border:1px solid rgba(91,141,239,.3);}
-  #changeLogRows .action-badge.delete{background:rgba(255,92,92,.14); color:var(--danger); border:1px solid rgba(255,92,92,.3);}
+  #changeLogRows .action-badge.delete{background:rgba(220,38,38,.14); color:var(--danger); border:1px solid rgba(220,38,38,.3);}
   #changeLogRows .diff-list{margin:8px 0 0; padding-left:0; list-style:none; font-size:12px;}
   #changeLogRows .diff-list li{padding:5px 0; border-top:1px dashed var(--line-soft);}
   #changeLogRows .diff-list li:first-child{border-top:none;}

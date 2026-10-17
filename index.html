@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>Dashboard · SONGDEE GPS</title>
-<meta name="app-version" content="1.17.0">
+<meta name="app-version" content="1.18.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -12,32 +12,32 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <style>
   :root{
-    --bg:#0b1220;
-    --bg-panel:#121b2e;
-    --bg-panel-2:#0f1729;
-    --line:#223047;
-    --line-soft:#1a2439;
-    --text:#e7edf7;
-    --text-dim:#8b9bb5;
-    --accent:#ffb020;
+    --bg:#ffffff;
+    --bg-panel:#ffffff;
+    --bg-panel-2:#f6f6f7;
+    --line:#e3e3e6;
+    --line-soft:#ececee;
+    --text:#161616;
+    --text-dim:#5c5c62;
+    --accent:#d81921;
     --accent-2:#3ddc97;
-    --danger:#ff5c5c;
-    --shadow-sm:0 1px 2px rgba(0,0,0,.25);
-    --shadow-md:0 10px 28px -14px rgba(0,0,0,.6);
-    --shadow-glow-accent:0 0 0 3px rgba(255,176,32,.14);
+    --danger:#dc2626;
+    --shadow-sm:0 1px 2px rgba(20,20,20,.06);
+    --shadow-md:0 10px 28px -14px rgba(20,20,20,.16);
+    --shadow-glow-accent:0 0 0 3px rgba(216,25,33,.14);
     /* Dashboard-only redesign tokens — additive, never override the values
        above (login screen and its input/button styling still read the
-       originals verbatim, so it stays visually untouched per the redesign
-       request: "keep the login page as-is"). */
-    --bg-input:#0a1120;
-    --text-faint:#5f6f92;
+       originals verbatim, so it stays visually consistent with the rest of
+       the reskinned app). */
+    --bg-input:#f6f6f7;
+    --text-faint:#8c8c93;
     --r-sm:12px;
     --r-md:16px;
     --r-lg:22px;
     --r-pill:999px;
-    --shadow-lg:0 22px 50px -22px rgba(0,0,0,.85);
+    --shadow-lg:0 22px 50px -22px rgba(20,20,20,.22);
     /* สีสันเพิ่มเติม — เหมือนกับ form.html ให้แต่ละการ์ดมีสีประจำตัว
-       ไม่ใช่เหลืองทองซ้ำทุกอัน (login screen ไม่เห็นค่าพวกนี้เลย เพราะ
+       ไม่ใช่สีแดงซ้ำทุกอัน (login screen ไม่เห็นค่าพวกนี้เลย เพราะ
        .login-overlay ทับด้วยพื้นทึบของตัวเองอยู่แล้ว) */
     --hue-blue:#5b8def;
     --hue-purple:#a78bfa;
@@ -48,9 +48,8 @@
   body{
     margin:0;
     background:
-      radial-gradient(1200px 500px at 50% -10%, #16223a 0%, transparent 60%),
-      radial-gradient(900px 460px at 100% 100%, rgba(255,176,32,0.06) 0%, transparent 62%),
-      radial-gradient(800px 460px at 0% 40%, rgba(91,141,239,.05) 0%, transparent 60%),
+      radial-gradient(1200px 500px at 50% -10%, #fafafa 0%, transparent 60%),
+      radial-gradient(900px 460px at 100% 100%, rgba(216,25,33,0.04) 0%, transparent 62%),
       var(--bg);
     background-attachment:fixed;
     color:var(--text);
@@ -62,7 +61,7 @@
      z-index ต่ำกว่า .login-overlay (300) และ overlay เองก็ทึบแสงอยู่แล้ว */
   .ambient-orbs{position:fixed; inset:0; z-index:-1; overflow:hidden; pointer-events:none;}
   .ambient-orbs span{
-    position:absolute; border-radius:50%; filter:blur(70px); opacity:.32;
+    position:absolute; border-radius:50%; filter:blur(70px); opacity:.13;
     animation:orbDrift 26s ease-in-out infinite alternate;
   }
   .ambient-orbs span:nth-child(1){
@@ -88,7 +87,7 @@
   ::-webkit-scrollbar-thumb:hover{background:var(--text-dim);}
   header{
     border-bottom:1px solid var(--line-soft);
-    background:rgba(11,18,32,.72);
+    background:rgba(255,255,255,.82);
     position:sticky; top:0; z-index:10;
     backdrop-filter:blur(14px);
   }
@@ -105,8 +104,8 @@
     display:inline-flex; align-items:center; gap:6px;
     font-family:'IBM Plex Mono',monospace;
     font-size:10.5px; letter-spacing:.1em; text-transform:uppercase;
-    color:var(--accent); background:rgba(255,176,32,.1);
-    border:1px solid rgba(255,176,32,.22); border-radius:var(--r-pill);
+    color:var(--accent); background:rgba(216,25,33,.1);
+    border:1px solid rgba(216,25,33,.22); border-radius:var(--r-pill);
     padding:4px 10px; margin-bottom:10px;
   }
   header h1{
@@ -134,7 +133,7 @@
   }
   .page-tabs a:hover{border-color:var(--text-dim); color:var(--text);}
   .page-tabs .active{
-    background:rgba(255,176,32,0.16); border-color:var(--accent); color:var(--accent); cursor:default;
+    background:rgba(216,25,33,0.16); border-color:var(--accent); color:var(--accent); cursor:default;
   }
   label{
     display:block; font-size:12.5px; color:var(--text-dim); margin:10px 0 5px;
@@ -195,7 +194,7 @@
   .login-split{min-height:100vh; display:flex;}
   .login-visual{
     display:none; position:relative; flex:1 1 46%; max-width:640px;
-    background:linear-gradient(160deg, #172845 0%, #0b1220 65%);
+    background:linear-gradient(160deg, #1c1c1c 0%, #0a0a0a 65%);
     overflow:hidden;
   }
   .login-visual::after{
@@ -257,7 +256,7 @@
   .dash-hero{
     position:relative; overflow:hidden;
     background:
-      radial-gradient(420px 220px at 8% 0%, rgba(255,176,32,.17) 0%, transparent 68%),
+      radial-gradient(420px 220px at 8% 0%, rgba(216,25,33,.17) 0%, transparent 68%),
       radial-gradient(360px 220px at 100% 110%, rgba(61,220,151,.13) 0%, transparent 68%),
       linear-gradient(165deg, rgba(255,255,255,.03), transparent 50%), var(--bg-panel);
     border:1px solid var(--line-soft); border-radius:var(--r-lg);
@@ -296,8 +295,8 @@
   }
   .stat-card.b::before{background:linear-gradient(90deg, transparent, var(--accent), transparent);}
   .stat-card.b .stat-icon{
-    background:linear-gradient(150deg, rgba(255,176,32,.22), rgba(255,176,32,.06));
-    border:1px solid rgba(255,176,32,.28); box-shadow:0 4px 14px -6px rgba(255,176,32,.5);
+    background:linear-gradient(150deg, rgba(216,25,33,.22), rgba(216,25,33,.06));
+    border:1px solid rgba(216,25,33,.28); box-shadow:0 4px 14px -6px rgba(216,25,33,.5);
   }
   .stat-card.b .num{color:var(--accent);}
   .stat-card .num{font-family:'Kanit',sans-serif; font-size:26px; font-weight:700; color:var(--accent-2); font-variant-numeric:tabular-nums; line-height:1.15;}
@@ -324,9 +323,9 @@
     display:flex; align-items:center; justify-content:center; font-size:15px;
     background:var(--bg-panel-2); border:1px solid var(--line-soft);
   }
-  .history-item.tpl-upgrade .hi-icon{background:linear-gradient(150deg, rgba(255,176,32,.22), rgba(255,176,32,.06)); border-color:rgba(255,176,32,.28);}
+  .history-item.tpl-upgrade .hi-icon{background:linear-gradient(150deg, rgba(216,25,33,.22), rgba(216,25,33,.06)); border-color:rgba(216,25,33,.28);}
   .history-item.tpl-new_install .hi-icon{background:linear-gradient(150deg, rgba(61,220,151,.22), rgba(61,220,151,.06)); border-color:rgba(61,220,151,.28);}
-  .history-item.tpl-repair .hi-icon{background:linear-gradient(150deg, rgba(255,92,92,.18), rgba(255,92,92,.06)); border-color:rgba(255,92,92,.26);}
+  .history-item.tpl-repair .hi-icon{background:linear-gradient(150deg, rgba(220,38,38,.18), rgba(220,38,38,.06)); border-color:rgba(220,38,38,.26);}
   .history-item .hi-text{flex:1; min-width:0;}
   .history-item .title{font-size:14px; font-weight:600; color:var(--text);}
   .history-item .meta{font-size:12px; color:var(--text-dim); margin-top:4px;}
@@ -383,7 +382,7 @@
     transition:background .15s ease, border-color .15s ease, filter .15s ease;
   }
   .name-map-row button{background:none; border:1px solid var(--line); color:var(--danger);}
-  .name-map-row button:hover{background:rgba(255,92,92,.08); border-color:var(--danger);}
+  .name-map-row button:hover{background:rgba(220,38,38,.08); border-color:var(--danger);}
   .name-map-add{display:grid; grid-template-columns:1fr 1fr auto; gap:8px; margin-top:6px;}
   .name-map-add input{background:var(--bg-input); border-radius:var(--r-sm); box-shadow:inset 0 1px 2px rgba(0,0,0,.25);}
   .name-map-add button{background:linear-gradient(135deg, var(--accent-2), #2bc386); border:none; color:#06251a; font-weight:700;}
@@ -473,16 +472,16 @@
           </pattern>
         </defs>
         <rect width="640" height="900" fill="url(#loginDots)"></rect>
-        <path d="M40 760 C 180 700, 220 560, 300 480 S 480 300, 560 160" fill="none" stroke="#ffb020" stroke-width="4" stroke-dasharray="2 14" stroke-linecap="round" opacity="0.75"></path>
-        <circle cx="560" cy="160" r="34" fill="#ffb020" opacity="0.15"></circle>
-        <circle cx="560" cy="160" r="20" fill="#ffb020" opacity="0.25"></circle>
-        <path d="M560 122 c17 0 30 13 30 30 c0 22-30 46-30 46 s-30-24-30-46 c0-17 13-30 30-30z" fill="#ffb020"></path>
-        <circle cx="560" cy="152" r="10" fill="#0b1220"></circle>
+        <path d="M40 760 C 180 700, 220 560, 300 480 S 480 300, 560 160" fill="none" stroke="#d81921" stroke-width="4" stroke-dasharray="2 14" stroke-linecap="round" opacity="0.75"></path>
+        <circle cx="560" cy="160" r="34" fill="#d81921" opacity="0.15"></circle>
+        <circle cx="560" cy="160" r="20" fill="#d81921" opacity="0.25"></circle>
+        <path d="M560 122 c17 0 30 13 30 30 c0 22-30 46-30 46 s-30-24-30-46 c0-17 13-30 30-30z" fill="#d81921"></path>
+        <circle cx="560" cy="152" r="10" fill="#0a0a0a"></circle>
         <g transform="translate(255,455)">
-          <rect x="0" y="6" width="46" height="22" rx="4" fill="#3ddc97"></rect>
-          <rect x="34" y="0" width="18" height="16" rx="3" fill="#3ddc97"></rect>
-          <circle cx="12" cy="30" r="6" fill="#0b1220" stroke="#3ddc97" stroke-width="2"></circle>
-          <circle cx="40" cy="30" r="6" fill="#0b1220" stroke="#3ddc97" stroke-width="2"></circle>
+          <rect x="0" y="6" width="46" height="22" rx="4" fill="#ffffff"></rect>
+          <rect x="34" y="0" width="18" height="16" rx="3" fill="#ffffff"></rect>
+          <circle cx="12" cy="30" r="6" fill="#0a0a0a" stroke="#ffffff" stroke-width="2"></circle>
+          <circle cx="40" cy="30" r="6" fill="#0a0a0a" stroke="#ffffff" stroke-width="2"></circle>
         </g>
       </svg>
       <div class="login-visual-text">
