@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.46.0">
+<meta name="app-version" content="1.47.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -278,6 +278,13 @@
   .fix-entry .item-row{margin-bottom:0;}
   .old-model-row{margin-top:11px; padding-top:11px; border-top:1px solid var(--line);}
   .old-model-row label{font-size:11.5px; margin:0 0 5px;}
+  .remove-subsection{margin-top:16px;}
+  .remove-subsection:first-child{margin-top:0;}
+  .remove-subsection-title{
+    font-family:'Kanit',sans-serif; font-weight:600; font-size:13px;
+    color:var(--text-dim); margin-bottom:8px;
+  }
+  .remove-subsection .fix-entry{background:var(--bg-input);}
   .photo-grid{display:grid; grid-template-columns:repeat(3, 1fr); gap:9px; margin-bottom:12px;}
   .photo-thumb{
     position:relative; aspect-ratio:1; border-radius:var(--r-sm); overflow:hidden;
@@ -661,6 +668,25 @@
     <div class="stock-lock-banner app-hidden" id="vehicleEquipmentBanner"></div>
     <div id="fixRows"></div>
     <button class="btn-add" id="addFixBtn" onclick="addFixRow()">+ เพิ่มรายการแก้ไข</button>
+
+    <!-- ถอดย้ายอุปกรณ์ only — renderRemoveSections() fills these; toggled
+         against #fixRows/#addFixBtn above in applyTemplate(). -->
+    <div id="removeSections" class="app-hidden">
+      <div class="remove-subsection">
+        <div class="remove-subsection-title">① ถอด</div>
+        <div id="removeOldRows"></div>
+        <button class="btn-add" type="button" id="addRemovePairBtn" onclick="addRemovePairRow()">+ เพิ่มรายการถอด/ติดตั้ง</button>
+      </div>
+      <div class="remove-subsection">
+        <div class="remove-subsection-title">② ติดตั้ง</div>
+        <div id="removeNewRows"></div>
+      </div>
+      <div class="remove-subsection">
+        <div class="remove-subsection-title">③ แก้ไข (ถ้ามี)</div>
+        <div id="removeEditRows"></div>
+        <button class="btn-add" type="button" id="addRemoveEditBtn" onclick="addRemoveEditRow()">+ เพิ่มรายการแก้ไข</button>
+      </div>
+    </div>
   </div>
 
   <div class="card" id="stickerCard">
@@ -1704,7 +1730,7 @@ function loadReportIntoForm(doc){
     fleet: doc.fleet || '',
     plate: doc.plate || '',
     problems: (doc.problems && doc.problems.length) ? doc.problems : [{symptom:''}],
-    fixes: (doc.fixes && doc.fixes.length) ? doc.fixes : [{product:'', qty:1, custom:'', oldModel:'', oldModelCustom:'', newSN:'', oldSN:'', ch:''}],
+    fixes: (doc.fixes && doc.fixes.length) ? doc.fixes.map(r=> ({section:'pair', ...r})) : [{product:'', qty:1, custom:'', oldModel:'', oldModelCustom:'', newSN:'', oldSN:'', ch:'', section:'pair'}],
     stickers: doc.stickers || {},
     checklist: doc.checklist || {},
     photos: (doc.photos || []).map(p=> ({
@@ -1966,7 +1992,7 @@ function defaultState(){
     fleet: "",
     plate: "",
     problems: [{symptom:""}],
-    fixes: [{product:"", qty:1, custom:"", oldModel:"", oldModelCustom:"", newSN:"", oldSN:"", ch:""}],
+    fixes: [{product:"", qty:1, custom:"", oldModel:"", oldModelCustom:"", newSN:"", oldSN:"", ch:"", section:"pair"}],
     stickers: {},
     checklist: {},
     photos: [],
@@ -2069,7 +2095,22 @@ function renderProblemRows(){
 }
 
 function addFixRow(){
-  state.fixes.push({product:"", qty:1, custom:"", oldModel:"", oldModelCustom:"", newSN:"", oldSN:"", ch:""});
+  state.fixes.push({product:"", qty:1, custom:"", oldModel:"", oldModelCustom:"", newSN:"", oldSN:"", ch:"", section:"pair"});
+  renderFixRows();
+  updatePreview();
+}
+// ถอดย้ายอุปกรณ์ only — see renderRemoveSections(). "pair" rows show in
+// both the "ถอด" (old-model half) and "ติดตั้ง" (product half) columns,
+// tied together by sharing one row object; "edit" rows are a standalone
+// product-only entry shown only in "แก้ไข" (ถ้ามี), same shape as any
+// other template's plain fix row.
+function addRemovePairRow(){
+  state.fixes.push({product:"", qty:1, custom:"", oldModel:"", oldModelCustom:"", newSN:"", oldSN:"", ch:"", section:"pair"});
+  renderFixRows();
+  updatePreview();
+}
+function addRemoveEditRow(){
+  state.fixes.push({product:"", qty:1, custom:"", oldModel:"", oldModelCustom:"", newSN:"", oldSN:"", ch:"", section:"edit"});
   renderFixRows();
   updatePreview();
 }
@@ -2078,8 +2119,9 @@ function removeFixRow(idx){
   renderFixRows();
   updatePreview();
 }
-function renderFixRows(){
-  const container = document.getElementById('fixRows');
+// Shared by both the normal single-list render and ถอดย้ายอุปกรณ์'s 3-column
+// split — stock-lock/Spare accounting doesn't depend on template.
+function fixRowsStockContext(){
   // Both sources can apply at once now: this ทะเบียน's ใบเบิก AND this
   // technician's own Stock spare items, shown as separate <optgroup>
   // sections in the same dropdown instead of one replacing the other
@@ -2098,10 +2140,6 @@ function renderFixRows(){
   if(hasLock) Object.entries(stockLock.items).forEach(([k,v])=>{ lockItems[k] = (lockItems[k]||0) + (v||0); });
   if(hasTechStock) Object.entries(techStock).forEach(([k,v])=>{ lockItems[k] = (lockItems[k]||0) + (v||0); });
   const options = locked ? [] : [...(liveCatalog || PRODUCTS), "อื่นๆ (พิมพ์เอง)"];
-  // "+เพิ่มรายการแก้ไข" ปิดเมื่อจำนวนแถวครบจำนวนตัวเลือกที่กดได้ — ตอน locked
-  // ตัวเลือกจริงมาจาก lockItems (ใบเบิก/ของ Spare) ไม่ใช่ options ซึ่งว่าง
-  // เปล่าเสมอตอน locked (ใช้แค่กับ dropdown ของโหมดไม่ล็อก) ก่อนแก้ไข ปุ่มนี้
-  // เลยปิดค้างตลอดทุกครั้งที่มี stock lock เพราะ options.length เป็น 0 เสมอ
   const lockedOptionsCount = Object.keys(lockItems).length;
 
   // ล็อกรายการจากใบเบิก/ของ Spare มีจำนวนจำกัดต่อชิ้น — ถ้ามีของชิ้นเดียวกัน
@@ -2117,176 +2155,244 @@ function renderFixRows(){
     }, 0);
     return Math.max(0, (lockItems[product]||0) - usedElsewhere);
   }
+  return { hasLock, hasTechStock, locked, lockItems, options, lockedOptionsCount, remainingFor };
+}
 
-  container.innerHTML = '';
-  state.fixes.forEach((row, idx)=>{
-    const wrap = document.createElement('div');
-    wrap.className = 'fix-entry';
+// The "product" half of a fix row — เลือกอุปกรณ์/จำนวน/ลบ, plus CH (ติดตั้งใหม่
+// only) /ชื่อเอง /SN ใหม่. Used as-is for every template's combined row, and
+// as the standalone "ติดตั้ง"/"แก้ไข" entry for ถอดย้ายอุปกรณ์.
+function buildProductHalf(row, idx, ctx){
+  const { hasLock, hasTechStock, locked, lockItems, options, remainingFor } = ctx;
+  const wrap = document.createElement('div');
+  wrap.className = 'fix-entry';
 
-    const line = document.createElement('div');
-    line.className = 'item-row';
+  const line = document.createElement('div');
+  line.className = 'item-row';
 
-    const sel = document.createElement('select');
-    sel.required = true;
-    const blank = document.createElement('option');
-    blank.value=''; blank.textContent='-- เลือกอุปกรณ์ --'; sel.appendChild(blank);
-    if(locked){
-      if(hasLock){
-        const og = document.createElement('optgroup');
-        og.label = `จากใบเบิก ${stockLock.noStock}`;
-        Object.keys(stockLock.items).forEach(p=>{
-          const o = document.createElement('option');
-          o.value=p; o.textContent = `${p} (เบิก ${remainingFor(p, idx)})`;
-          if(p===row.product) o.selected=true;
-          og.appendChild(o);
-        });
-        sel.appendChild(og);
-      }
-      if(hasTechStock){
-        const og = document.createElement('optgroup');
-        og.label = `ของ Spare (${techStockOwnerName})`;
-        Object.keys(techStock).forEach(p=>{
-          const o = document.createElement('option');
-          o.value=p; o.textContent = `${p} (คงเหลือ ${remainingFor(p, idx)})`;
-          if(p===row.product) o.selected=true;
-          og.appendChild(o);
-        });
-        sel.appendChild(og);
-      }
-    } else {
-      options.forEach(p=>{
+  const sel = document.createElement('select');
+  sel.required = true;
+  const blank = document.createElement('option');
+  blank.value=''; blank.textContent='-- เลือกอุปกรณ์ --'; sel.appendChild(blank);
+  if(locked){
+    if(hasLock){
+      const og = document.createElement('optgroup');
+      og.label = `จากใบเบิก ${stockLock.noStock}`;
+      Object.keys(stockLock.items).forEach(p=>{
         const o = document.createElement('option');
-        o.value=p; o.textContent = p;
+        o.value=p; o.textContent = `${p} (เบิก ${remainingFor(p, idx)})`;
         if(p===row.product) o.selected=true;
-        sel.appendChild(o);
+        og.appendChild(o);
       });
+      sel.appendChild(og);
     }
-    // จำนวนตั้งต้นที่ 1 เสมอตอนเพิ่งเลือกอุปกรณ์ — เดิม default เป็นจำนวน
-    // คงเหลือทั้งหมด (remainingFor) ทำให้เลือกของที่เหลือเยอะๆ แล้วจำนวน
-    // เด้งไปเท่าที่มีในสต็อกทันทีโดยไม่ได้ตั้งใจ (เช่น เครื่องรูดบัตรเหลือ 23
-    // แต่ใช้จริงแค่ 1) ยังปรับเพิ่มได้เองในช่องจำนวน ไม่เกิน max ที่กำหนดไว้แล้ว
-    sel.onchange = ()=>{
-      row.product = sel.value;
-      row.qty = locked ? 1 : row.qty;
-      // เปลี่ยนไปเป็นของที่ไม่ต้องมี CH — ล้างช่อง CH เดิมทิ้ง ไม่งั้นค่าเก่าจะ
-      // ค้างอยู่และหลุดไปเขียนทับคอลัมน์ Ch ผิดชิ้นตอน buildSheetUpdates()
-      if(!rowNeedsChannel(row.product)) row.ch = '';
-      updatePreview(); renderFixRows();
-    };
+    if(hasTechStock){
+      const og = document.createElement('optgroup');
+      og.label = `ของ Spare (${techStockOwnerName})`;
+      Object.keys(techStock).forEach(p=>{
+        const o = document.createElement('option');
+        o.value=p; o.textContent = `${p} (คงเหลือ ${remainingFor(p, idx)})`;
+        if(p===row.product) o.selected=true;
+        og.appendChild(o);
+      });
+      sel.appendChild(og);
+    }
+  } else {
+    options.forEach(p=>{
+      const o = document.createElement('option');
+      o.value=p; o.textContent = p;
+      if(p===row.product) o.selected=true;
+      sel.appendChild(o);
+    });
+  }
+  // จำนวนตั้งต้นที่ 1 เสมอตอนเพิ่งเลือกอุปกรณ์ — เดิม default เป็นจำนวน
+  // คงเหลือทั้งหมด (remainingFor) ทำให้เลือกของที่เหลือเยอะๆ แล้วจำนวน
+  // เด้งไปเท่าที่มีในสต็อกทันทีโดยไม่ได้ตั้งใจ (เช่น เครื่องรูดบัตรเหลือ 23
+  // แต่ใช้จริงแค่ 1) ยังปรับเพิ่มได้เองในช่องจำนวน ไม่เกิน max ที่กำหนดไว้แล้ว
+  sel.onchange = ()=>{
+    row.product = sel.value;
+    row.qty = locked ? 1 : row.qty;
+    // เปลี่ยนไปเป็นของที่ไม่ต้องมี CH — ล้างช่อง CH เดิมทิ้ง ไม่งั้นค่าเก่าจะ
+    // ค้างอยู่และหลุดไปเขียนทับคอลัมน์ Ch ผิดชิ้นตอน buildSheetUpdates()
+    if(!rowNeedsChannel(row.product)) row.ch = '';
+    updatePreview(); renderFixRows();
+  };
 
-    const qty = document.createElement('input');
-    qty.type = locked ? 'number' : 'text';
-    if(locked){ qty.min = 0; qty.max = remainingFor(row.product, idx) || 0; }
-    qty.className='qty'; qty.value=row.qty; qty.placeholder='จำนวน';
-    qty.oninput = ()=>{
-      let v = qty.value;
-      if(locked){
-        const max = remainingFor(row.product, idx) || 0;
-        v = Math.max(0, Math.min(parseInt(v)||0, max));
-        qty.value = v;
-      }
-      row.qty = v; updatePreview();
-    };
+  const qty = document.createElement('input');
+  qty.type = locked ? 'number' : 'text';
+  if(locked){ qty.min = 0; qty.max = remainingFor(row.product, idx) || 0; }
+  qty.className='qty'; qty.value=row.qty; qty.placeholder='จำนวน';
+  qty.oninput = ()=>{
+    let v = qty.value;
+    if(locked){
+      const max = remainingFor(row.product, idx) || 0;
+      v = Math.max(0, Math.min(parseInt(v)||0, max));
+      qty.value = v;
+    }
+    row.qty = v; updatePreview();
+  };
 
+  const rm = document.createElement('button');
+  rm.className='btn-remove'; rm.textContent='×'; rm.type='button';
+  rm.onclick = ()=> removeFixRow(idx);
+
+  line.appendChild(sel); line.appendChild(qty); line.appendChild(rm);
+  wrap.appendChild(line);
+
+  // ติดตั้งใหม่ only, เฉพาะแถวที่ต้องมี CH จริง (กล้องใน Stock's "Camera"
+  // category, หรือ DMS/ADAS — ไม่รวม AI Box ซึ่งไม่ได้ต่อช่องกล้องช่องไหน)
+  // เลือก CH (Ch1-Ch9) ที่ต่ออยู่จริงหน้างาน ไม่บังคับเลือก ส่งกลับไปเขียนชีต
+  // MDVR Tracking คอลัมน์ตรงช่องนั้นให้ ดู buildSheetUpdates()
+  if(state.tpl === 'new_install' && rowNeedsChannel(row.product)){
+    const chSel = document.createElement('select');
+    chSel.style.marginTop = '6px';
+    const chBlank = document.createElement('option');
+    chBlank.value=''; chBlank.textContent='-- ไม่ระบุช่อง (CH) --'; chSel.appendChild(chBlank);
+    MDVR_CHANNEL_OPTIONS.forEach(ch=>{
+      const o = document.createElement('option');
+      o.value=ch; o.textContent=ch;
+      if(ch===row.ch) o.selected=true;
+      chSel.appendChild(o);
+    });
+    chSel.onchange = ()=>{ row.ch = chSel.value; updatePreview(); };
+    wrap.appendChild(chSel);
+  }
+
+  if(!locked && row.product === "อื่นๆ (พิมพ์เอง)"){
+    const custom = document.createElement('input');
+    custom.type='text'; custom.placeholder='พิมพ์ชื่ออุปกรณ์'; custom.value=row.custom;
+    custom.style.marginTop='6px';
+    custom.oninput = ()=>{ row.custom = custom.value; updatePreview(); };
+    wrap.appendChild(custom);
+  }
+
+  if(deviceTypeForProduct(row.product)){
+    const newSN = document.createElement('input');
+    newSN.type='text'; newSN.placeholder='SN เครื่องใหม่ (จาก Ai Box/ADAS/DMS Tracking)';
+    newSN.value = row.newSN || ''; newSN.style.marginTop='6px';
+    newSN.oninput = ()=>{ row.newSN = newSN.value; updatePreview(); };
+    wrap.appendChild(newSN);
+  }
+
+  return wrap;
+}
+
+// The "old model" half — รุ่นเก่าที่เปลี่ยน + SN เดิม, sourced only from this
+// ทะเบียน's own recorded equipment (never a generic catalog guess). Used
+// nested inside the combined row for templates with tplHasOldModel(), and
+// as the standalone "ถอด" entry for ถอดย้ายอุปกรณ์ (standaloneLabel truthy).
+function buildOldModelHalf(row, idx, standalone){
+  const oldWrap = document.createElement('div');
+  oldWrap.className = standalone ? 'fix-entry' : 'old-model-row';
+  const oldLabel = document.createElement('label');
+  oldLabel.textContent = standalone ? 'อุปกรณ์เดิมที่ถอด' : 'รุ่นเก่าที่เปลี่ยน (ถ้ามี)';
+  const oldSel = document.createElement('select');
+  const oldBlank = document.createElement('option');
+  oldBlank.value=''; oldBlank.textContent='-- ไม่มีการเปลี่ยนอุปกรณ์ --'; oldSel.appendChild(oldBlank);
+  // Only ever sourced from this vehicle's actual recorded equipment —
+  // no generic PRODUCTS catalog fallback group. If nothing's on file
+  // for this plate yet, the only option is "ไม่มีการเปลี่ยนอุปกรณ์";
+  // we don't want techs picking a guessed/generic old model that
+  // isn't really what's on the vehicle.
+  if(vehicleOldModels.length){
+    const vehGroup = document.createElement('optgroup');
+    vehGroup.label = `จากประวัติทะเบียนนี้ (${state.plate})`;
+    vehicleOldModels.forEach(m=>{
+      const o = document.createElement('option');
+      o.value=m.label; o.textContent=m.label;
+      if(m.label===row.oldModel) o.selected=true;
+      vehGroup.appendChild(o);
+    });
+    oldSel.appendChild(vehGroup);
+  }
+  oldSel.onchange = ()=>{
+    row.oldModel = oldSel.value;
+    const type = deviceTypeForProduct(row.oldModel);
+    if(type && !row.oldSN && deviceLookup[type]) row.oldSN = deviceLookup[type].sn || '';
+    updatePreview(); renderFixRows();
+  };
+  oldWrap.appendChild(oldLabel); oldWrap.appendChild(oldSel);
+
+  if(row.oldModel === "อื่นๆ (พิมพ์เอง)"){
+    const oldCustom = document.createElement('input');
+    oldCustom.type='text'; oldCustom.placeholder='พิมพ์ชื่อรุ่นเก่า'; oldCustom.value=row.oldModelCustom;
+    oldCustom.style.marginTop='6px';
+    oldCustom.oninput = ()=>{ row.oldModelCustom = oldCustom.value; updatePreview(); };
+    oldWrap.appendChild(oldCustom);
+  }
+
+  if(deviceTypeForProduct(row.oldModel)){
+    const oldSN = document.createElement('input');
+    oldSN.type='text'; oldSN.placeholder='SN เครื่องเดิม (auto จากประวัติทะเบียนถ้ามี)';
+    oldSN.value = row.oldSN || ''; oldSN.style.marginTop='6px';
+    oldSN.oninput = ()=>{ row.oldSN = oldSN.value; updatePreview(); };
+    oldWrap.appendChild(oldSN);
+  }
+
+  if(standalone){
     const rm = document.createElement('button');
     rm.className='btn-remove'; rm.textContent='×'; rm.type='button';
+    rm.style.position='absolute'; rm.style.top='14px'; rm.style.right='14px';
     rm.onclick = ()=> removeFixRow(idx);
+    oldWrap.style.position = 'relative';
+    oldWrap.appendChild(rm);
+  }
 
-    line.appendChild(sel); line.appendChild(qty); line.appendChild(rm);
-    wrap.appendChild(line);
+  return oldWrap;
+}
 
-    // ติดตั้งใหม่ only, เฉพาะแถวที่ต้องมี CH จริง (กล้องใน Stock's "Camera"
-    // category, หรือ DMS/ADAS — ไม่รวม AI Box ซึ่งไม่ได้ต่อช่องกล้องช่องไหน)
-    // เลือก CH (Ch1-Ch9) ที่ต่ออยู่จริงหน้างาน ไม่บังคับเลือก ส่งกลับไปเขียนชีต
-    // MDVR Tracking คอลัมน์ตรงช่องนั้นให้ ดู buildSheetUpdates()
-    if(state.tpl === 'new_install' && rowNeedsChannel(row.product)){
-      const chSel = document.createElement('select');
-      chSel.style.marginTop = '6px';
-      const chBlank = document.createElement('option');
-      chBlank.value=''; chBlank.textContent='-- ไม่ระบุช่อง (CH) --'; chSel.appendChild(chBlank);
-      MDVR_CHANNEL_OPTIONS.forEach(ch=>{
-        const o = document.createElement('option');
-        o.value=ch; o.textContent=ch;
-        if(ch===row.ch) o.selected=true;
-        chSel.appendChild(o);
-      });
-      chSel.onchange = ()=>{ row.ch = chSel.value; updatePreview(); };
-      wrap.appendChild(chSel);
-    }
+function renderFixRows(){
+  const ctx = fixRowsStockContext();
+  const isRemoveTpl = state.tpl === 'remove';
+  document.getElementById('fixRows').classList.toggle('app-hidden', isRemoveTpl);
+  document.getElementById('addFixBtn').classList.toggle('app-hidden', isRemoveTpl);
+  document.getElementById('removeSections').classList.toggle('app-hidden', !isRemoveTpl);
 
-    if(!locked && row.product === "อื่นๆ (พิมพ์เอง)"){
-      const custom = document.createElement('input');
-      custom.type='text'; custom.placeholder='พิมพ์ชื่ออุปกรณ์'; custom.value=row.custom;
-      custom.style.marginTop='6px';
-      custom.oninput = ()=>{ row.custom = custom.value; updatePreview(); };
-      wrap.appendChild(custom);
-    }
+  if(isRemoveTpl){ renderRemoveSections(ctx); return; }
 
-    if(deviceTypeForProduct(row.product)){
-      const newSN = document.createElement('input');
-      newSN.type='text'; newSN.placeholder='SN เครื่องใหม่ (จาก Ai Box/ADAS/DMS Tracking)';
-      newSN.value = row.newSN || ''; newSN.style.marginTop='6px';
-      newSN.oninput = ()=>{ row.newSN = newSN.value; updatePreview(); };
-      wrap.appendChild(newSN);
-    }
-
+  const container = document.getElementById('fixRows');
+  container.innerHTML = '';
+  state.fixes.forEach((row, idx)=>{
+    const wrap = buildProductHalf(row, idx, ctx);
     if(tplHasOldModel(state.tpl)){
-      const oldWrap = document.createElement('div');
-      oldWrap.className = 'old-model-row';
-      const oldLabel = document.createElement('label');
-      oldLabel.textContent = 'รุ่นเก่าที่เปลี่ยน (ถ้ามี)';
-      const oldSel = document.createElement('select');
-      const oldBlank = document.createElement('option');
-      oldBlank.value=''; oldBlank.textContent='-- ไม่มีการเปลี่ยนอุปกรณ์ --'; oldSel.appendChild(oldBlank);
-      // Only ever sourced from this vehicle's actual recorded equipment —
-      // no generic PRODUCTS catalog fallback group. If nothing's on file
-      // for this plate yet, the only option is "ไม่มีการเปลี่ยนอุปกรณ์";
-      // we don't want techs picking a guessed/generic old model that
-      // isn't really what's on the vehicle.
-      if(vehicleOldModels.length){
-        const vehGroup = document.createElement('optgroup');
-        vehGroup.label = `จากประวัติทะเบียนนี้ (${state.plate})`;
-        vehicleOldModels.forEach(m=>{
-          const o = document.createElement('option');
-          o.value=m.label; o.textContent=m.label;
-          if(m.label===row.oldModel) o.selected=true;
-          vehGroup.appendChild(o);
-        });
-        oldSel.appendChild(vehGroup);
-      }
-      oldSel.onchange = ()=>{
-        row.oldModel = oldSel.value;
-        const type = deviceTypeForProduct(row.oldModel);
-        if(type && !row.oldSN && deviceLookup[type]) row.oldSN = deviceLookup[type].sn || '';
-        updatePreview(); renderFixRows();
-      };
-      oldWrap.appendChild(oldLabel); oldWrap.appendChild(oldSel);
-
-      if(row.oldModel === "อื่นๆ (พิมพ์เอง)"){
-        const oldCustom = document.createElement('input');
-        oldCustom.type='text'; oldCustom.placeholder='พิมพ์ชื่อรุ่นเก่า'; oldCustom.value=row.oldModelCustom;
-        oldCustom.style.marginTop='6px';
-        oldCustom.oninput = ()=>{ row.oldModelCustom = oldCustom.value; updatePreview(); };
-        oldWrap.appendChild(oldCustom);
-      }
-
-      if(deviceTypeForProduct(row.oldModel)){
-        const oldSN = document.createElement('input');
-        oldSN.type='text'; oldSN.placeholder='SN เครื่องเดิม (auto จากประวัติทะเบียนถ้ามี)';
-        oldSN.value = row.oldSN || ''; oldSN.style.marginTop='6px';
-        oldSN.oninput = ()=>{ row.oldSN = oldSN.value; updatePreview(); };
-        oldWrap.appendChild(oldSN);
-      }
-
-      wrap.appendChild(oldWrap);
+      wrap.appendChild(buildOldModelHalf(row, idx, false));
     }
-
     container.appendChild(wrap);
   });
   const addBtn = document.getElementById('addFixBtn');
-  if(addBtn){
-    addBtn.disabled = locked ? state.fixes.length >= lockedOptionsCount : false;
-  }
+  addBtn.disabled = ctx.locked ? state.fixes.length >= ctx.lockedOptionsCount : false;
+}
+
+// ถอดย้ายอุปกรณ์ only — same state.fixes array as every other template, just
+// shown as 3 separate lists instead of one combined row:
+//  - "pair" rows (default, added via "+ เพิ่มรายการถอด/ติดตั้ง") pair the old-
+//    model half ("ถอด") with the product half ("ติดตั้ง") by sharing one row
+//    object — leaving the ติดตั้ง half blank is a pure removal (nothing
+//    replaces it in that slot); fixLine()/buildSheetUpdates() already read
+//    that correctly (a "ทำการถอด" line, and a cleared+logged sheet column).
+//  - "edit" rows (added via "+ เพิ่มรายการแก้ไข" under แก้ไข) are a plain
+//    product-only entry with no old-model pairing, for anything else done
+//    on the visit that isn't a remove/install.
+function renderRemoveSections(ctx){
+  const oldContainer = document.getElementById('removeOldRows');
+  const newContainer = document.getElementById('removeNewRows');
+  const editContainer = document.getElementById('removeEditRows');
+  oldContainer.innerHTML = ''; newContainer.innerHTML = ''; editContainer.innerHTML = '';
+
+  state.fixes.forEach((row, idx)=>{
+    if(row.section === 'edit'){
+      editContainer.appendChild(buildProductHalf(row, idx, ctx));
+    } else {
+      oldContainer.appendChild(buildOldModelHalf(row, idx, true));
+      newContainer.appendChild(buildProductHalf(row, idx, ctx));
+    }
+  });
+
+  // Same stock-lock accounting as the normal single-list render — one
+  // shared pool across both add buttons, since every row (pair or edit)
+  // still draws from the same state.fixes/lockItems count.
+  const atCap = ctx.locked && state.fixes.length >= ctx.lockedOptionsCount;
+  document.getElementById('addRemovePairBtn').disabled = atCap;
+  document.getElementById('addRemoveEditBtn').disabled = atCap;
 }
 
 function renderStickers(){
@@ -2647,6 +2753,46 @@ async function pushSheetUpdates(){
   const data = await res.json();
   if(!res.ok || !data.ok) throw new Error(data.error || ('HTTP ' + res.status));
   return data;
+}
+
+// ถอดย้ายอุปกรณ์ only — a "pair" row with an old model picked (รุ่นเก่าที่เปลี่ยน
+// matched a known sheet column) but nothing picked for ติดตั้ง is a pure
+// removal: the slot needs to be actively cleared + logged, not just left
+// alone. buildSheetUpdates()'s own "if(!newName) return" is correct for
+// every other case (nothing to write), but doing that here would leave
+// stale equipment data sitting in the sheet forever — see /mdvr-clear.
+function buildSheetClears(){
+  if(state.tpl !== 'remove') return [];
+  const clears = [];
+  state.fixes.forEach(row=>{
+    if(row.section === 'edit') return;
+    const src = vehicleOldModels.find(m=> m.label === row.oldModel);
+    if(!src) return;
+    const newName = row.product === "อื่นๆ (พิมพ์เอง)" ? (row.custom || "") : row.product;
+    if(newName) return; // being replaced — buildSheetUpdates() writes that instead
+    clears.push({ column: src.column });
+  });
+  return clears;
+}
+
+async function pushMdvrClears(){
+  const clears = buildSheetClears();
+  if(!clears.length) return null;
+  const plate = (state.plate || '').trim();
+  if(!plate) return null;
+  const dateStr = state.date || '';
+  const results = [];
+  for(const c of clears){
+    const res = await fetch('https://songdee-vehicle-lookup.songdeegps.workers.dev/mdvr-clear', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ plate, column: c.column, date: dateStr, technician: tester.techName })
+    });
+    const data = await res.json();
+    if(!res.ok || !data.ok) throw new Error(data.error || ('HTTP ' + res.status));
+    results.push(data);
+  }
+  return results;
 }
 
 // AI Box/ADAS/DMS swap write-back — one payload per fix row that touches
@@ -3111,6 +3257,18 @@ async function sendToLine(){
     }catch(e){
       console.error('[Sheet update]', e);
       saveSuffix += ` (อัปเดตชีตไม่สำเร็จ: ${e.message})`;
+    }
+
+    // ถอดย้ายอุปกรณ์: clear + log any "ถอด" slot that wasn't paired with a
+    // replacement in "ติดตั้ง". No-ops for every other template.
+    try{
+      const clearRes = await pushMdvrClears();
+      if(clearRes && clearRes.length){
+        saveSuffix += ` · ถอด+บันทึก ${clearRes.length} รายการ ✓`;
+      }
+    }catch(e){
+      console.error('[MDVR clear]', e);
+      saveSuffix += ` (ถอด/บันทึกไม่สำเร็จ: ${e.message})`;
     }
 
     // Move any AI Box/ADAS/DMS unit swapped this visit in the Ai Box Tracking
