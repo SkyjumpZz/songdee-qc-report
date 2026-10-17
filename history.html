@@ -2,8 +2,11 @@
 <html lang="th">
 <head>
 <meta charset="UTF-8">
+<script>
+(function(){try{if(localStorage.getItem('sd-theme')==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();
+</script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
-<meta name="app-version" content="1.2.0">
+<meta name="app-version" content="1.3.0">
 <title>ประวัติรายงาน · SONGDEE GPS</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -34,6 +37,21 @@
     --hue-pink:#f472b6;
     --hue-cyan:#22d3ee;
   }
+  /* โหมดมืด — ดู form.html's toggleTheme()/sd-theme comment สำหรับรายละเอียด */
+  :root[data-theme="dark"]{
+    --bg:#121212;
+    --bg-panel:#1c1c1c;
+    --bg-panel-2:#242424;
+    --line:#333333;
+    --line-soft:#2a2a2a;
+    --text:#f0f0f0;
+    --text-dim:#a8a8ac;
+    --text-faint:#7a7a7e;
+    --accent:#ff4d4d;
+    --shadow-sm:0 1px 2px rgba(0,0,0,.4);
+    --shadow-md:0 14px 34px -18px rgba(0,0,0,.8);
+  }
+  [data-theme="dark"] header{background:rgba(18,18,18,.82);}
   *{box-sizing:border-box;}
   body{
     margin:0;
@@ -88,7 +106,17 @@
   .header-inner{
     max-width:640px; margin:0 auto;
     padding:18px 18px 14px;
+    position:relative;
   }
+  .theme-toggle{
+    position:absolute; top:14px; right:16px;
+    width:34px; height:34px; border-radius:50%;
+    border:1px solid var(--line-soft); background:var(--bg-panel-2);
+    color:var(--text-dim); font-size:15px; cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+    transition:border-color .15s ease, color .15s ease;
+  }
+  .theme-toggle:hover{border-color:var(--accent); color:var(--accent);}
   header .eyebrow{
     display:inline-flex; align-items:center; gap:6px;
     font-family:'IBM Plex Mono',monospace;
@@ -230,6 +258,7 @@
 
 <header>
   <div class="header-inner">
+    <button class="theme-toggle" id="themeToggleBtn" type="button" onclick="toggleTheme()" title="สลับโหมดขาว/ดำ">🌙</button>
     <div class="eyebrow">SONGDEE GPS · เทสช่าง</div>
     <h1>ประวัติรายงาน</h1>
     <div class="tester-bar" id="testerBar" style="display:none">
@@ -293,6 +322,23 @@ function renderSkeleton(container, count){
 function doLogout(){
   _auth.signOut().then(()=>{ location.href = 'index.html'; });
 }
+
+function syncThemeToggleIcon(){
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  document.getElementById('themeToggleBtn').textContent = isDark ? '☀️' : '🌙';
+}
+function toggleTheme(){
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  if(isDark){
+    document.documentElement.removeAttribute('data-theme');
+    try{ localStorage.setItem('sd-theme', 'light'); }catch(e){}
+  } else {
+    document.documentElement.setAttribute('data-theme', 'dark');
+    try{ localStorage.setItem('sd-theme', 'dark'); }catch(e){}
+  }
+  syncThemeToggleIcon();
+}
+syncThemeToggleIcon();
 
 _auth.onAuthStateChanged(async user=>{
   const listEl = document.getElementById('list');

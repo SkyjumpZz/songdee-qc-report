@@ -2,9 +2,15 @@
 <html lang="th">
 <head>
 <meta charset="UTF-8">
+<script>
+// ตั้ง data-theme ก่อน CSS วาดจอ ไม่งั้นจะเห็นธีมขาวกระพริบแวบหนึ่งก่อน
+// สลับเป็นมืดทุกครั้งที่โหลดหน้า (คนละจุดกับ toggleTheme() ด้านล่าง ซึ่งรันหลัง
+// DOM พร้อมแล้ว — ตัวนี้ต้อง inline/sync อยู่บนสุดของ head เพื่อกันกระพริบ)
+(function(){try{if(localStorage.getItem('sd-theme')==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();
+</script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.47.0">
+<meta name="app-version" content="1.48.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -43,6 +49,29 @@
     --shadow-glow-accent:0 0 0 3px rgba(216,25,33,.16);
     --shadow-glow-ok:0 8px 22px -6px rgba(61,220,151,.4);
   }
+  /* โหมดมืด — สลับด้วยปุ่ม theme-toggle (toggleTheme() ด้านล่าง), จำค่าไว้ใน
+     localStorage คีย์ 'sd-theme'. สีแดงของแบรนด์สว่างขึ้นนิดหน่อยให้อ่านง่าย
+     บนพื้นเกือบดำ ส่วนเขียว/โทนสีการ์ดอื่นๆ ใช้ค่าเดิม อ่านได้ดีอยู่แล้วทั้งสองโหมด */
+  :root[data-theme="dark"]{
+    --bg:#121212;
+    --bg-panel:#1c1c1c;
+    --bg-panel-2:#242424;
+    --bg-input:#242424;
+    --line:#333333;
+    --line-soft:#2a2a2a;
+    --text:#f0f0f0;
+    --text-dim:#a8a8ac;
+    --text-faint:#7a7a7e;
+    --accent:#ff4d4d;
+    --accent-soft:#ff8a84;
+    --amber:#ff4d4d;
+    --shadow-sm:0 1px 2px rgba(0,0,0,.4);
+    --shadow-md:0 14px 34px -18px rgba(0,0,0,.8);
+    --shadow-lg:0 22px 50px -22px rgba(0,0,0,.85);
+    --shadow-glow-accent:0 0 0 3px rgba(255,77,77,.22);
+  }
+  [data-theme="dark"] header{background:rgba(18,18,18,.82);}
+  [data-theme="dark"] .actionbar-inner{background:rgba(28,28,28,.85);}
   *{box-sizing:border-box;}
   body{
     margin:0;
@@ -105,7 +134,17 @@
   .header-inner{
     max-width:640px; margin:0 auto;
     padding:18px 18px 14px;
+    position:relative;
   }
+  .theme-toggle{
+    position:absolute; top:14px; right:16px;
+    width:34px; height:34px; border-radius:50%;
+    border:1px solid var(--line-soft); background:var(--bg-panel-2);
+    color:var(--text-dim); font-size:15px; cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+    transition:border-color .15s ease, color .15s ease;
+  }
+  .theme-toggle:hover{border-color:var(--accent); color:var(--accent);}
   header .eyebrow{
     display:inline-flex; align-items:center; gap:6px;
     font-family:'IBM Plex Mono',monospace;
@@ -532,6 +571,7 @@
 
 <header>
   <div class="header-inner">
+    <button class="theme-toggle" id="themeToggleBtn" type="button" onclick="toggleTheme()" title="สลับโหมดขาว/ดำ">🌙</button>
     <div class="eyebrow">SONGDEE GPS · เทสช่าง</div>
     <h1>รายงานตรวจสอบงานช่าง <span id="versionTag" class="version-tag"></span></h1>
     <div class="tester-bar app-hidden" id="testerBar">
@@ -3359,6 +3399,25 @@ function renderAll(){
 // ---------------------------------------------------------------
 const APP_VERSION = document.querySelector('meta[name="app-version"]').content;
 document.getElementById('versionTag').textContent = 'v' + APP_VERSION;
+
+// โหมดขาว/ดำ — data-theme ตั้งไว้แล้วตั้งแต่ก่อนวาดจอ (inline script บนสุดของ
+// head กัน flash), ตรงนี้แค่ sync ไอคอนปุ่มให้ตรงกับสถานะตอนโหลด
+function syncThemeToggleIcon(){
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  document.getElementById('themeToggleBtn').textContent = isDark ? '☀️' : '🌙';
+}
+function toggleTheme(){
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  if(isDark){
+    document.documentElement.removeAttribute('data-theme');
+    try{ localStorage.setItem('sd-theme', 'light'); }catch(e){}
+  } else {
+    document.documentElement.setAttribute('data-theme', 'dark');
+    try{ localStorage.setItem('sd-theme', 'dark'); }catch(e){}
+  }
+  syncThemeToggleIcon();
+}
+syncThemeToggleIcon();
 
 async function checkForUpdate(){
   try{

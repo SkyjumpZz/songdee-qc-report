@@ -2,9 +2,12 @@
 <html lang="th">
 <head>
 <meta charset="UTF-8">
+<script>
+(function(){try{if(localStorage.getItem('sd-theme')==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();
+</script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>Dashboard · SONGDEE GPS</title>
-<meta name="app-version" content="1.18.0">
+<meta name="app-version" content="1.19.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -44,6 +47,25 @@
     --hue-pink:#f472b6;
     --hue-cyan:#22d3ee;
   }
+  /* โหมดมืด — ดู form.html's toggleTheme()/sd-theme comment สำหรับรายละเอียด
+     ทั้งหมด (คัดลอกค่าเดียวกันมา ให้สลับโหมดแล้วเนียนเหมือนกันทุกหน้า) */
+  :root[data-theme="dark"]{
+    --bg:#121212;
+    --bg-panel:#1c1c1c;
+    --bg-panel-2:#242424;
+    --bg-input:#242424;
+    --line:#333333;
+    --line-soft:#2a2a2a;
+    --text:#f0f0f0;
+    --text-dim:#a8a8ac;
+    --text-faint:#7a7a7e;
+    --accent:#ff4d4d;
+    --shadow-sm:0 1px 2px rgba(0,0,0,.4);
+    --shadow-md:0 10px 28px -14px rgba(0,0,0,.7);
+    --shadow-lg:0 22px 50px -22px rgba(0,0,0,.85);
+    --shadow-glow-accent:0 0 0 3px rgba(255,77,77,.22);
+  }
+  [data-theme="dark"] header{background:rgba(18,18,18,.82);}
   *{box-sizing:border-box;}
   body{
     margin:0;
@@ -99,7 +121,17 @@
   .header-inner{
     max-width:640px; margin:0 auto;
     padding:18px 18px 14px;
+    position:relative;
   }
+  .theme-toggle{
+    position:absolute; top:14px; right:16px;
+    width:34px; height:34px; border-radius:50%;
+    border:1px solid var(--line-soft); background:var(--bg-panel-2);
+    color:var(--text-dim); font-size:15px; cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+    transition:border-color .15s ease, color .15s ease;
+  }
+  .theme-toggle:hover{border-color:var(--accent); color:var(--accent);}
   header .eyebrow{
     display:inline-flex; align-items:center; gap:6px;
     font-family:'IBM Plex Mono',monospace;
@@ -526,6 +558,7 @@
 
 <header>
   <div class="header-inner">
+    <button class="theme-toggle" id="themeToggleBtn" type="button" onclick="toggleTheme()" title="สลับโหมดขาว/ดำ">🌙</button>
     <div class="eyebrow">SONGDEE GPS · เทสช่าง</div>
     <h1>Dashboard <span id="versionTag" class="version-tag"></span></h1>
     <div class="tester-bar app-hidden" id="testerBar">
@@ -1084,6 +1117,23 @@ function renderList(list){
 const APP_VERSION = document.querySelector('meta[name="app-version"]').content;
 document.getElementById('versionTag').textContent = 'v' + APP_VERSION;
 document.getElementById('loginVersion').textContent = APP_VERSION;
+
+function syncThemeToggleIcon(){
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  document.getElementById('themeToggleBtn').textContent = isDark ? '☀️' : '🌙';
+}
+function toggleTheme(){
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  if(isDark){
+    document.documentElement.removeAttribute('data-theme');
+    try{ localStorage.setItem('sd-theme', 'light'); }catch(e){}
+  } else {
+    document.documentElement.setAttribute('data-theme', 'dark');
+    try{ localStorage.setItem('sd-theme', 'dark'); }catch(e){}
+  }
+  syncThemeToggleIcon();
+}
+syncThemeToggleIcon();
 </script>
 
 </body>
