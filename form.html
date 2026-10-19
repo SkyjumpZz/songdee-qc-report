@@ -10,7 +10,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.51.0">
+<meta name="app-version" content="1.52.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -2842,6 +2842,20 @@ function fixLine(row){
   return null;
 }
 
+// MDVR Tracking's Ch1-Ch9 columns record DMS/ADAS generically — checked the
+// real sheet data: "DMS"/"ADAS" literal are by far the dominant values
+// there (1602/1503 occurrences), the specific catalog variant ("DMS Camera
+// V3") never appears. Every other equipment column (Buzzer, SD Card Slot 1,
+// MCR, ...) DOES want the specific product/brand name written in full, so
+// this only overrides the value when writing an actual Ch column.
+function sheetValueForColumn(column, product){
+  const type = deviceTypeForProduct(product);
+  if(/^Ch[1-9]$/.test(column) && (type === 'dms' || type === 'adas')){
+    return type.toUpperCase();
+  }
+  return null; // no override — caller falls back to the full product name
+}
+
 // Sheet write-back — two sources, never both (a report is one job type):
 // 1) รุ่นเก่า picked from the "จากประวัติทะเบียนนี้" group — only then do we
 //    know which sheet column to overwrite (the label carries its source
@@ -2851,7 +2865,8 @@ function fixLine(row){
 //    replace), so the CH picked per row (see renderFixRows()) IS the
 //    column — otherwise a brand-new camera install never reached the
 //    sheet's Ch1-Ch9 columns at all, since case 1 never applies here.
-// New value written in both = the newly installed product name.
+// New value written in both = the newly installed product name, except a
+// Ch column holding DMS/ADAS — see sheetValueForColumn() above.
 function buildSheetUpdates(){
   const updates = [];
   if(tplHasOldModel(state.tpl)){
@@ -2860,7 +2875,8 @@ function buildSheetUpdates(){
       if(!src) return;
       const newName = row.product === "อื่นๆ (พิมพ์เอง)" ? (row.custom || "") : row.product;
       if(!newName) return;
-      updates.push({ column: src.column, value: newName });
+      const value = sheetValueForColumn(src.column, row.product) || newName;
+      updates.push({ column: src.column, value });
     });
   } else if(state.tpl === 'new_install'){
     state.fixes.forEach(row=>{
@@ -2871,7 +2887,8 @@ function buildSheetUpdates(){
       if(!row.ch || !rowNeedsChannel(row.product)) return;
       const newName = row.product === "อื่นๆ (พิมพ์เอง)" ? (row.custom || "") : row.product;
       if(!newName) return;
-      updates.push({ column: row.ch, value: newName });
+      const value = sheetValueForColumn(row.ch, row.product) || newName;
+      updates.push({ column: row.ch, value });
     });
   }
   return updates;
