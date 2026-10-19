@@ -10,7 +10,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.50.0">
+<meta name="app-version" content="1.51.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -1932,6 +1932,83 @@ function rowNeedsChannel(product){
 // Track รู้ว่ากล้อง/อุปกรณ์แต่ละตัวต่อช่องไหน
 const MDVR_CHANNEL_OPTIONS = ['Ch1','Ch2','Ch3','Ch4','Ch5','Ch6','Ch7','Ch8','Ch9'];
 
+// Maps DMS/ADAS Tracking's own free-text "Version" column (short-form,
+// e.g. "Dms V.3") to a Stock catalog product name — built by hand from the
+// real distinct values in both sheets, cross-checked against Stock's live
+// AI category, NOT a generic string-similarity guess. Deliberately leaves
+// out every value that could mean more than one catalog entry (e.g.
+// "Dms V.3" alone can't tell a plain V3 apart from "DMS V.3 - SD (LINDE)"
+// or "DMS Camera V3  - NEW" — all three exist) — for those, autofillDeviceSN()
+// shows the raw text instead of guessing. Only extend this table with a
+// value you've confirmed maps to exactly one catalog product.
+const DMS_VERSION_MATCH = {
+  'Dms V.2': 'DMS Camera V2',
+  'Dms 8CH': 'DMS 8CH (Linde)',
+  'DMS D8': 'DMS Camera D8',
+  'DMS C29N': 'Streamax  DMS C29N',
+  'DMS D6': 'DMS D6 (Howen)',
+};
+const ADAS_VERSION_MATCH = {
+  'Adas V.1': 'ADAS Camera V1',
+  'Adas A7': 'ADAS Camera  A7',
+  'Adas V.2': 'ADAS Camera  V2',
+  'Adas V.29': 'ADAS Camera V.29',
+};
+
+// idx -> hint text under the SN field, see autofillDeviceSN(). Kept outside
+// the row objects (not persisted to Firestore, purely UI feedback) —
+// renderFixRows() tears down and rebuilds the whole row DOM on every
+// change, so a hint stashed on a local DOM element would just vanish the
+// moment that happens; keying by index here lets buildProductHalf() put it
+// straight back after a rebuild. Harmless if a row removal shifts indices
+// around — worst case a stale hint briefly shows against the wrong row.
+let snHints = {};
+
+// ใส่ SN เครื่อง DMS/ADAS แล้วให้ระบบเติมรุ่นให้เอง (คำขอผู้ใช้: "ใส่ SN แล้ว
+// ขึ้นรุ่นเลย ... Lock เลย") — ดึงข้อมูลจริงจากชีต DMS/ADAS Tracking ทาง
+// songdee-vehicle-lookup's GET /device-sn, แล้วเทียบ version ที่ได้กับตาราง
+// ด้านบน เลือกรุ่นให้อัตโนมัติเฉพาะตอนแม่นยำ (รุ่นที่แมปได้ต้องมีอยู่จริงใน
+// live catalog ด้วย ไม่งั้นชื่ออาจเปลี่ยนไปแล้วในสต็อก) — นอกนั้นแค่โชว์
+// ข้อความดิบจากชีตให้ช่างเลือกรุ่นที่ตรงเอง ไม่เดา
+async function autofillDeviceSN(row, idx, type, sn){
+  const target = (sn || '').trim();
+  if(!target || !type){ snHints[idx] = ''; renderFixRows(); return; }
+  snHints[idx] = 'กำลังค้นหา SN...';
+  renderFixRows();
+  try{
+    const res = await fetch(`https://songdee-vehicle-lookup.songdeegps.workers.dev/device-sn?type=${encodeURIComponent(type)}&sn=${encodeURIComponent(target)}`);
+    const data = await res.json();
+    if(!data || !data.found){
+      snHints[idx] = 'ไม่พบ SN นี้ในชีต Tracking';
+      renderFixRows();
+      return;
+    }
+    const version = (data.version || '').trim();
+    if(!version){
+      snHints[idx] = '';
+      renderFixRows();
+      return;
+    }
+    const matchTable = type === 'dms' ? DMS_VERSION_MATCH : type === 'adas' ? ADAS_VERSION_MATCH : null;
+    const matched = matchTable ? matchTable[version] : null;
+    const catalogHasIt = matched && (liveCatalog || PRODUCTS).includes(matched);
+    // ล็อกอัตโนมัติไม่ได้ตอน stock-lock (ใบเบิก/ของ Spare) อยู่ — ตัวเลือกใน
+    // dropdown ตอนนั้นมาจาก lockItems ไม่ใช่ catalog ปกติ เปลี่ยน product
+    // เป็นชื่อนอกรายการนั้นจะทำให้ dropdown ของแถวนี้พังแทน
+    const lockedNow = !!stockLock || !!techStock;
+    if(catalogHasIt && !lockedNow){
+      row.product = matched;
+      snHints[idx] = `✓ ตรวจพบรุ่น: ${matched}`;
+    } else {
+      snHints[idx] = `พบข้อมูลในชีต: ${version} — กรุณาเลือกรุ่นที่ตรงเอง`;
+    }
+  }catch(e){
+    console.error('[Device SN lookup]', e);
+    snHints[idx] = '';
+  }
+  renderFixRows(); updatePreview();
+}
+
 const STATUS_OPTS = {
   sticker: ["-- เลือกผล --","ติดเรียบร้อย","ลูกค้าไม่ให้ติด"]
 };
@@ -2313,12 +2390,24 @@ function buildProductHalf(row, idx, ctx){
     wrap.appendChild(custom);
   }
 
-  if(deviceTypeForProduct(row.product)){
+  const snType = deviceTypeForProduct(row.product);
+  if(snType){
     const newSN = document.createElement('input');
     newSN.type='text'; newSN.placeholder='SN เครื่องใหม่ (จาก Ai Box/ADAS/DMS Tracking)';
     newSN.value = row.newSN || ''; newSN.style.marginTop='6px';
     newSN.oninput = ()=>{ row.newSN = newSN.value; updatePreview(); };
+    // DMS/ADAS เท่านั้น — พิมพ์ SN แล้วเติมรุ่นให้อัตโนมัติ (ดู autofillDeviceSN()),
+    // ตอน blur ไม่ใช่ทุกตัวอักษร กันยิง request รัวๆ ระหว่างพิมพ์
+    if(snType === 'dms' || snType === 'adas'){
+      newSN.onblur = ()=> autofillDeviceSN(row, idx, snType, newSN.value);
+    }
     wrap.appendChild(newSN);
+    if(snHints[idx]){
+      const hint = document.createElement('div');
+      hint.className = 'hint'; hint.style.marginTop = '4px';
+      hint.textContent = snHints[idx];
+      wrap.appendChild(hint);
+    }
   }
 
   return wrap;
