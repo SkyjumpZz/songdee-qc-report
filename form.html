@@ -10,7 +10,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.54.0">
+<meta name="app-version" content="1.55.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -1043,9 +1043,13 @@ function scheduleStockLockCheck(){
 // spaces/dashes (e.g. "1กก1234" vs "1กก-1234" vs "1กก 1234"). A strict
 // trimmed-equality match silently missed a confirmed-real, non-cancelled
 // ใบเบิก over exactly this kind of formatting difference. Same fix
-// songdee-line-proxy already uses for its own plate lookups.
+// songdee-line-proxy already uses for its own plate lookups — and the same
+// one songdee-vehicle-lookup's own normPlate() needed strengthening with
+// (Unicode dash lookalikes, NFC-normalizing Thai vowel encoding) after a
+// user report of ทะเบียน/ISSUE mismatches; mirrored here so ใบเบิก/assignment
+// matching doesn't silently have the same gap.
 function normPlate(s){
-  return String(s||'').replace(/[\s\-]/g,'').toLowerCase();
+  return String(s||'').normalize('NFC').replace(/[\s.\-‐-―]/g,'').toLowerCase();
 }
 
 async function checkStockLock(){
