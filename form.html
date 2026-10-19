@@ -10,7 +10,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.53.0">
+<meta name="app-version" content="1.54.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -2265,7 +2265,14 @@ function fixRowsStockContext(){
   const lockItems = {};
   if(hasLock) Object.entries(stockLock.items).forEach(([k,v])=>{ lockItems[k] = (lockItems[k]||0) + (v||0); });
   if(hasTechStock) Object.entries(techStock).forEach(([k,v])=>{ lockItems[k] = (lockItems[k]||0) + (v||0); });
-  const options = locked ? [] : [...(liveCatalog || PRODUCTS), "อื่นๆ (พิมพ์เอง)"];
+  // "DMS"/"ADAS" เฉยๆ (ไม่ใช่รุ่นเจาะจง) ต่อท้ายตัวเลือกจริงจาก catalog — เลือก
+  // แค่ประเภทไปก่อนได้เลยไม่ต้องรู้รุ่นล่วงหน้า พอกรอก SN แล้วออกจากช่อง
+  // autofillDeviceSN() จะเปลี่ยนเป็นรุ่นที่ถูกต้องให้เองถ้าเจอข้อมูลแม่นยำ (ดู
+  // ด้านล่าง) — ข้ามถ้า catalog มีคำนี้อยู่แล้วเป๊ะๆ กันตัวเลือกซ้ำ (PRODUCTS
+  // สำรองมี "ADAS" อยู่แล้ว แต่ไม่มี "DMS")
+  const baseCatalog = liveCatalog || PRODUCTS;
+  const genericDeviceTypes = ['DMS', 'ADAS'].filter(g=> !baseCatalog.includes(g));
+  const options = locked ? [] : [...genericDeviceTypes, ...baseCatalog, "อื่นๆ (พิมพ์เอง)"];
   const lockedOptionsCount = Object.keys(lockItems).length;
 
   // ล็อกรายการจากใบเบิก/ของ Spare มีจำนวนจำกัดต่อชิ้น — ถ้ามีของชิ้นเดียวกัน
@@ -2398,9 +2405,11 @@ function buildProductHalf(row, idx, ctx){
     newSN.value = row.newSN || ''; newSN.style.marginTop='6px';
     newSN.oninput = ()=>{ row.newSN = newSN.value; updatePreview(); };
     // DMS/ADAS เท่านั้น — พิมพ์ SN แล้วเติมรุ่นให้อัตโนมัติ (ดู autofillDeviceSN()),
-    // ตอน blur ไม่ใช่ทุกตัวอักษร กันยิง request รัวๆ ระหว่างพิมพ์
+    // ตอน blur ไม่ใช่ทุกตัวอักษร กันยิง request รัวๆ ระหว่างพิมพ์ — เพิ่ม Enter
+    // ด้วยเผื่อมือถือบางเครื่อง blur ไม่ไวเท่าที่ควรตอนกดปุ่มถัดไปต่อ
     if(snType === 'dms' || snType === 'adas'){
       newSN.onblur = ()=> autofillDeviceSN(row, idx, snType, newSN.value);
+      newSN.onkeydown = (e)=>{ if(e.key === 'Enter'){ e.preventDefault(); newSN.blur(); } };
     }
     wrap.appendChild(newSN);
     if(snHints[idx]){
