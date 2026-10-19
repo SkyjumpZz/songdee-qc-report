@@ -10,7 +10,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.49.0">
+<meta name="app-version" content="1.50.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -1240,31 +1240,31 @@ async function loadDeviceLookup(){
 // when the report is sent, instead of admin having to close it by hand.
 const ISSUE_ENDPOINT = 'https://songdee-vehicle-lookup.songdeegps.workers.dev/issue';
 const ISSUE_CLOSE_ENDPOINT = 'https://songdee-vehicle-lookup.songdeegps.workers.dev/issue-close';
-let openIssue = null; // {found, ticketNo, feedback} or null
-let closeIssueChecked = true;
+let openIssues = []; // [{ticketNo, feedback, closeChecked}] — a plate can have more than one open ticket at once
 
 async function loadOpenIssue(){
   const plate = (state.plate || '').trim();
   const banner = document.getElementById('issueBanner');
   if(!plate){
-    openIssue = null;
+    openIssues = [];
     banner.classList.add('app-hidden');
     return;
   }
   try{
     const res = await fetch(`${ISSUE_ENDPOINT}?plate=${encodeURIComponent(plate)}`);
     const data = await res.json();
-    openIssue = data && data.found ? data : null;
+    const items = (data && Array.isArray(data.items)) ? data.items : [];
+    openIssues = items.map(it => ({ ...it, closeChecked: true }));
   }catch(e){
     console.error('[Issue lookup]', e);
-    openIssue = null;
+    openIssues = [];
   }
   renderIssueBanner();
 }
 
 function renderIssueBanner(){
   const banner = document.getElementById('issueBanner');
-  if(!openIssue){
+  if(!openIssues.length){
     banner.classList.add('app-hidden');
     banner.innerHTML = '';
     return;
@@ -1272,36 +1272,41 @@ function renderIssueBanner(){
   banner.classList.remove('app-hidden');
   banner.className = 'stock-lock-banner warn';
   banner.innerHTML = '';
-  const text = document.createElement('div');
-  text.textContent = `พบ Issue ที่ยังไม่ปิด: ${openIssue.ticketNo || '(ไม่มีเลขที่)'} — ${openIssue.feedback || ''}`;
-  const toggle = document.createElement('label');
-  toggle.style.cssText = 'display:flex;align-items:center;gap:6px;margin-top:6px;cursor:pointer;';
-  const cb = document.createElement('input');
-  cb.type = 'checkbox';
-  cb.checked = closeIssueChecked;
-  cb.onchange = ()=>{ closeIssueChecked = cb.checked; };
-  const lbl = document.createElement('span');
-  lbl.textContent = 'ปิด Issue นี้เมื่อส่งรายงาน';
-  toggle.appendChild(cb); toggle.appendChild(lbl);
-  banner.appendChild(text); banner.appendChild(toggle);
-  if((openIssue.feedback || '').trim()){
-    const pullBtn = document.createElement('button');
-    pullBtn.type = 'button';
-    pullBtn.textContent = 'ดึงข้อความนี้ใส่ช่องปัญหา';
-    pullBtn.style.cssText = 'margin-top:8px; background:none; border:1px solid var(--amber); color:var(--amber); border-radius:8px; padding:6px 10px; font-size:12px; cursor:pointer; font-family:inherit;';
-    pullBtn.onclick = fillProblemFromIssue;
-    banner.appendChild(pullBtn);
-  }
+  openIssues.forEach((issue, idx)=>{
+    const entry = document.createElement('div');
+    if(idx > 0) entry.style.cssText = 'margin-top:10px; padding-top:10px; border-top:1px dashed var(--line);';
+    const text = document.createElement('div');
+    text.textContent = `พบ Issue ที่ยังไม่ปิด: ${issue.ticketNo || '(ไม่มีเลขที่)'} — ${issue.feedback || ''}`;
+    const toggle = document.createElement('label');
+    toggle.style.cssText = 'display:flex;align-items:center;gap:6px;margin-top:6px;cursor:pointer;';
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.checked = issue.closeChecked;
+    cb.onchange = ()=>{ issue.closeChecked = cb.checked; };
+    const lbl = document.createElement('span');
+    lbl.textContent = 'ปิด Issue นี้เมื่อส่งรายงาน';
+    toggle.appendChild(cb); toggle.appendChild(lbl);
+    entry.appendChild(text); entry.appendChild(toggle);
+    if((issue.feedback || '').trim()){
+      const pullBtn = document.createElement('button');
+      pullBtn.type = 'button';
+      pullBtn.textContent = 'ดึงข้อความนี้ใส่ช่องปัญหา';
+      pullBtn.style.cssText = 'margin-top:8px; background:none; border:1px solid var(--amber); color:var(--amber); border-radius:8px; padding:6px 10px; font-size:12px; cursor:pointer; font-family:inherit;';
+      pullBtn.onclick = ()=> fillProblemFromIssue(issue);
+      entry.appendChild(pullBtn);
+    }
+    banner.appendChild(entry);
+  });
 }
 
-// Copies the open Issue ticket's feedback text into the ปัญหา list — same
+// Copies one open Issue ticket's feedback text into the ปัญหา list — same
 // idea as onAssignmentSelect() already does for a.problem (what admin typed
 // when assigning the job), just for the separate ISSUE-tracking source
 // instead (see ISSUE_ENDPOINT above). Fills the first still-empty row if
 // there is one, otherwise adds a new row, rather than overwriting anything
 // already typed.
-function fillProblemFromIssue(){
-  const text = (openIssue && openIssue.feedback || '').trim();
+function fillProblemFromIssue(issue){
+  const text = (issue && issue.feedback || '').trim();
   if(!text) return;
   const emptyRow = state.problems.find(r=> !r.symptom.trim());
   if(emptyRow){
@@ -1842,8 +1847,7 @@ function startNewReport(){
   selectedAssignmentId = null;
   vehicleOldModels = [];
   deviceLookup = {};
-  openIssue = null;
-  closeIssueChecked = true;
+  openIssues = [];
   renderIssueBanner();
   renderAll();
   updateProductBanner();
@@ -1873,8 +1877,7 @@ function startNextVehicle(){
   selectedAssignmentId = null;
   vehicleOldModels = [];
   deviceLookup = {};
-  openIssue = null;
-  closeIssueChecked = true;
+  openIssues = [];
   renderIssueBanner();
   renderAll();
   updateProductBanner();
@@ -2889,30 +2892,36 @@ async function pushDeviceSwaps(){
   return results;
 }
 
-// ISSUE Tracking close — only fires when a matching open ticket was found,
-// the tech left "ปิด Issue นี้เมื่อส่งรายงาน" checked, AND the issueBanner
-// was actually visible (tplHasProblems — issueBanner lives in problemsCard,
-// which is hidden for อัปเกรด/ติดตั้งใหม่). Without that last check this
-// would silently close an unrelated open ticket the tech never saw, just
-// because it happened to match the plate — openIssue/closeIssueChecked are
-// set from the plate lookup regardless of which job-type tab is active.
+// ISSUE Tracking close — one call per ticket the tech left checked (a plate
+// can have several open at once, see openIssues above), only when the
+// issueBanner was actually visible (tplHasProblems — issueBanner lives in
+// problemsCard, which is hidden for อัปเกรด/ติดตั้งใหม่). Without that last
+// check this would silently close open tickets the tech never saw, just
+// because they happened to match the plate — openIssues is set from the
+// plate lookup regardless of which job-type tab is active.
 async function pushIssueClose(){
-  if(!openIssue || !closeIssueChecked || !tplHasProblems(state.tpl)) return null;
+  if(!tplHasProblems(state.tpl)) return null;
+  const toClose = openIssues.filter(i => i.closeChecked);
+  if(!toClose.length) return null;
   // ISO (YYYY-MM-DD) — feeds closeIssue()'s FIXED DATE write, which has a
   // DATE_IS_VALID rule; see buildDeviceSwaps()'s comment on the same issue.
   const dateStr = state.date || '';
   const fixLines = state.fixes.map(fixLine).filter(Boolean);
-  const res = await fetch('https://songdee-vehicle-lookup.songdeegps.workers.dev/issue-close', {
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({
-      plate: state.plate, ticketNo: openIssue.ticketNo,
-      fixedDetails: fixLines.join('\n'), technician: tester.techName, date: dateStr,
-    })
-  });
-  const data = await res.json();
-  if(!res.ok || !data.ok) throw new Error(data.error || ('HTTP ' + res.status));
-  return data;
+  const results = [];
+  for(const issue of toClose){
+    const res = await fetch('https://songdee-vehicle-lookup.songdeegps.workers.dev/issue-close', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        plate: state.plate, ticketNo: issue.ticketNo,
+        fixedDetails: fixLines.join('\n'), technician: tester.techName, date: dateStr,
+      })
+    });
+    const data = await res.json();
+    if(!res.ok || !data.ok) throw new Error(data.error || ('HTTP ' + res.status));
+    results.push(data);
+  }
+  return results;
 }
 
 function buildMessage(){
@@ -3336,11 +3345,11 @@ async function sendToLine(){
       saveSuffix += ` (อัปเดต Ai Box/ADAS/DMS ไม่สำเร็จ: ${e.message})`;
     }
 
-    // Close the matching ISSUE Tracking ticket, if the tech left it checked.
+    // Close every ISSUE Tracking ticket the tech left checked.
     try{
       const issueRes = await pushIssueClose();
-      if(issueRes){
-        saveSuffix += ` · ปิด Issue ${issueRes.ticketNo || ''} ✓`;
+      if(issueRes && issueRes.length){
+        saveSuffix += ` · ปิด Issue ${issueRes.map(r=> r.ticketNo).filter(Boolean).join(', ')} ✓`;
       }
     }catch(e){
       console.error('[Issue close]', e);
