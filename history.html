@@ -6,7 +6,7 @@
 (function(){try{if(localStorage.getItem('sd-theme')==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
-<meta name="app-version" content="1.3.0">
+<meta name="app-version" content="1.4.0">
 <title>ประวัติรายงาน · SONGDEE GPS</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -39,19 +39,20 @@
   }
   /* โหมดมืด — ดู form.html's toggleTheme()/sd-theme comment สำหรับรายละเอียด */
   :root[data-theme="dark"]{
-    --bg:#121212;
-    --bg-panel:#1c1c1c;
-    --bg-panel-2:#242424;
-    --line:#333333;
-    --line-soft:#2a2a2a;
-    --text:#f0f0f0;
-    --text-dim:#a8a8ac;
-    --text-faint:#7a7a7e;
-    --accent:#ff4d4d;
+    --bg:#0e0e10;
+    --bg-panel:#1e1e22;
+    --bg-panel-2:#28282c;
+    --line:#45454c;
+    --line-soft:#36363c;
+    --text:#f5f5f5;
+    --text-dim:#b7b7bd;
+    --text-faint:#8b8b92;
+    --accent:#ff5b5b;
     --shadow-sm:0 1px 2px rgba(0,0,0,.4);
     --shadow-md:0 14px 34px -18px rgba(0,0,0,.8);
   }
-  [data-theme="dark"] header{background:rgba(18,18,18,.82);}
+  [data-theme="dark"] header{background:rgba(14,14,16,.85);}
+  [data-theme="dark"] .card{border-color:var(--line);}
   *{box-sizing:border-box;}
   body{
     margin:0;
