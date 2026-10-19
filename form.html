@@ -10,7 +10,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.52.0">
+<meta name="app-version" content="1.53.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -1396,12 +1396,14 @@ async function loadCustomerFleetSuggestions(){
   }catch(e){
     console.error('[Customer/Fleet suggestions] sd_fleet', e);
   }
+  // ชื่อลูกค้า/Fleet มาจาก Stock (sd_customers/sd_fleet) อย่างเดียวเท่านั้น —
+  // เคยดึงจาก qc_reports/assignments มาเสริมด้วย แต่พบว่ามีทะเบียนรถหลุดเข้า
+  // มาปนในรายการ (พิมพ์ผิดช่องตอนกรอกรายงาน/มอบหมายงานแล้วมันเก็บ log ไว้
+  // เป็น "เคยมีค่านี้" ตลอดไป) — Stock เป็นแหล่งข้อมูลที่คุมคุณภาพได้ตรงจุดกว่า
   try{
     const snap = await _db.collection('qc_reports').orderBy('createdAt', 'desc').limit(500).get();
     snap.docs.forEach(d=>{
       const v = d.data();
-      if(v.customer && v.customer.trim()) customers.add(v.customer.trim());
-      if(v.fleet && v.fleet.trim()) fleets.add(v.fleet.trim());
       if(v.installMdvrPlacement && v.installMdvrPlacement.trim()) installMdvrPlacements.add(v.installMdvrPlacement.trim());
       if(v.installPowerSource && v.installPowerSource.trim()) installPowerSources.add(v.installPowerSource.trim());
       if(v.installSpeakerPlacement && v.installSpeakerPlacement.trim()) installSpeakerPlacements.add(v.installSpeakerPlacement.trim());
@@ -1415,7 +1417,6 @@ async function loadCustomerFleetSuggestions(){
     const snap = await _db.collection('assignments').get();
     snap.docs.forEach(d=>{
       const v = d.data();
-      if(v.customer && v.customer.trim()) customers.add(v.customer.trim());
       if(v.assignedToName && v.assignedToName.trim()) techNames.add(v.assignedToName.trim());
     });
   }catch(e){
