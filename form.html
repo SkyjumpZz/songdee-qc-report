@@ -10,7 +10,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.57.0">
+<meta name="app-version" content="1.58.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -624,7 +624,11 @@
     <div class="row2">
       <div>
         <label>วันที่<span class="req">*</span></label>
-        <input type="date" id="jobDate">
+        <div style="display:flex;gap:6px">
+          <select id="jobDateDay" style="flex:0.8"></select>
+          <select id="jobDateMonth" style="flex:1.6"></select>
+          <select id="jobDateYear" style="flex:0.9"></select>
+        </div>
       </div>
       <div class="suggest-field">
         <label>ชื่อลูกค้า</label>
@@ -1322,7 +1326,20 @@ async function loadDeviceLookup(){
 // when the report is sent, instead of admin having to close it by hand.
 const ISSUE_ENDPOINT = 'https://songdee-vehicle-lookup.songdeegps.workers.dev/issue';
 const ISSUE_CLOSE_ENDPOINT = 'https://songdee-vehicle-lookup.songdeegps.workers.dev/issue-close';
-let openIssues = []; // [{ticketNo, feedback, closeChecked}] — a plate can have more than one open ticket at once
+let openIssues = []; // [{ticketNo, feedback, closeChecked, cause}] — a plate can have more than one open ticket at once
+
+// ตัวเลือก "Cause" ตอนปิด Issue — ตรงกับคอลัมน์ "Cause" จริงในชีต ISSUES-All
+// (ดึงจากค่าจริงที่มีอยู่แล้วในชีต เรียงจากที่ใช้บ่อยไปน้อย "Others" ไว้ท้ายสุด
+// เป็นตัวเลือกกวาดกรณีที่ไม่ตรงกับหมวดไหนเลย) — ให้ผู้เทสเลือกเองว่าปัญหาอยู่
+// ที่ไหน แทนที่จะปล่อยคอลัมน์นี้ว่างเหมือนเดิม
+const CAUSE_OPTIONS = [
+  'Regular Camera', 'No Defect Found', 'Wiring', 'MDVR', 'SIM', 'upgrade',
+  'AI Box', 'SD Card', 'Intercom', 'Loose Connection', 'SSD', 'MCR', 'Buzzer',
+  'Antenna', 'DMS Camera', 'Human', 'Installation', 'Splitter', 'Configure',
+  'IP Camera', 'Momenta', 'BSD Camera', 'Care Drive', 'Sensor', 'Basic GPS',
+  'Fuse', 'ADAS', 'Power Plug', 'Mic', 'HDD', 'Firmware', 'Port', 'Speaker AI',
+  'Ruptela', 'Handfree', 'Vehicle', 'GPS / MDVR', 'Others',
+];
 
 async function loadOpenIssue(){
   const plate = (state.plate || '').trim();
@@ -1336,7 +1353,7 @@ async function loadOpenIssue(){
     const res = await fetch(`${ISSUE_ENDPOINT}?plate=${encodeURIComponent(plate)}`);
     const data = await res.json();
     const items = (data && Array.isArray(data.items)) ? data.items : [];
-    openIssues = items.map(it => ({ ...it, closeChecked: true }));
+    openIssues = items.map(it => ({ ...it, closeChecked: true, cause: '' }));
   }catch(e){
     console.error('[Issue lookup]', e);
     openIssues = [];
@@ -1364,11 +1381,33 @@ function renderIssueBanner(){
     const cb = document.createElement('input');
     cb.type = 'checkbox';
     cb.checked = issue.closeChecked;
-    cb.onchange = ()=>{ issue.closeChecked = cb.checked; };
+    cb.onchange = ()=>{ issue.closeChecked = cb.checked; updatePreview(); };
     const lbl = document.createElement('span');
     lbl.textContent = 'ปิด Issue นี้เมื่อส่งรายงาน';
     toggle.appendChild(cb); toggle.appendChild(lbl);
     entry.appendChild(text); entry.appendChild(toggle);
+    // Cause — ให้ผู้เทสเลือกเองว่าปัญหาอยู่ที่ไหน (เขียนลงคอลัมน์ "Cause" ใน
+    // ชีต ISSUES-All ตอนปิด Issue — ดู pushIssueClose()) บังคับเลือกเฉพาะตอน
+    // ติ๊กปิด Issue นี้จริง (ดู getMissingFields())
+    const causeWrap = document.createElement('div');
+    causeWrap.style.cssText = 'margin-top:6px;';
+    const causeLbl = document.createElement('span');
+    causeLbl.textContent = 'สาเหตุ (Cause): ';
+    causeLbl.style.cssText = 'font-size:12px;';
+    const causeSel = document.createElement('select');
+    causeSel.style.cssText = 'margin-left:4px;';
+    const blankOpt = document.createElement('option');
+    blankOpt.value = ''; blankOpt.textContent = '-- เลือกสาเหตุ --';
+    causeSel.appendChild(blankOpt);
+    CAUSE_OPTIONS.forEach(c=>{
+      const o = document.createElement('option');
+      o.value = c; o.textContent = c;
+      if(issue.cause === c) o.selected = true;
+      causeSel.appendChild(o);
+    });
+    causeSel.onchange = ()=>{ issue.cause = causeSel.value; updatePreview(); };
+    causeWrap.appendChild(causeLbl); causeWrap.appendChild(causeSel);
+    entry.appendChild(causeWrap);
     if((issue.feedback || '').trim()){
       const pullBtn = document.createElement('button');
       pullBtn.type = 'button';
@@ -2109,7 +2148,8 @@ const CHECK_PASS_LABEL = {
   camera: "ภาพชัดเจน ทดสอบผ่าน",
   symptom: "แก้ไขตามอาการที่แจ้งเรียบร้อย",
   uninstall: "ถอดครบตามรายการ",
-  damage: "ไม่มีความเสียหาย"
+  damage: "ไม่มีความเสียหาย",
+  db9: "ใส่น็อตยึดหัว DB9 เรียบร้อย"
 };
 
 // Which sections apply per job type:
@@ -2121,6 +2161,17 @@ const CHECK_PASS_LABEL = {
 //   involve swapping a part).
 function tplHasProblems(tpl){ return tpl === "repair"; }
 function tplHasOldModel(tpl){ return tpl !== "new_install"; }
+
+// ข้อความแสดงผลของแต่ละ checklist item ตอนพรีวิว/การ์ด LINE — แยกกรณี
+// "กล่องเหล็ก" ({has, reason}) ออกจากช่องอื่นๆ (บูลีนล้วน, ใช้ CHECK_PASS_LABEL)
+function checklistItemLabel(item){
+  if(item.type === 'steelbox'){
+    const v = state.checklist[item.key];
+    if(!v || v.has === null || v.has === undefined) return '(ยังไม่ตรวจสอบ)';
+    return v.has ? 'มีการติดตั้งกล่องเหล็ก' : `ไม่มีการติดตั้งกล่องเหล็ก — เหตุผล: ${v.reason || '-'}`;
+  }
+  return state.checklist[item.key] ? CHECK_PASS_LABEL[item.type] : '(ยังไม่ตรวจสอบ)';
+}
 
 // The "แก้ไข" card holds a different kind of entry per job type (pure
 // install vs a remove+install swap vs an actual repair fix vs a pure
@@ -2143,23 +2194,27 @@ const TEMPLATES = {
   upgrade: {
     label: "อัปเกรด",
     checklist: [
-      {key:"lock",   text:"ตรวจสอบ การรัดล็อคอุปกรณ์กล้อง", type:"lock"},
-      {key:"mirror", text:"ตรวจสอบ มุมกล้องทั้งหมด (Mirror Check list)", type:"mirror"},
-      {key:"config", text:"ตรวจสอบ Config ระบบรอบคัน", type:"config"},
-      {key:"apn",    text:"ตรวจสอบ Config APN", type:"apn"},
-      {key:"cable",  text:"ตรวจสอบ การล็อคสายหลัง MDVR", type:"cable"},
+      {key:"lock",     text:"ตรวจสอบ การรัดล็อคอุปกรณ์กล้อง", type:"lock"},
+      {key:"mirror",   text:"ตรวจสอบ มุมกล้องทั้งหมด (Mirror Check list)", type:"mirror"},
+      {key:"config",   text:"ตรวจสอบ Config ระบบรอบคัน", type:"config"},
+      {key:"apn",      text:"ตรวจสอบ Config APN", type:"apn"},
+      {key:"cable",    text:"ตรวจสอบ การล็อคสายหลัง MDVR", type:"cable"},
+      {key:"steelbox", text:"ตรวจสอบการติดตั้งกล่องเหล็ก", type:"steelbox"},
+      {key:"db9",      text:"ตรวจสอบการใส่น็อตยึดหัว DB9", type:"db9"},
     ]
   },
   new_install: {
     label: "ติดตั้งใหม่",
     checklist: [
-      {key:"lock",   text:"ตรวจสอบ การรัดล็อคอุปกรณ์กล้อง", type:"lock"},
-      {key:"mirror", text:"ตรวจสอบ มุมกล้องทั้งหมด (Mirror Check list)", type:"mirror"},
-      {key:"config", text:"ตรวจสอบ Config ระบบรอบคัน", type:"config"},
-      {key:"apn",    text:"ตรวจสอบ Config APN", type:"apn"},
-      {key:"signal", text:"ทดสอบสัญญาณ GPS / เครือข่าย", type:"signal"},
-      {key:"camera", text:"ทดสอบภาพกล้องทุกช่อง", type:"camera"},
-      {key:"cable",  text:"ตรวจสอบ การเก็บ/ล็อคสายทั้งหมด", type:"cable"},
+      {key:"lock",     text:"ตรวจสอบ การรัดล็อคอุปกรณ์กล้อง", type:"lock"},
+      {key:"mirror",   text:"ตรวจสอบ มุมกล้องทั้งหมด (Mirror Check list)", type:"mirror"},
+      {key:"config",   text:"ตรวจสอบ Config ระบบรอบคัน", type:"config"},
+      {key:"apn",      text:"ตรวจสอบ Config APN", type:"apn"},
+      {key:"signal",   text:"ทดสอบสัญญาณ GPS / เครือข่าย", type:"signal"},
+      {key:"camera",   text:"ทดสอบภาพกล้องทุกช่อง", type:"camera"},
+      {key:"cable",    text:"ตรวจสอบ การเก็บ/ล็อคสายทั้งหมด", type:"cable"},
+      {key:"steelbox", text:"ตรวจสอบการติดตั้งกล่องเหล็ก", type:"steelbox"},
+      {key:"db9",      text:"ตรวจสอบการใส่น็อตยึดหัว DB9", type:"db9"},
     ]
   },
   repair: {
@@ -2232,8 +2287,46 @@ let originalReportDoc = null;
 // it for an unrelated second report.
 let isResendOfExistingReport = false;
 
+// วันที่/เดือน/ปี แยก 3 ช่อง (ชื่อเดือนภาษาไทยกันสับสนลำดับ) แทน <input type="date">
+// เดิม — ตัวควบคุมของเบราว์เซอร์โชว์ลำดับวันที่ตามโลเคลของเครื่อง/OS ไม่ใช่
+// ของหน้าเว็บ (lang="th" บนหน้านี้ไม่มีผลกับ Chrome) ทำให้บางเครื่องโชว์เป็น
+// เดือน/วัน/ปี แบบสหรัฐฯ ทั้งที่อยากให้เป็นวัน/เดือน/ปีเสมอ — ค่าที่เก็บใน
+// state.date ยังเป็น ISO (YYYY-MM-DD) เหมือนเดิมทุกจุดที่ใช้ต่อ
+const THAI_MONTHS = ['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
+function populateJobDateSelects(){
+  const daySel = document.getElementById('jobDateDay');
+  const monthSel = document.getElementById('jobDateMonth');
+  const yearSel = document.getElementById('jobDateYear');
+  daySel.innerHTML = '';
+  for(let d=1; d<=31; d++){
+    const o = document.createElement('option'); o.value = String(d).padStart(2,'0'); o.textContent = d; daySel.appendChild(o);
+  }
+  monthSel.innerHTML = '';
+  THAI_MONTHS.forEach((name,i)=>{
+    const o = document.createElement('option'); o.value = String(i+1).padStart(2,'0'); o.textContent = name; monthSel.appendChild(o);
+  });
+  yearSel.innerHTML = '';
+  const nowY = new Date().getFullYear();
+  for(let y = nowY - 2; y <= nowY + 1; y++){
+    const o = document.createElement('option'); o.value = String(y); o.textContent = y; yearSel.appendChild(o);
+  }
+}
+function syncJobDateSelectsFromState(){
+  const [y,m,d] = (state.date || '').split('-');
+  if(y) document.getElementById('jobDateYear').value = y;
+  if(m) document.getElementById('jobDateMonth').value = m;
+  if(d) document.getElementById('jobDateDay').value = d;
+}
+function onJobDateSelectChange(){
+  const d = document.getElementById('jobDateDay').value;
+  const m = document.getElementById('jobDateMonth').value;
+  const y = document.getElementById('jobDateYear').value;
+  state.date = (y && m && d) ? `${y}-${m}-${d}` : '';
+  updatePreview();
+}
+
 function syncFormInputsFromState(){
-  document.getElementById('jobDate').value = state.date || '';
+  syncJobDateSelectsFromState();
   document.getElementById('jobCustomer').value = state.customer || '';
   document.getElementById('jobFleet').value = state.fleet || '';
   document.getElementById('jobPlate').value = state.plate || '';
@@ -2662,6 +2755,44 @@ function renderChecklist(){
     const lbl = document.createElement('div');
     lbl.className = 'lbl';
     lbl.innerHTML = `<span class="mark">🔺</span><span>${item.text}</span>`;
+
+    // กล่องเหล็ก — มี/ไม่มี ไม่ใช่แค่ติ๊กผ่านเฉยๆ แบบช่องอื่น ถ้าไม่มีต้องบังคับ
+    // ใส่เหตุผล (ดู getMissingFields()) เก็บเป็น {has, reason} แทนบูลีนตัวเดียว
+    if(item.type === 'steelbox'){
+      const v = state.checklist[item.key] || { has: null, reason: '' };
+      state.checklist[item.key] = v;
+      const footer = document.createElement('div');
+      footer.className = 'check-toggle';
+      footer.style.cssText = 'flex-direction:column;align-items:stretch;gap:6px;';
+      const btnRow = document.createElement('div');
+      btnRow.style.cssText = 'display:flex;gap:8px;';
+      const yesBtn = document.createElement('button');
+      yesBtn.type = 'button'; yesBtn.textContent = 'มีกล่องเหล็ก';
+      const noBtn = document.createElement('button');
+      noBtn.type = 'button'; noBtn.textContent = 'ไม่มีกล่องเหล็ก';
+      [yesBtn, noBtn].forEach(b=>{ b.style.cssText = 'flex:1;padding:6px 8px;border-radius:8px;border:1px solid var(--line);background:transparent;color:inherit;font:inherit;cursor:pointer;'; });
+      const reasonInput = document.createElement('input');
+      reasonInput.type = 'text';
+      reasonInput.placeholder = 'เหตุผลที่ไม่มีกล่องเหล็ก';
+      reasonInput.value = v.reason || '';
+      reasonInput.style.cssText = 'width:100%;box-sizing:border-box;';
+      reasonInput.oninput = ()=>{ v.reason = reasonInput.value; updatePreview(); };
+      function syncSteelboxUI(){
+        yesBtn.style.background = v.has === true ? 'var(--ok, #1a7f4b)' : 'transparent';
+        yesBtn.style.color = v.has === true ? '#fff' : 'inherit';
+        noBtn.style.background = v.has === false ? 'var(--danger, #b3261e)' : 'transparent';
+        noBtn.style.color = v.has === false ? '#fff' : 'inherit';
+        reasonInput.style.display = v.has === false ? '' : 'none';
+      }
+      yesBtn.onclick = ()=>{ v.has = true; v.reason = ''; reasonInput.value = ''; syncSteelboxUI(); updatePreview(); };
+      noBtn.onclick = ()=>{ v.has = false; syncSteelboxUI(); updatePreview(); };
+      syncSteelboxUI();
+      btnRow.appendChild(yesBtn); btnRow.appendChild(noBtn);
+      footer.appendChild(btnRow); footer.appendChild(reasonInput);
+      box.appendChild(lbl); box.appendChild(footer);
+      wrap.appendChild(box);
+      return;
+    }
 
     const toggle = document.createElement('label');
     toggle.className = 'check-toggle' + (state.checklist[item.key] ? ' checked' : '');
@@ -3120,6 +3251,7 @@ async function pushIssueClose(){
       body: JSON.stringify({
         plate: state.plate, ticketNo: issue.ticketNo,
         fixedDetails: fixLines.join('\n'), technician: tester.techName, date: dateStr,
+        cause: issue.cause || '',
       })
     });
     const data = await res.json();
@@ -3159,9 +3291,8 @@ function buildMessage(){
   lines.push('');
 
   TEMPLATES[state.tpl].checklist.forEach(item=>{
-    const done = !!state.checklist[item.key];
     lines.push(`🔺${item.text}`);
-    lines.push(`: ${done ? CHECK_PASS_LABEL[item.type] : '(ยังไม่ตรวจสอบ)'}`);
+    lines.push(`: ${checklistItemLabel(item)}`);
   });
   if(state.network){
     lines.push(`🔺เครือข่ายอุปกรณ์`);
@@ -3223,10 +3354,7 @@ function buildLineCard(){
   sections.push({
     heading: '✅ รายการตรวจสอบ',
     lines: [
-      ...TEMPLATES[state.tpl].checklist.map(item=>{
-        const done = !!state.checklist[item.key];
-        return `• ${item.text}: ${done ? CHECK_PASS_LABEL[item.type] : '(ยังไม่ตรวจสอบ)'}`;
-      }),
+      ...TEMPLATES[state.tpl].checklist.map(item=> `• ${item.text}: ${checklistItemLabel(item)}`),
       ...(state.network ? [`• เครือข่ายอุปกรณ์: ${state.network}`] : []),
     ]
   });
@@ -3275,8 +3403,21 @@ function getMissingFields(){
     if(!state.stickers[s.key] || state.stickers[s.key] === STATUS_OPTS.sticker[0]) missing.push(s.text);
   });
   TEMPLATES[state.tpl].checklist.forEach(item=>{
+    if(item.type === 'steelbox'){
+      const v = state.checklist[item.key];
+      if(!v || v.has === null || v.has === undefined) missing.push(item.text);
+      else if(v.has === false && !(v.reason||'').trim()) missing.push(item.text + ' (เหตุผลที่ไม่มีกล่องเหล็ก)');
+      return;
+    }
     if(!state.checklist[item.key]) missing.push(item.text);
   });
+  // Cause — บังคับเลือกเฉพาะ Issue ที่ติ๊กปิดจริง (ดู renderIssueBanner()) กัน
+  // ส่งรายงานไปแล้วคอลัมน์ Cause ในชีตว่างเหมือนเดิม
+  if(tplHasProblems(state.tpl)){
+    openIssues.filter(i=> i.closeChecked).forEach(i=>{
+      if(!i.cause) missing.push(`สาเหตุ (Cause) ของ Issue ${i.ticketNo || '(ไม่มีเลขที่)'}`);
+    });
+  }
   // ปัญหา/แก้ไข had no completeness check at all before this — a repair
   // report could send with zero ปัญหา logged, or any report with zero
   // รายการแก้ไข/อุปกรณ์ที่ติดตั้ง, and still pass. Reuse problemLine()/
@@ -3313,7 +3454,11 @@ function updatePreview(){
   }
 }
 
-document.getElementById('jobDate').addEventListener('input', e=>{ state.date = e.target.value; updatePreview(); });
+populateJobDateSelects();
+syncJobDateSelectsFromState();
+document.getElementById('jobDateDay').addEventListener('change', onJobDateSelectChange);
+document.getElementById('jobDateMonth').addEventListener('change', onJobDateSelectChange);
+document.getElementById('jobDateYear').addEventListener('change', onJobDateSelectChange);
 document.getElementById('jobCustomer').addEventListener('input', e=>{ state.customer = e.target.value; updatePreview(); });
 document.getElementById('jobFleet').addEventListener('input', e=>{ state.fleet = e.target.value; updatePreview(); });
 document.getElementById('jobPlate').addEventListener('input', e=>{ state.plate = e.target.value; updatePreview(); scheduleStockLockCheck(); });
