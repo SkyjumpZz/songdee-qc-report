@@ -10,7 +10,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.56.0">
+<meta name="app-version" content="1.57.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -854,6 +854,7 @@ _auth.onAuthStateChanged(async user=>{
     loadLiveCatalog();
     loadTechStock();
     loadMdvrAvailable(); // not awaited — same reasoning as loadLineGroupMap() below
+    loadScannedDeviceEmeis(); // not awaited, same reasoning
     await loadNameMap(); // resolved before any assignments fetch uses the real mapping
     loadLineGroupMap(); // not awaited — sendToLine() can't run before the user finishes the form anyway
     loadReportFromUrlIfAny();
@@ -1206,6 +1207,55 @@ async function loadMdvrAvailable(){
     mdvrAvailableDevices = [];
   }
   if(document.activeElement && document.activeElement.id === 'mdvrImeiInput') renderMdvrImeiSuggest();
+}
+
+// EMEI/SN ที่สแกนไว้ตอน "จัดของ" (songdee-stock) ทั้งหมด ไม่กรองตามทะเบียน —
+// ต่างจาก applyStockDeviceAutofill()/stockLock ที่ต้องมีทะเบียนตรงกับใบเบิก
+// ก่อนถึงเติมให้อัตโนมัติ เคสที่ยังไม่มีทะเบียน (รถใหม่ยังไม่จดทะเบียน) หรือ
+// ทะเบียนไม่ตรงกับใบเบิกพอดี ช่างยังเลือก EMEI เองจากรายการนี้ได้ผ่าน
+// <datalist> ที่ต่อกับช่อง SN ของแถว DMS/ADAS (ดู buildProductHalf())
+let scannedDeviceEmeis = []; // [{name, type, imei, sn, noStock, plate}]
+async function loadScannedDeviceEmeis(){
+  try{
+    const snap = await _db.collection('sd')
+      .where('k', '>=', 'sd:doc:')
+      .where('k', '<', 'sd:doc:' + String.fromCharCode(0xf8ff))
+      .get();
+    const list = [];
+    snap.docs.forEach(d=>{
+      let doc; try{ doc = JSON.parse(d.data().v); }catch{ return; }
+      if(!doc || doc.cancelled) return;
+      Object.entries(doc.items||{}).forEach(([name,it])=>{
+        if(!it || (!it.imei && !it.sn)) return;
+        const type = deviceTypeForProduct(name);
+        if(type !== 'dms' && type !== 'adas') return;
+        list.push({ name, type, imei: it.imei||'', sn: it.sn||'', noStock: doc.noStock||'', plate: doc.plate||'' });
+      });
+    });
+    scannedDeviceEmeis = list;
+  }catch(e){
+    console.error('[Scanned device EMEIs]', e);
+    scannedDeviceEmeis = [];
+  }
+  renderFixRows();
+}
+// สร้าง/รีเฟรช <datalist> ของ EMEI/SN ที่สแกนไว้ ต่อประเภท dms/adas — เรียกทุก
+// ครั้งที่ renderFixRows() สร้างแถว DMS/ADAS ใหม่ (datalist เก็บไว้ที่ document.body
+// ไม่ได้อยู่ใต้ #fixRows เลยไม่ถูกเคลียร์ทิ้งตอน renderFixRows() rebuild DOM ส่วนนั้น)
+function refreshScannedEmeiDatalist(type){
+  const dlId = `scannedEmeiList_${type}`;
+  let dl = document.getElementById(dlId);
+  if(!dl){ dl = document.createElement('datalist'); dl.id = dlId; document.body.appendChild(dl); }
+  dl.innerHTML = '';
+  scannedDeviceEmeis.filter(d=> d.type === type).forEach(d=>{
+    const val = (d.sn || d.imei || '').trim();
+    if(!val) return;
+    const opt = document.createElement('option');
+    opt.value = val;
+    opt.label = `${val}${d.noStock ? ' · ' + d.noStock : ''}${d.plate ? ' · ' + d.plate : ''}`;
+    dl.appendChild(opt);
+  });
+  return dlId;
 }
 
 // Non-fatal like pushSheetUpdates()/pushDeviceSwaps()/pushIssueClose() —
@@ -2443,6 +2493,12 @@ function buildProductHalf(row, idx, ctx){
     if(snType === 'dms' || snType === 'adas'){
       newSN.onblur = ()=> autofillDeviceSN(row, idx, snType, newSN.value);
       newSN.onkeydown = (e)=>{ if(e.key === 'Enter'){ e.preventDefault(); newSN.blur(); } };
+      // ให้เลือก EMEI/SN ที่สแกนไว้ตอนจัดของได้เองผ่าน <datalist> เสมอ — ไม่ใช่
+      // แค่ตอนทะเบียนตรงกับใบเบิก (stockLock) เผื่อเคสยังไม่มีทะเบียน (รถใหม่)
+      // หรือทะเบียนไม่ตรงกับใบเบิกพอดี ยังเลือกจากของที่สแกนจริงได้ ไม่ต้อง
+      // พิมพ์มือเดา — ดู loadScannedDeviceEmeis()
+      const dlId = refreshScannedEmeiDatalist(snType);
+      newSN.setAttribute('list', dlId);
     }
     wrap.appendChild(newSN);
     if(snHints[idx]){
