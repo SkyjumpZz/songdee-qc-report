@@ -10,7 +10,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.58.0">
+<meta name="app-version" content="1.59.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -643,9 +643,15 @@
         <div class="suggest-dropdown app-hidden" id="jobFleetSuggestions"></div>
       </div>
       <div class="suggest-field">
-        <label>ทะเบียน<span class="req">*</span></label>
+        <label><span id="jobPlateLabel">ทะเบียน</span><span class="req">*</span></label>
         <input type="text" id="jobPlate" placeholder="เช่น 1กก-1234" autocomplete="off">
         <div class="suggest-dropdown app-hidden" id="jobPlateSuggestions"></div>
+      </div>
+    </div>
+    <div class="row2 app-hidden" id="jobNewPlateRow">
+      <div class="suggest-field">
+        <label>ทะเบียนใหม่ (ถ้าย้ายไปติดตั้งรถคันอื่น)</label>
+        <input type="text" id="jobNewPlate" placeholder="เช่น 2กข-5678 (เว้นว่างถ้าไม่ได้ย้ายไปคันอื่น)" autocomplete="off">
       </div>
     </div>
   </div>
@@ -2254,6 +2260,10 @@ function defaultState(){
     customer: "",
     fleet: "",
     plate: "",
+    // ถอดย้ายอุปกรณ์ only — ทะเบียนใหม่ (ปลายทางที่ย้ายอุปกรณ์ไปติดตั้ง) ถ้ามี;
+    // state.plate สำหรับ template นี้หมายถึง "ทะเบียนเก่า" (คันที่ถอดออกมา) —
+    // ดู renderTabs()/buildSheetUpdates()/buildDeviceSwaps()
+    newPlate: "",
     problems: [{symptom:""}],
     fixes: [{product:"", qty:1, custom:"", oldModel:"", oldModelCustom:"", newSN:"", oldSN:"", ch:"", section:"pair"}],
     stickers: {},
@@ -2330,6 +2340,7 @@ function syncFormInputsFromState(){
   document.getElementById('jobCustomer').value = state.customer || '';
   document.getElementById('jobFleet').value = state.fleet || '';
   document.getElementById('jobPlate').value = state.plate || '';
+  document.getElementById('jobNewPlate').value = state.newPlate || '';
   document.getElementById('mdvrDeviceId').value = state.mdvrDeviceId || '';
   document.getElementById('mdvrServerSelect').value = state.mdvrServer || '';
   document.getElementById('mdvrImeiInput').value = state.mdvrImei || '';
@@ -2362,6 +2373,13 @@ function renderTabs(){
   document.getElementById('installDetailCard').classList.toggle('app-hidden', state.tpl !== 'new_install');
   document.getElementById('fixesCardTitle').textContent = FIXES_CARD_LABEL[state.tpl] || 'แก้ไข';
   document.getElementById('addFixBtn').textContent = FIXES_ADD_BTN_LABEL[state.tpl] || '+ เพิ่มรายการแก้ไข';
+  // ถอดย้ายอุปกรณ์ — ย้ายข้ามคัน: "ทะเบียน" เดิมกลายเป็น "ทะเบียนเก่า" (คันที่
+  // ถอดออกมา จุดอ้างอิงเดิมทุกจุด: stock-lock/รุ่นเก่า/MDVR clear ไม่ต้องแก้)
+  // และโผล่ช่อง "ทะเบียนใหม่" (ปลายทางที่ย้ายไปติดตั้ง ถ้ามี) เพิ่ม — ดู
+  // buildSheetUpdates()/buildDeviceSwaps() ที่ผูกฝั่งติดตั้งเข้ากับทะเบียนใหม่นี้
+  document.getElementById('jobPlateLabel').textContent = state.tpl === 'remove' ? 'ทะเบียนเก่า' : 'ทะเบียน';
+  document.getElementById('jobNewPlateRow').classList.toggle('app-hidden', state.tpl !== 'remove');
+  if(state.tpl !== 'remove') state.newPlate = '';
   renderVehicleEquipmentBanner();
 }
 
@@ -2547,11 +2565,14 @@ function buildProductHalf(row, idx, ctx){
   line.appendChild(sel); line.appendChild(qty); line.appendChild(rm);
   wrap.appendChild(line);
 
-  // ติดตั้งใหม่ only, เฉพาะแถวที่ต้องมี CH จริง (กล้องใน Stock's "Camera"
-  // category, หรือ DMS/ADAS — ไม่รวม AI Box ซึ่งไม่ได้ต่อช่องกล้องช่องไหน)
-  // เลือก CH (Ch1-Ch9) ที่ต่ออยู่จริงหน้างาน ไม่บังคับเลือก ส่งกลับไปเขียนชีต
-  // MDVR Tracking คอลัมน์ตรงช่องนั้นให้ ดู buildSheetUpdates()
-  if(state.tpl === 'new_install' && rowNeedsChannel(row.product)){
+  // ติดตั้งใหม่ เฉพาะแถวที่ต้องมี CH จริง (กล้องใน Stock's "Camera" category,
+  // หรือ DMS/ADAS — ไม่รวม AI Box ซึ่งไม่ได้ต่อช่องกล้องช่องไหน) เลือก CH
+  // (Ch1-Ch9) ที่ต่ออยู่จริงหน้างาน ไม่บังคับเลือก ส่งกลับไปเขียนชีต MDVR
+  // Tracking คอลัมน์ตรงช่องนั้นให้ ดู buildSheetUpdates() — ถอดย้ายอุปกรณ์ที่
+  // ระบุทะเบียนใหม่ก็ต้องมี CH ด้วยเหมือนกัน (ฝั่งติดตั้งไปอยู่รถคนละคัน ไม่มี
+  // คอลัมน์เดิมจากประวัติทะเบียนเก่าให้อ้างอิงแล้ว ต้องเลือกช่องใหม่เอง)
+  const needsChForRemove = state.tpl === 'remove' && row.section !== 'edit' && (state.newPlate||'').trim();
+  if((state.tpl === 'new_install' || needsChForRemove) && rowNeedsChannel(row.product)){
     const chSel = document.createElement('select');
     chSel.style.marginTop = '6px';
     const chBlank = document.createElement('option');
@@ -3098,7 +3119,24 @@ function sheetValueForColumn(column, product){
 // New value written in both = the newly installed product name, except a
 // Ch column holding DMS/ADAS — see sheetValueForColumn() above.
 function buildSheetUpdates(){
-  const updates = [];
+  const updates = []; // { plate, column, value }
+  // ถอดย้ายอุปกรณ์ + ย้ายข้ามคัน (ทะเบียนใหม่ระบุ) — ฝั่ง "ถอด" ไม่เขียนทับคอลัมน์
+  // เดิมอีกต่อไป (อุปกรณ์ไม่ได้อยู่คันเดิมแล้ว ปล่อยให้ buildSheetClears() เคลียร์
+  // คอลัมน์นั้นบนทะเบียนเก่าแทนเสมอ) ฝั่ง "ติดตั้ง" เขียนไปที่ CH ที่เลือกไว้บน
+  // ทะเบียนใหม่ (ไม่มีคอลัมน์เดิมจากประวัติทะเบียนใหม่ให้อ้างอิง เหมือนติดตั้งใหม่)
+  if(state.tpl === 'remove'){
+    const newPlate = (state.newPlate || '').trim();
+    if(!newPlate) return updates;
+    state.fixes.forEach(row=>{
+      if(row.section === 'edit') return;
+      if(!row.ch || !rowNeedsChannel(row.product)) return;
+      const newName = row.product === "อื่นๆ (พิมพ์เอง)" ? (row.custom || "") : row.product;
+      if(!newName) return;
+      const value = sheetValueForColumn(row.ch, row.product) || newName;
+      updates.push({ plate: newPlate, column: row.ch, value });
+    });
+    return updates;
+  }
   if(tplHasOldModel(state.tpl)){
     state.fixes.forEach(row=>{
       const src = vehicleOldModels.find(m=> m.label === row.oldModel);
@@ -3106,7 +3144,7 @@ function buildSheetUpdates(){
       const newName = row.product === "อื่นๆ (พิมพ์เอง)" ? (row.custom || "") : row.product;
       if(!newName) return;
       const value = sheetValueForColumn(src.column, row.product) || newName;
-      updates.push({ column: src.column, value });
+      updates.push({ plate: state.plate, column: src.column, value });
     });
   } else if(state.tpl === 'new_install'){
     state.fixes.forEach(row=>{
@@ -3118,7 +3156,7 @@ function buildSheetUpdates(){
       const newName = row.product === "อื่นๆ (พิมพ์เอง)" ? (row.custom || "") : row.product;
       if(!newName) return;
       const value = sheetValueForColumn(row.ch, row.product) || newName;
-      updates.push({ column: row.ch, value });
+      updates.push({ plate: state.plate, column: row.ch, value });
     });
   }
   return updates;
@@ -3127,24 +3165,36 @@ function buildSheetUpdates(){
 async function pushSheetUpdates(){
   const updates = buildSheetUpdates();
   if(!updates.length) return null; // nothing maps to a known sheet cell
-  const plate = (state.plate || '').trim();
-  if(!plate) return null;
-  const res = await fetch('https://songdee-vehicle-lookup.songdeegps.workers.dev/update', {
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({ plate, updates })
+  // จัดกลุ่มตามทะเบียนก่อนยิง — ปกติเป็นทะเบียนเดียวกันหมด (1 call เหมือนเดิม)
+  // ยกเว้นถอดย้ายอุปกรณ์ข้ามคันที่ทุกรายการเขียนไปทะเบียนใหม่ทะเบียนเดียวอยู่แล้ว
+  // (บัง rows ที่ไม่ระบุ plate ชัดเจนด้วย state.plate กันไว้เฉยๆ)
+  const byPlate = new Map();
+  updates.forEach(u=>{
+    const plate = (u.plate || state.plate || '').trim();
+    if(!plate) return;
+    if(!byPlate.has(plate)) byPlate.set(plate, []);
+    byPlate.get(plate).push({ column: u.column, value: u.value });
   });
-  const data = await res.json();
-  if(!res.ok || !data.ok) throw new Error(data.error || ('HTTP ' + res.status));
-  return data;
+  const results = [];
+  for(const [plate, group] of byPlate){
+    const res = await fetch('https://songdee-vehicle-lookup.songdeegps.workers.dev/update', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ plate, updates: group })
+    });
+    const data = await res.json();
+    if(!res.ok || !data.ok) throw new Error(data.error || ('HTTP ' + res.status));
+    results.push(data);
+  }
+  return results;
 }
 
 // ถอดย้ายอุปกรณ์ only — a "pair" row with an old model picked (รุ่นเก่าที่เปลี่ยน
-// matched a known sheet column) but nothing picked for ติดตั้ง is a pure
-// removal: the slot needs to be actively cleared + logged, not just left
-// alone. buildSheetUpdates()'s own "if(!newName) return" is correct for
-// every other case (nothing to write), but doing that here would leave
-// stale equipment data sitting in the sheet forever — see /mdvr-clear.
+// matched a known sheet column) always needs its slot actively cleared +
+// logged on ทะเบียนเก่า (state.plate) — ไม่ว่าจะมีของใหม่มาแทนที่หรือไม่ก็ตาม,
+// เพราะของใหม่ (ถ้ามี) ไปเขียนที่ "ทะเบียนใหม่" คนละคันแล้ว (ดู
+// buildSheetUpdates() — เดิมเคยข้ามการเคลียร์ตอนมีของใหม่มาแทน โดยสมมติว่า
+// เป็นการสลับอุปกรณ์บนคันเดิม ซึ่งผิดสำหรับการย้ายข้ามคัน).
 function buildSheetClears(){
   if(state.tpl !== 'remove') return [];
   const clears = [];
@@ -3152,8 +3202,6 @@ function buildSheetClears(){
     if(row.section === 'edit') return;
     const src = vehicleOldModels.find(m=> m.label === row.oldModel);
     if(!src) return;
-    const newName = row.product === "อื่นๆ (พิมพ์เอง)" ? (row.custom || "") : row.product;
-    if(newName) return; // being replaced — buildSheetUpdates() writes that instead
     clears.push({ column: src.column });
   });
   return clears;
@@ -3194,6 +3242,8 @@ function buildDeviceSwaps(){
   // valid there (newType/newSN), but ignore any stale oldModel/oldSN left
   // over in state from before the tpl-based section split.
   const allowOld = tplHasOldModel(state.tpl);
+  const isRemove = state.tpl === 'remove';
+  const newPlate = isRemove ? (state.newPlate || '').trim() : '';
   const swaps = [];
   state.fixes.forEach(row=>{
     const newType = deviceTypeForProduct(row.product);
@@ -3203,6 +3253,16 @@ function buildDeviceSwaps(){
     const oldSN = (oldType === type) ? (row.oldSN || '').trim() : '';
     const newSN = (newType === type) ? (row.newSN || '').trim() : '';
     if(!oldSN && !newSN) return;
+    if(isRemove){
+      // ย้ายข้ามคัน — swapDevice() ของ worker ใช้ plate เดียวกันเขียนทั้งฝั่ง
+      // oldSN (ถอด) และ newSN (ติดตั้ง) ถ้าส่งมาพร้อมกันในคำขอเดียว ซึ่งผิดตอน
+      // ย้ายข้ามคัน (ฝั่งถอดต้องบันทึกว่าออกจากทะเบียนเก่า ฝั่งติดตั้งต้องบันทึก
+      // ว่าไปอยู่ทะเบียนใหม่) แยกยิงคนละคำขอคนละทะเบียนแทน — ฝั่งติดตั้งข้ามไป
+      // ถ้ายังไม่ได้ระบุทะเบียนใหม่ (ไม่รู้จะเขียนลงคันไหน)
+      if(oldSN) swaps.push({ type, plate: state.plate, customer: state.customer, technician: tester.techName, date: dateStr, oldSN, newSN: '' });
+      if(newSN && newPlate) swaps.push({ type, plate: newPlate, customer: state.customer, technician: tester.techName, date: dateStr, oldSN: '', newSN });
+      return;
+    }
     swaps.push({
       type, plate: state.plate, customer: state.customer,
       technician: tester.techName, date: dateStr, oldSN, newSN,
@@ -3267,7 +3327,12 @@ function buildMessage(){
   if(isResendOfExistingReport) lines.push('📝 แก้ไขจากรายงานเดิม (ส่งซ้ำ)');
   lines.push(`${dateStr} ${TEMPLATES[state.tpl].label}${state.customer ? ' ' + state.customer : ''}`);
   if(state.fleet) lines.push(`Fleet: ${state.fleet}`);
-  lines.push(`ทะเบียน: ${state.plate || '(ยังไม่ระบุ)'}`);
+  if(state.tpl === 'remove'){
+    lines.push(`ทะเบียนเก่า: ${state.plate || '(ยังไม่ระบุ)'}`);
+    if(state.newPlate) lines.push(`ทะเบียนใหม่: ${state.newPlate}`);
+  } else {
+    lines.push(`ทะเบียน: ${state.plate || '(ยังไม่ระบุ)'}`);
+  }
   lines.push('');
 
   const problemLines = tplHasProblems(state.tpl) ? state.problems.map(problemLine).filter(Boolean) : [];
@@ -3332,7 +3397,12 @@ function buildLineCard(){
   fields.push({label:'วันที่', value: dateStr});
   if(state.customer) fields.push({label:'ลูกค้า', value: state.customer});
   if(state.fleet) fields.push({label:'Fleet', value: state.fleet});
-  fields.push({label:'ทะเบียน', value: state.plate || '-'});
+  if(state.tpl === 'remove'){
+    fields.push({label:'ทะเบียนเก่า', value: state.plate || '-'});
+    if(state.newPlate) fields.push({label:'ทะเบียนใหม่', value: state.newPlate});
+  } else {
+    fields.push({label:'ทะเบียน', value: state.plate || '-'});
+  }
   fields.push({label:'ผู้ทดสอบ', value: tester.techName || '-'});
 
   const sections = [];
@@ -3398,7 +3468,19 @@ function buildLineCard(){
 function getMissingFields(){
   const missing = [];
   if(!state.date) missing.push('วันที่');
-  if(!state.plate) missing.push('ทะเบียน');
+  if(!state.plate) missing.push(state.tpl === 'remove' ? 'ทะเบียนเก่า' : 'ทะเบียน');
+  // ถอดย้ายอุปกรณ์ + ย้ายข้ามคัน — ถ้ามีรายการระบุของที่จะไปติดตั้ง (ฝั่ง
+  // "ติดตั้ง" ของแถวจับคู่ มีชื่อสินค้า) ต้องรู้ว่าจะย้ายไปทะเบียนไหนด้วย ไม่งั้น
+  // รายงานจะบอกว่า "ทำการติดตั้ง..." แต่ไม่มีคันไหนถูกเขียนชีตจริงเลย (ดู
+  // buildSheetUpdates()/buildDeviceSwaps() ที่ข้ามฝั่งติดตั้งถ้าไม่มีทะเบียนใหม่)
+  if(state.tpl === 'remove' && !(state.newPlate||'').trim()){
+    const hasInstallSide = state.fixes.some(row=>{
+      if(row.section === 'edit') return false;
+      const newName = row.product === "อื่นๆ (พิมพ์เอง)" ? (row.custom || "") : row.product;
+      return !!newName;
+    });
+    if(hasInstallSide) missing.push('ทะเบียนใหม่ (ระบุคันที่จะย้ายไปติดตั้ง)');
+  }
   STICKERS.forEach(s=>{
     if(!state.stickers[s.key] || state.stickers[s.key] === STATUS_OPTS.sticker[0]) missing.push(s.text);
   });
@@ -3462,6 +3544,7 @@ document.getElementById('jobDateYear').addEventListener('change', onJobDateSelec
 document.getElementById('jobCustomer').addEventListener('input', e=>{ state.customer = e.target.value; updatePreview(); });
 document.getElementById('jobFleet').addEventListener('input', e=>{ state.fleet = e.target.value; updatePreview(); });
 document.getElementById('jobPlate').addEventListener('input', e=>{ state.plate = e.target.value; updatePreview(); scheduleStockLockCheck(); });
+document.getElementById('jobNewPlate').addEventListener('input', e=>{ state.newPlate = e.target.value; updatePreview(); renderFixRows(); });
 document.getElementById('jobAssignSelect').addEventListener('change', e=>{ onAssignmentSelect(e.target.value); });
 document.getElementById('mdvrImeiInput').addEventListener('input', e=>{ state.mdvrImei = e.target.value; updatePreview(); });
 document.getElementById('mdvrDeviceId').addEventListener('input', e=>{ state.mdvrDeviceId = e.target.value; updatePreview(); });
