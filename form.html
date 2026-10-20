@@ -10,7 +10,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.59.0">
+<meta name="app-version" content="1.59.1">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -650,8 +650,8 @@
     </div>
     <div class="row2 app-hidden" id="jobNewPlateRow">
       <div class="suggest-field">
-        <label>ทะเบียนใหม่ (ถ้าย้ายไปติดตั้งรถคันอื่น)</label>
-        <input type="text" id="jobNewPlate" placeholder="เช่น 2กข-5678 (เว้นว่างถ้าไม่ได้ย้ายไปคันอื่น)" autocomplete="off">
+        <label>ทะเบียนใหม่<span class="req">*</span></label>
+        <input type="text" id="jobNewPlate" placeholder="เช่น 2กข-5678" autocomplete="off">
       </div>
     </div>
   </div>
@@ -3469,17 +3469,10 @@ function getMissingFields(){
   const missing = [];
   if(!state.date) missing.push('วันที่');
   if(!state.plate) missing.push(state.tpl === 'remove' ? 'ทะเบียนเก่า' : 'ทะเบียน');
-  // ถอดย้ายอุปกรณ์ + ย้ายข้ามคัน — ถ้ามีรายการระบุของที่จะไปติดตั้ง (ฝั่ง
-  // "ติดตั้ง" ของแถวจับคู่ มีชื่อสินค้า) ต้องรู้ว่าจะย้ายไปทะเบียนไหนด้วย ไม่งั้น
-  // รายงานจะบอกว่า "ทำการติดตั้ง..." แต่ไม่มีคันไหนถูกเขียนชีตจริงเลย (ดู
-  // buildSheetUpdates()/buildDeviceSwaps() ที่ข้ามฝั่งติดตั้งถ้าไม่มีทะเบียนใหม่)
+  // ถอดย้ายอุปกรณ์ + ย้ายข้ามคัน — บังคับทะเบียนใหม่เสมอ (ไม่ใช่แค่ตอนมี
+  // รายการติดตั้งจริง) ตามที่ขอ ให้ระบุครบทั้งทะเบียนเก่า/ใหม่ทุกครั้ง
   if(state.tpl === 'remove' && !(state.newPlate||'').trim()){
-    const hasInstallSide = state.fixes.some(row=>{
-      if(row.section === 'edit') return false;
-      const newName = row.product === "อื่นๆ (พิมพ์เอง)" ? (row.custom || "") : row.product;
-      return !!newName;
-    });
-    if(hasInstallSide) missing.push('ทะเบียนใหม่ (ระบุคันที่จะย้ายไปติดตั้ง)');
+    missing.push('ทะเบียนใหม่');
   }
   STICKERS.forEach(s=>{
     if(!state.stickers[s.key] || state.stickers[s.key] === STATUS_OPTS.sticker[0]) missing.push(s.text);
