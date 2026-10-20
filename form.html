@@ -10,7 +10,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.55.0">
+<meta name="app-version" content="1.56.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -894,7 +894,7 @@ _auth.onAuthStateChanged(async user=>{
 // tech-stock collection) — doc id is the key with [/:.]  replaced by
 // "_" (songdee-stock's own ss()/sg() helpers do the same transform).
 // ---------------------------------------------------------------
-let stockLock = null; // { noStock, items: {name: qty} } or null
+let stockLock = null; // { noStock, items: {name: qty}, devices: {name: {imei, sn}} } or null
 let _stockLockTimer = null;
 let liveCatalog = null; // string[] once loaded, else null (fall back to PRODUCTS)
 // Product names under Stock's own "Camera" category (sd_cats) — combined
@@ -1052,6 +1052,28 @@ function normPlate(s){
   return String(s||'').normalize('NFC').replace(/[\s.\-‐-―]/g,'').toLowerCase();
 }
 
+// เติม SN เครื่อง DMS/ADAS ให้แถว fix ที่เลือกอุปกรณ์ตรงกับของในใบเบิกที่สแกน
+// EMEI/SN มาแล้ว (stockLock.devices) — เติมเฉพาะตอนช่องยังว่าง (ไม่ทับค่าที่
+// ช่างกรอกเองหรือแก้ไว้แล้ว) และยังพิมพ์/ลบ/แก้ต่อได้ตามปกติทุกครั้ง เหมือน
+// กรอก SN ด้วยมือ — รวมถึงให้ autofillDeviceSN() อัปเกรดเป็นรุ่นเจาะจงต่อ
+// ถ้าข้อมูลแม่นยำพอ (ดู DMS_VERSION_MATCH/ADAS_VERSION_MATCH)
+function applyStockDeviceAutofill(row, idx){
+  if(!stockLock || !stockLock.devices || row.newSN) return;
+  const name = row.product === 'อื่นๆ (พิมพ์เอง)' ? null : row.product;
+  const dev = name && stockLock.devices[name];
+  if(!dev) return;
+  const sn = (dev.sn || dev.imei || '').trim();
+  if(!sn) return;
+  row.newSN = sn;
+  const type = deviceTypeForProduct(row.product);
+  if(type === 'dms' || type === 'adas') autofillDeviceSN(row, idx, type, sn);
+}
+function applyStockDeviceAutofillAll(){
+  if(!Array.isArray(state.fixes)) return;
+  state.fixes.forEach((row,idx)=> applyStockDeviceAutofill(row, idx));
+  renderFixRows();
+}
+
 async function checkStockLock(){
   const banner = document.getElementById('stockLockBanner');
   const plate = (state.plate || '').trim();
@@ -1083,10 +1105,16 @@ async function checkStockLock(){
     if(!match) match = docs[0];
     if(match){
       const items = {};
+      // ตอน "จัดของ" ถ้าช่างสแกน QR สติกเกอร์บนกล่อง/เครื่องแล้วบันทึก EMEI/SN
+      // ไว้ในใบเบิกนี้ (songdee-stock) ดึงมาเติมในฟอร์มให้เลย แต่ยังแก้ไขได้ตาม
+      // ปกติทุกช่อง — ดู applyStockDeviceAutofill()
+      const devices = {};
       Object.entries(match.items||{}).forEach(([name,it])=>{
         if(it && it.qty > 0) items[name] = it.qty;
+        if(it && (it.imei || it.sn)) devices[name] = { imei: it.imei || '', sn: it.sn || '' };
       });
-      stockLock = { noStock: match.noStock || '(ไม่มีเลขที่)', items, matchedByJob };
+      stockLock = { noStock: match.noStock || '(ไม่มีเลขที่)', items, devices, matchedByJob };
+      applyStockDeviceAutofillAll();
     } else {
       stockLock = null;
     }
@@ -2351,6 +2379,7 @@ function buildProductHalf(row, idx, ctx){
     // เปลี่ยนไปเป็นของที่ไม่ต้องมี CH — ล้างช่อง CH เดิมทิ้ง ไม่งั้นค่าเก่าจะ
     // ค้างอยู่และหลุดไปเขียนทับคอลัมน์ Ch ผิดชิ้นตอน buildSheetUpdates()
     if(!rowNeedsChannel(row.product)) row.ch = '';
+    applyStockDeviceAutofill(row, idx);
     updatePreview(); renderFixRows();
   };
 
