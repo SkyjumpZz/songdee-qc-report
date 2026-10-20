@@ -6,7 +6,7 @@
 (function(){try{if(localStorage.getItem('sd-theme')==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
-<meta name="app-version" content="1.4.0">
+<meta name="app-version" content="1.5.0">
 <title>ประวัติรายงาน · SONGDEE GPS</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -459,7 +459,12 @@ function renderList(list, showAdmin){
     a.className = 'history-item' + (doc.tpl ? ' tpl-' + doc.tpl : '');
     a.href = `form.html?report=${encodeURIComponent(doc.id)}`;
     const ownerLine = showAdmin ? `<div class="owner">ผู้ทดสอบ: ${escapeHtmlLite(doc.techName||'-')}</div>` : '';
-    a.innerHTML = `<div class="hi-row"><div class="hi-icon">${tplIcon}</div><div class="hi-text"><div class="title">${escapeHtmlLite(tplLabel)} ${escapeHtmlLite(doc.customer||'')}</div><div class="meta">ทะเบียน: ${escapeHtmlLite(doc.plate||'-')}</div>${ownerLine}</div></div>`;
+    // ถอดย้ายอุปกรณ์ — doc.plate คือทะเบียนเก่า (คันที่ถอดออกมา) เลเบลให้ชัด
+    // กว่า "ทะเบียน" เฉยๆ และโชว์ทะเบียนใหม่ด้วยถ้ามี (ดู form.html's dual-plate)
+    const plateMeta = (doc.tpl === 'remove')
+      ? `ทะเบียนเก่า: ${escapeHtmlLite(doc.plate||'-')}${doc.newPlate ? ` → ใหม่: ${escapeHtmlLite(doc.newPlate)}` : ''}`
+      : `ทะเบียน: ${escapeHtmlLite(doc.plate||'-')}`;
+    a.innerHTML = `<div class="hi-row"><div class="hi-icon">${tplIcon}</div><div class="hi-text"><div class="title">${escapeHtmlLite(tplLabel)} ${escapeHtmlLite(doc.customer||'')}</div><div class="meta">${plateMeta}</div>${ownerLine}</div></div>`;
     wrap.appendChild(a);
     if(showAdmin){
       const delBtn = document.createElement('button');

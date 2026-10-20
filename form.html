@@ -10,7 +10,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.61.0">
+<meta name="app-version" content="1.61.1">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -1838,7 +1838,19 @@ function diffReportFields(oldDoc, payload){
     }
   });
   const oldChecklist = oldDoc.checklist || {}, newChecklist = payload.checklist || {};
+  // กล่องเหล็ก ({has, reason}) ไม่ใช่บูลีนล้วนเหมือนช่องอื่น — !!{...} เป็น
+  // true เสมอไม่ว่า has จะเป็นอะไร ต้องเทียบ has/reason ตรงๆ ไม่งั้นสลับ
+  // มี/ไม่มี หรือแก้เหตุผลจะไม่ขึ้น log การเปลี่ยนแปลงเลย
+  function steelboxLabel(v){
+    if(!v || v.has === null || v.has === undefined) return 'ยังไม่ทำ';
+    return v.has ? 'มีกล่องเหล็ก' : `ไม่มีกล่องเหล็ก (${v.reason || '-'})`;
+  }
   new Set([...Object.keys(oldChecklist), ...Object.keys(newChecklist)]).forEach(key=>{
+    if(key === 'steelbox'){
+      const a = steelboxLabel(oldChecklist[key]), b = steelboxLabel(newChecklist[key]);
+      if(a !== b) changes.push({ label: `รายการตรวจสอบ: ${checklistLabel(tplForLabels, key)}`, from: a, to: b });
+      return;
+    }
     const a = !!oldChecklist[key], b = !!newChecklist[key];
     if(a !== b){
       changes.push({ label: `รายการตรวจสอบ: ${checklistLabel(tplForLabels, key)}`, from: a ? 'ทำแล้ว' : 'ยังไม่ทำ', to: b ? 'ทำแล้ว' : 'ยังไม่ทำ' });
@@ -1884,6 +1896,8 @@ async function logReportChange(action, payload, changes){
 async function saveReport(){
   const payload = {
     tpl: state.tpl, date: state.date, customer: state.customer, fleet: state.fleet, plate: state.plate,
+    // ถอดย้ายอุปกรณ์ only — ทะเบียนใหม่ (ปลายทาง) ดู defaultState()/renderTabs()
+    newPlate: state.newPlate || '',
     problems: state.problems, fixes: state.fixes, stickers: state.stickers, checklist: state.checklist,
     // Only ever persist uploaded photos (name + Drive viewUrl) — never the
     // local base64 bytes, which would bloat/overflow a Firestore doc.
@@ -1931,6 +1945,7 @@ function loadReportIntoForm(doc){
     customer: doc.customer || '',
     fleet: doc.fleet || '',
     plate: doc.plate || '',
+    newPlate: doc.newPlate || '',
     problems: (doc.problems && doc.problems.length) ? doc.problems : [{symptom:''}],
     fixes: (doc.fixes && doc.fixes.length) ? doc.fixes.map(r=> ({section:'pair', ...r})) : [{product:'', qty:1, custom:'', oldModel:'', oldModelCustom:'', newSN:'', oldSN:'', ch:'', section:'pair'}],
     stickers: doc.stickers || {},
@@ -2811,9 +2826,9 @@ function renderChecklist(){
       reasonInput.style.cssText = 'width:100%;box-sizing:border-box;';
       reasonInput.oninput = ()=>{ v.reason = reasonInput.value; updatePreview(); };
       function syncSteelboxUI(){
-        yesBtn.style.background = v.has === true ? 'var(--ok, #1a7f4b)' : 'transparent';
+        yesBtn.style.background = v.has === true ? 'var(--accent-2)' : 'transparent';
         yesBtn.style.color = v.has === true ? '#fff' : 'inherit';
-        noBtn.style.background = v.has === false ? 'var(--danger, #b3261e)' : 'transparent';
+        noBtn.style.background = v.has === false ? 'var(--danger)' : 'transparent';
         noBtn.style.color = v.has === false ? '#fff' : 'inherit';
         reasonInput.style.display = v.has === false ? '' : 'none';
       }
