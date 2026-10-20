@@ -10,7 +10,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.60.0">
+<meta name="app-version" content="1.61.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -1206,7 +1206,31 @@ const renderInstallMicPlacementSuggest = wireSuggestInput('installMicPlacementIn
 const renderMdvrImeiSuggest = wireSuggestInput('mdvrImeiInput', 'mdvrImeiSuggestions', ()=>mdvrAvailableDevices.map(d=>d.imei), imei=>{
   state.mdvrImei = imei;
   updatePreview();
+  autofillMdvrModel(imei);
 });
+
+// เติมรุ่น MDVR ให้แถว "อุปกรณ์ที่ติดตั้ง" แถวแรกที่ยังว่างอัตโนมัติ เมื่อเลือก/
+// พิมพ์ IMEI ที่ตรงกับเครื่องในรายการที่ยังไม่ผูกทะเบียน (mdvrAvailableDevices
+// — มี Device type มาด้วยจาก /mdvr-available) เทียบกับ MDVR_DEVICE_TYPE_MATCH
+// เหมือน autofillDeviceSN() ของ DMS/ADAS เติมให้เฉพาะตอนแม่นยำ (ต้องมีอยู่จริง
+// ใน live catalog ด้วย) ไม่งั้นปล่อยให้ช่างเลือกเองตามปกติ ไม่เดา ไม่ทับแถวที่
+// เลือกอุปกรณ์ไว้แล้ว
+function autofillMdvrModel(imei){
+  const target = (imei || '').trim();
+  if(!target) return;
+  const dev = mdvrAvailableDevices.find(d => (d.imei||'').trim() === target);
+  if(!dev || !dev.deviceType) return;
+  const matched = MDVR_DEVICE_TYPE_MATCH[dev.deviceType];
+  if(!matched || !(liveCatalog || PRODUCTS).includes(matched)) return;
+  const emptyRow = state.fixes.find(r => !r.product);
+  if(emptyRow){
+    emptyRow.product = matched;
+  } else {
+    state.fixes.push({product: matched, qty:1, custom:'', oldModel:'', oldModelCustom:'', newSN:'', oldSN:'', ch:'', section:'pair'});
+  }
+  renderFixRows();
+  updatePreview();
+}
 async function loadMdvrAvailable(){
   try{
     const res = await fetch(MDVR_AVAILABLE_ENDPOINT);
@@ -2081,6 +2105,27 @@ const ADAS_VERSION_MATCH = {
   'Adas A7': 'ADAS Camera  A7',
   'Adas V.2': 'ADAS Camera  V2',
   'Adas V.29': 'ADAS Camera V.29',
+};
+// MDVR Tracking's own free-text "Device type" column (e.g. "ME41-02",
+// "ME32-04 V1") mapped to Stock's exact MDVR catalog name — same rule as
+// DMS_VERSION_MATCH/ADAS_VERSION_MATCH above: built by hand from the real
+// distinct values in the sheet, cross-checked against Stock's live MDVR
+// category, only kept when exactly one catalog entry matches (e.g. "ME32-04
+// V1" alone is left out — Stock has "MDVR 32-04 V1", "...(YB)", "...(4G)",
+// "...(มีเฉพาะกรอบ)", "...(LINDE)" all at once, no way to tell which).
+const MDVR_DEVICE_TYPE_MATCH = {
+  'ME41-02': 'MDVR - 2CH',
+  'ME31-08 V.5 2BSD': 'MDVR 31-08 V.5 (2BSD)',
+  'ME31-08 V.5 3BSD': 'MDVR 31-08 V.5 (3BSD)',
+  'ME31-08 V1': 'MDVR 31-08 V1',
+  'ME32-04 V1 (4G)': 'MDVR 32-04 V1 (4G)',
+  'ME32-04 V3 (B)': 'MDVR 32-04 V3 (B)',
+  'ME41-04 V1': 'MDVR 41-04 V1',
+  'MA80-08 V2': 'MDVR 80-08 AI V2',
+  'MA80-08 V3': 'MDVR 80-08 AI V3',
+  'F6N (streamax)': 'MDVR F6N',
+  'MDVR 31-08 Lot.02': 'MDVR 31-08 Lot.02',
+  'Video Mixer (Offline)': 'Video Mixer (Offline)',
 };
 
 // idx -> hint text under the SN field, see autofillDeviceSN(). Kept outside
@@ -3507,6 +3552,7 @@ document.getElementById('jobPlate').addEventListener('input', e=>{ state.plate =
 document.getElementById('jobNewPlate').addEventListener('input', e=>{ state.newPlate = e.target.value; updatePreview(); renderFixRows(); });
 document.getElementById('jobAssignSelect').addEventListener('change', e=>{ onAssignmentSelect(e.target.value); });
 document.getElementById('mdvrImeiInput').addEventListener('input', e=>{ state.mdvrImei = e.target.value; updatePreview(); });
+document.getElementById('mdvrImeiInput').addEventListener('blur', e=>{ autofillMdvrModel(e.target.value); });
 document.getElementById('mdvrDeviceId').addEventListener('input', e=>{ state.mdvrDeviceId = e.target.value; updatePreview(); });
 document.getElementById('mdvrServerSelect').addEventListener('change', e=>{ state.mdvrServer = e.target.value; updatePreview(); });
 document.getElementById('installMdvrPlacementInput').addEventListener('input', e=>{ state.installMdvrPlacement = e.target.value; updatePreview(); });
