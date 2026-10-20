@@ -7,7 +7,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>Dashboard · SONGDEE GPS</title>
-<meta name="app-version" content="1.20.0">
+<meta name="app-version" content="1.21.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -800,7 +800,10 @@ _auth.onAuthStateChanged(async user=>{
     stats.classList.remove('app-hidden');
     document.getElementById('adminNameMapCard').classList.toggle('app-hidden', role.role !== 'admin');
     document.getElementById('testerRosterCard').classList.toggle('app-hidden', role.role !== 'admin');
-    document.getElementById('lineGroupMapCard').classList.toggle('app-hidden', role.role !== 'admin');
+    // ซ่อนไว้ก่อน — ช่องชื่อช่างเป็นพิมพ์เองอิสระ อยากให้เป็น Dropdown จาก
+    // รายชื่อช่างฝั่ง Admin แทนก่อนเปิดใช้งานจริง (ตามที่ขอ ยังไม่ได้ต่อสาย
+    // ดึงรายชื่อช่างจาก Admin เข้ามา)
+    document.getElementById('lineGroupMapCard').classList.add('app-hidden');
     await loadDashboard();
     if(role.role === 'admin'){
       await loadNameMap();

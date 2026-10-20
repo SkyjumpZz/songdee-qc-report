@@ -10,7 +10,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.59.1">
+<meta name="app-version" content="1.60.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -2152,9 +2152,6 @@ const CHECK_PASS_LABEL = {
   cable: "ล็อคเรียบร้อย / เก็บสายเรียบร้อย",
   signal: "สัญญาณปกติ ทดสอบผ่าน",
   camera: "ภาพชัดเจน ทดสอบผ่าน",
-  symptom: "แก้ไขตามอาการที่แจ้งเรียบร้อย",
-  uninstall: "ถอดครบตามรายการ",
-  damage: "ไม่มีความเสียหาย",
   db9: "ใส่น็อตยึดหัว DB9 เรียบร้อย"
 };
 
@@ -2196,56 +2193,26 @@ const FIXES_ADD_BTN_LABEL = {
 };
 
 // Checklist templates per job type. "อัปเกรด" matches the reference report format.
+// รายการตรวจสอบเดียวกันทุกประเภทงาน (อัปเกรด/ติดตั้งใหม่/ซ่อม/ถอดย้ายอุปกรณ์)
+// ตามที่ขอ — เดิมแต่ละประเภทมีรายการไม่เท่ากัน (บางอันไม่มีกล่องเหล็ก/DB9,
+// บางอันข้อความต่างกันเล็กน้อย) ทำให้ไม่สม่ำเสมอ ใช้ชุดเดียวกันทั้งหมดแทน
+const SHARED_CHECKLIST = [
+  {key:"lock",     text:"ตรวจสอบ การรัดล็อคอุปกรณ์กล้อง", type:"lock"},
+  {key:"mirror",   text:"ตรวจสอบ มุมกล้องทั้งหมด (Mirror Check list)", type:"mirror"},
+  {key:"config",   text:"ตรวจสอบ Config ระบบรอบคัน", type:"config"},
+  {key:"apn",      text:"ตรวจสอบ Config APN", type:"apn"},
+  {key:"signal",   text:"ทดสอบสัญญาณ GPS / เครือข่าย", type:"signal"},
+  {key:"camera",   text:"ทดสอบภาพกล้องทุกช่อง", type:"camera"},
+  {key:"cable",    text:"ตรวจสอบ การเก็บ/ล็อคสายทั้งหมด", type:"cable"},
+  {key:"steelbox", text:"ตรวจสอบการติดตั้งกล่องเหล็ก", type:"steelbox"},
+  {key:"db9",      text:"ตรวจสอบการใส่น็อตยึดหัว DB9", type:"db9"},
+];
 const TEMPLATES = {
-  upgrade: {
-    label: "อัปเกรด",
-    checklist: [
-      {key:"lock",     text:"ตรวจสอบ การรัดล็อคอุปกรณ์กล้อง", type:"lock"},
-      {key:"mirror",   text:"ตรวจสอบ มุมกล้องทั้งหมด (Mirror Check list)", type:"mirror"},
-      {key:"config",   text:"ตรวจสอบ Config ระบบรอบคัน", type:"config"},
-      {key:"apn",      text:"ตรวจสอบ Config APN", type:"apn"},
-      {key:"cable",    text:"ตรวจสอบ การล็อคสายหลัง MDVR", type:"cable"},
-      {key:"steelbox", text:"ตรวจสอบการติดตั้งกล่องเหล็ก", type:"steelbox"},
-      {key:"db9",      text:"ตรวจสอบการใส่น็อตยึดหัว DB9", type:"db9"},
-    ]
-  },
-  new_install: {
-    label: "ติดตั้งใหม่",
-    checklist: [
-      {key:"lock",     text:"ตรวจสอบ การรัดล็อคอุปกรณ์กล้อง", type:"lock"},
-      {key:"mirror",   text:"ตรวจสอบ มุมกล้องทั้งหมด (Mirror Check list)", type:"mirror"},
-      {key:"config",   text:"ตรวจสอบ Config ระบบรอบคัน", type:"config"},
-      {key:"apn",      text:"ตรวจสอบ Config APN", type:"apn"},
-      {key:"signal",   text:"ทดสอบสัญญาณ GPS / เครือข่าย", type:"signal"},
-      {key:"camera",   text:"ทดสอบภาพกล้องทุกช่อง", type:"camera"},
-      {key:"cable",    text:"ตรวจสอบ การเก็บ/ล็อคสายทั้งหมด", type:"cable"},
-      {key:"steelbox", text:"ตรวจสอบการติดตั้งกล่องเหล็ก", type:"steelbox"},
-      {key:"db9",      text:"ตรวจสอบการใส่น็อตยึดหัว DB9", type:"db9"},
-    ]
-  },
-  repair: {
-    label: "ซ่อม",
-    checklist: [
-      {key:"symptom", text:"ตรวจสอบ อาการตามที่แจ้งซ่อม", type:"symptom"},
-      {key:"lock",    text:"ตรวจสอบ การรัดล็อคอุปกรณ์หลังซ่อม", type:"lock"},
-      {key:"config",  text:"ตรวจสอบ Config ระบบรอบคัน", type:"config"},
-      {key:"signal",  text:"ทดสอบสัญญาณหลังซ่อม", type:"signal"},
-      {key:"cable",   text:"ตรวจสอบ การเก็บ/ล็อคสาย", type:"cable"},
-    ]
-  },
-  remove: {
-    label: "ถอดย้ายอุปกรณ์",
-    checklist: [
-      {key:"uninstall", text:"ตรวจสอบถอดอุปกรณ์ครบตามรายการ", type:"uninstall"},
-      {key:"cable",     text:"ตรวจสอบเก็บสาย/ปิดช่องที่ถอดเรียบร้อย", type:"cable"},
-      {key:"damage",    text:"ตรวจสอบไม่มีความเสียหายต่อตัวรถจากการถอด", type:"damage"},
-    ]
-  }
+  upgrade: { label: "อัปเกรด", checklist: SHARED_CHECKLIST },
+  new_install: { label: "ติดตั้งใหม่", checklist: SHARED_CHECKLIST },
+  repair: { label: "ซ่อม", checklist: SHARED_CHECKLIST },
+  remove: { label: "ถอดย้ายอุปกรณ์", checklist: SHARED_CHECKLIST },
 };
-// NOTE for whoever edits this next: item text/order for "new_install",
-// "repair", and "remove" are starting drafts (not confirmed against a real
-// reference report like the "upgrade" one was) — swap in the real wording
-// per template.
 
 const STICKERS = [
   {key:"front", text:"หน้ารถ"},
