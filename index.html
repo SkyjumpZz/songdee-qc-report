@@ -7,7 +7,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>Dashboard · SONGDEE GPS</title>
-<meta name="app-version" content="1.23.0">
+<meta name="app-version" content="1.24.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -804,10 +804,11 @@ _auth.onAuthStateChanged(async user=>{
     testerBar.classList.remove('app-hidden');
     pageTabs.classList.remove('app-hidden');
     stats.classList.remove('app-hidden');
-    document.getElementById('adminNameMapCard').classList.toggle('app-hidden', role.role !== 'admin');
-    // Super Admin เท่านั้น — ระดับเหนือ Admin ธรรมดา เห็น/แก้การ์ดนี้ได้คนเดียว
-    // (ตามที่ขอ) role.role==='admin' ธรรมดาเห็นการ์ดอื่นได้ปกติ แต่ไม่เห็นการ์ด
-    // นี้ และไม่โหลดข้อมูลมาฝั่ง client เลยด้วย (ดู loadTesterRoster() ด้านล่าง)
+    // Super Admin เท่านั้น — ระดับเหนือ Admin ธรรมดา เห็น/แก้การ์ดทั้งสองนี้ได้
+    // คนเดียว (ตามที่ขอ) role.role==='admin' ธรรมดายังใช้งานฟอร์ม/ประวัติได้
+    // ปกติ แค่ไม่เห็น 2 การ์ดนี้ และไม่โหลดข้อมูลมาฝั่ง client เลยด้วย (ดู
+    // loadNameMap()/loadTesterRoster() ด้านล่าง)
+    document.getElementById('adminNameMapCard').classList.toggle('app-hidden', !role.superAdmin);
     document.getElementById('testerRosterCard').classList.toggle('app-hidden', !role.superAdmin);
     // ซ่อนไว้ก่อน — ช่องชื่อช่างเป็นพิมพ์เองอิสระ อยากให้เป็น Dropdown จาก
     // รายชื่อช่างฝั่ง Admin แทนก่อนเปิดใช้งานจริง (ตามที่ขอ ยังไม่ได้ต่อสาย
@@ -815,10 +816,10 @@ _auth.onAuthStateChanged(async user=>{
     document.getElementById('lineGroupMapCard').classList.add('app-hidden');
     await loadDashboard();
     if(role.role === 'admin'){
-      await loadNameMap();
       await loadLineGroupMap();
     }
     if(role.superAdmin){
+      await loadNameMap();
       await loadTesterRoster();
     }
   }catch(e){
