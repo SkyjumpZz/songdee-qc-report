@@ -7,7 +7,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>Dashboard · SONGDEE GPS</title>
-<meta name="app-version" content="1.21.0">
+<meta name="app-version" content="1.22.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -446,6 +446,12 @@
     font-size:10px; text-transform:uppercase; letter-spacing:.06em;
     padding:3px 8px; border-radius:var(--r-pill); background:var(--bg-panel-2); color:var(--text-dim);
     border:1px solid var(--line); white-space:nowrap; flex-shrink:0;
+  }
+  .tester-roster-row .role-badge-super{
+    cursor:pointer; font-family:inherit;
+  }
+  .tester-roster-row .role-badge-super.on{
+    background:var(--accent); color:#fff; border-color:var(--accent);
   }
 
   /* ลูกเล่น — matches form.html's entrance/feedback touches. Skipped
@@ -1013,12 +1019,36 @@ async function loadTesterRoster(){
       const badge = document.createElement('span');
       badge.className = 'role-badge'; badge.textContent = r.role || '-';
 
-      row.appendChild(email); row.appendChild(techInput); row.appendChild(badge);
+      // Super Admin — ระดับเหนือ Admin ธรรมดา เฉพาะคนนี้เท่านั้นที่เห็นการ์ด
+      // "รายชื่อผู้ทดสอบ" นี้เอง (ดู onAuthStateChanged) เก็บเป็น flag แยกจาก
+      // role ธรรมดา ไม่ชนกับเช็ค role.role==='admin' ที่ใช้อยู่ทั่วระบบ
+      const superBadge = document.createElement('button');
+      superBadge.type = 'button';
+      superBadge.className = 'role-badge role-badge-super' + (r.superAdmin ? ' on' : '');
+      superBadge.textContent = r.superAdmin ? '👑 SUPER ADMIN' : 'ตั้งเป็น Super Admin';
+      superBadge.onclick = ()=> persistSuperAdmin(r.id, !r.superAdmin);
+
+      row.appendChild(email); row.appendChild(techInput); row.appendChild(badge); row.appendChild(superBadge);
       wrap.appendChild(row);
     });
   }catch(e){
     wrap.className = 'err';
     wrap.textContent = 'โหลดรายชื่อไม่สำเร็จ: ' + e.message;
+  }
+}
+
+async function persistSuperAdmin(uid, superAdmin){
+  const statusEl = document.getElementById('testerRosterStatus');
+  statusEl.textContent = 'กำลังบันทึก...';
+  statusEl.className = 'name-map-status';
+  try{
+    await _db.collection('roles').doc(uid).set({superAdmin}, {merge:true});
+    statusEl.textContent = 'บันทึกแล้ว ✓';
+    statusEl.className = 'name-map-status ok';
+    await loadTesterRoster();
+  }catch(e){
+    statusEl.textContent = 'บันทึกไม่สำเร็จ: ' + e.message;
+    statusEl.className = 'name-map-status err';
   }
 }
 
