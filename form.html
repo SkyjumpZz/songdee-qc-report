@@ -10,7 +10,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.62.1">
+<meta name="app-version" content="1.63.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -868,14 +868,20 @@ _auth.onAuthStateChanged(async user=>{
   try{
     const roleSnap = await _db.collection('roles').doc(user.uid).get();
     const role = roleSnap.exists ? roleSnap.data() : null;
-    if(!role || !role.techName){
-      alert('บัญชีนี้ยังไม่ได้กำหนดชื่อช่าง (techName) กรุณาให้แอดมินตั้งค่าในระบบ Stock ก่อน');
+    if(!role){
+      alert('บัญชีนี้ยังไม่ได้ลงทะเบียนในระบบ กรุณาติดต่อแอดมิน');
       await _auth.signOut();
       location.href = 'index.html';
       return;
     }
-    tester = { uid: user.uid, techName: role.techName };
-    document.getElementById('testerName').textContent = role.techName;
+    // role.techName can be unset — an admin hasn't gotten around to
+    // mapping this account to a ชื่อช่าง in Stock yet. Used to hard-block
+    // the whole app here; now lets them in and use the form normally
+    // (techStockOwnerNames picker, getMissingFields(), etc. already treat
+    // a blank name as "nothing selected"), and only warns right before
+    // sending — see sendToLine()'s confirm() for the missing-techName case.
+    tester = { uid: user.uid, techName: role.techName || '' };
+    document.getElementById('testerName').textContent = role.techName || '(ไม่มีชื่อช่าง)';
     appMain.classList.remove('app-hidden');
     actionBar.classList.remove('app-hidden');
     testerBar.classList.remove('app-hidden');
@@ -3882,6 +3888,15 @@ async function sendToLine(){
   }
 
   try{
+    // บัญชีนี้ยังไม่ได้ผูกชื่อช่าง (role.techName ว่าง — ดู onAuthStateChanged())
+    // — ไม่บล็อกการส่งแล้ว แต่เตือนให้ยืนยันก่อนทุกครั้ง เพราะรายงานที่ส่งไป
+    // จะไม่มีชื่อผู้ทดสอบติดอยู่เลย (ช่อง "ผู้ทดสอบ" ในข้อความ/การ์ด/ชีตจะ
+    // ว่างเปล่า "-")
+    if(!tester.techName){
+      const ok = confirm('บัญชีนี้ยังไม่มีชื่อช่าง (techName) — รายงานที่ส่งจะไม่ระบุชื่อผู้ทดสอบ\n\nยืนยันส่งรายงานนี้โดยไม่มีชื่อช่างหรือไม่?');
+      if(!ok){ showToast('ยกเลิกการส่ง (ยังไม่มีชื่อช่าง)'); return; }
+    }
+
     // ยังไม่มี currentReportId แปลว่าเป็นรายงานใหม่ (ไม่ใช่กำลังแก้ไข/ส่งซ้ำ
     // รายงานที่เปิดมาจากประวัติ) — เช็คว่ามีรายงานทะเบียน+วันที่+ประเภทงาน
     // เดียวกันถูกส่งไปแล้วเมื่อไม่นานนี้หรือไม่ (น่าจะมาจากอีกเครื่อง เพราะ
