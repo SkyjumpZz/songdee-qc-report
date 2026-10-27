@@ -10,7 +10,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.61.1">
+<meta name="app-version" content="1.62.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -465,6 +465,22 @@
   }
   .suggest-dropdown .item:last-child{border-bottom:none;}
   .suggest-dropdown .item:hover{background:rgba(216,25,33,.08);}
+  .suggest-dropdown .suggest-group-label{
+    padding:8px 12px 3px; font-size:10.5px; font-weight:700; letter-spacing:.03em;
+    color:var(--text-faint); text-transform:uppercase;
+  }
+  .ssel-chips{display:flex; flex-wrap:wrap; gap:6px; margin-bottom:8px;}
+  .ssel-chips:empty{display:none;}
+  .ssel-chip{
+    display:inline-flex; align-items:center; gap:4px;
+    background:rgba(61,220,151,.12); border:1px solid var(--accent-2); color:var(--accent-2);
+    border-radius:var(--r-pill); padding:5px 4px 5px 11px; font-size:12.5px; font-weight:600;
+  }
+  .ssel-chip button{
+    background:none; border:none; color:inherit; cursor:pointer; font-size:15px; line-height:1;
+    padding:3px 6px; border-radius:50%;
+  }
+  .ssel-chip button:hover{background:rgba(61,220,151,.2);}
   .editing-banner{
     font-size:12px; color:var(--accent); background:rgba(216,25,33,0.1);
     border:1px solid var(--accent); border-radius:var(--r-sm); padding:10px 13px; margin-bottom:12px;
@@ -610,10 +626,12 @@
   <div class="card" id="jobInfoCard">
     <div class="card-title"><span class="dot">🚚</span>ข้อมูลงาน</div>
     <div class="tech-stock-search app-hidden" id="techStockSearch">
-      <label>ช่างที่กำลังทำรายงานนี้ (เลือกชื่อ — ดึงทั้งงานที่มอบหมายและของ Spare ของช่างคนนั้น)</label>
-      <select id="techStockNameSelect">
-        <option value="">-- เลือกช่าง --</option>
-      </select>
+      <label>ช่างที่กำลังทำรายงานนี้ (เลือกได้หลายคน — ดึงทั้งงานที่มอบหมายและของ Spare ของช่างที่เลือกรวมกัน)</label>
+      <div class="ssel-chips" id="techStockChips"></div>
+      <div class="suggest-field">
+        <input type="text" id="techStockNameInput" placeholder="พิมพ์ชื่อช่างเพื่อค้นหา/เพิ่ม..." autocomplete="off">
+        <div class="suggest-dropdown app-hidden" id="techStockNameSuggestions"></div>
+      </div>
     </div>
     <div id="jobAssignField">
       <label>งานที่ได้รับมอบหมาย (จาก Admin)</label>
@@ -723,6 +741,7 @@
     <div class="stock-lock-banner app-hidden" id="vehicleEquipmentBanner"></div>
     <div id="fixRows"></div>
     <button class="btn-add" id="addFixBtn" onclick="addFixRow()">+ เพิ่มรายการแก้ไข</button>
+    <button class="btn-add app-hidden" type="button" id="addFixExtraBtn" onclick="addFixRow(true)">+ เพิ่มของนอกเหนือรายการ</button>
 
     <!-- ถอดย้ายอุปกรณ์ only — renderRemoveSections() fills these; toggled
          against #fixRows/#addFixBtn above in applyTemplate(). -->
@@ -731,6 +750,7 @@
         <div class="remove-subsection-title">① ถอด</div>
         <div id="removeOldRows"></div>
         <button class="btn-add" type="button" id="addRemovePairBtn" onclick="addRemovePairRow()">+ เพิ่มรายการถอด/ติดตั้ง</button>
+        <button class="btn-add app-hidden" type="button" id="addRemovePairExtraBtn" onclick="addRemovePairRow(true)">+ เพิ่มของนอกเหนือรายการ</button>
       </div>
       <div class="remove-subsection">
         <div class="remove-subsection-title">② ติดตั้ง</div>
@@ -740,6 +760,7 @@
         <div class="remove-subsection-title">③ แก้ไข (ถ้ามี)</div>
         <div id="removeEditRows"></div>
         <button class="btn-add" type="button" id="addRemoveEditBtn" onclick="addRemoveEditRow()">+ เพิ่มรายการแก้ไข</button>
+        <button class="btn-add app-hidden" type="button" id="addRemoveEditExtraBtn" onclick="addRemoveEditRow(true)">+ เพิ่มของนอกเหนือรายการ</button>
       </div>
     </div>
   </div>
@@ -914,8 +935,8 @@ let liveCatalog = null; // string[] once loaded, else null (fall back to PRODUCT
 // but doesn't occupy an MDVR video channel.
 let cameraProductNames = new Set();
 let allTechStock = {}; // raw sd:tech blob: {techName: [{name,qty,used,ret,pend}, ...]}
-let techStock = null; // {name: remainingQty} for whichever name is active below, or null
-let techStockOwnerName = ''; // whose stock techStock currently shows
+let techStock = null; // {name: remainingQty} merged across techStockOwnerNames below, or null
+let techStockOwnerNames = []; // whose stock+assignments are currently combined (multi-select — several techs can go to the same job)
 let techStockChecked = false; // avoids a false "nothing found" banner flash before the fetch resolves
 
 async function loadLiveCatalog(){
@@ -947,16 +968,31 @@ function computeTechStockItems(name){
   return Object.keys(items).length ? items : null;
 }
 
-// No default technician — starts blank every time so nobody's job/Spare
-// stock shows up until someone deliberately picks a name from the select
-// (see wireTechStockSearch() below).
-function applyTechStockName(name){
-  techStockOwnerName = (name || '').trim();
-  techStock = techStockOwnerName ? computeTechStockItems(techStockOwnerName) : null;
+// {name: remainingQty} summed across every selected technician — same
+// product picked up by two techs on the same job just adds together,
+// same as if it were one bigger Spare pool.
+function computeMergedTechStockItems(names){
+  const merged = {};
+  names.forEach(name=>{
+    const items = computeTechStockItems(name);
+    if(!items) return;
+    Object.entries(items).forEach(([k,v])=>{ merged[k] = (merged[k]||0) + v; });
+  });
+  return Object.keys(merged).length ? merged : null;
+}
+
+// No default technician(s) — starts empty every time so nobody's job/Spare
+// stock shows up until someone deliberately adds a name (see
+// wireTechStockSearch()/addTechStockName() below). Multi-select: several
+// technicians can go to the same job, each bringing their own assigned
+// jobs + Spare stock, shown combined.
+function applyTechStockNames(names){
+  techStockOwnerNames = Array.isArray(names) ? names.filter(Boolean) : [];
+  techStock = techStockOwnerNames.length ? computeMergedTechStockItems(techStockOwnerNames) : null;
   updateProductBanner();
 }
 
-let techStockNames = []; // merged, deduped names for the select's options
+let techStockNames = []; // merged, deduped names available to pick from
 let assignedTechNames = []; // assignedToName values seen across all `assignments` docs (see loadCustomerFleetSuggestions)
 
 // Gating this list on Spare-stock ownership alone (Object.keys(allTechStock))
@@ -971,34 +1007,79 @@ function refreshTechStockNames(){
   wireTechStockSearch();
 }
 
-function wireTechStockSearch(){
-  const select = document.getElementById('techStockNameSelect');
-  const wrap = document.getElementById('techStockSearch');
-  if(!select || !wrap) return;
-  wrap.classList.toggle('app-hidden', !techStockNames.length);
-  select.innerHTML = '';
-  const blank = document.createElement('option');
-  blank.value = ''; blank.textContent = '-- เลือกช่าง --';
-  select.appendChild(blank);
-  techStockNames.forEach(n=>{
-    const o = document.createElement('option');
-    o.value = n; o.textContent = n;
-    select.appendChild(o);
+function renderTechStockChips(){
+  const chips = document.getElementById('techStockChips');
+  if(!chips) return;
+  chips.innerHTML = '';
+  techStockOwnerNames.forEach(name=>{
+    const chip = document.createElement('span');
+    chip.className = 'ssel-chip';
+    const label = document.createElement('span');
+    label.textContent = name;
+    const x = document.createElement('button');
+    x.type = 'button'; x.textContent = '×';
+    x.title = `เอา ${name} ออก`;
+    x.onclick = ()=> removeTechStockName(name);
+    chip.appendChild(label); chip.appendChild(x);
+    chips.appendChild(chip);
   });
-  select.value = ''; // always starts unselected, even across a re-wire
-  // One name drives both lookups together: this technician's Spare stock
-  // AND their own งานที่ได้รับมอบหมาย list (which ใบเบิก to pull follows
-  // from whichever job gets picked there — see checkStockLock()).
-  select.onchange = ()=>{
-    const name = select.value;
-    // ใบเบิก (stockLock) and Spare stock now show together in
-    // renderFixRows() as separate optgroups instead of one replacing the
-    // other — so switching technician here only needs to recompute the
-    // Spare side; the ใบเบิก side (tied to ทะเบียน, not technician) is
-    // untouched.
-    applyTechStockName(name);
-    loadAssignments(name);
-  };
+}
+
+function addTechStockName(name){
+  name = (name || '').trim();
+  if(!name || techStockOwnerNames.includes(name)) return;
+  applyTechStockNames([...techStockOwnerNames, name]);
+  renderTechStockChips();
+  loadAssignments(techStockOwnerNames);
+}
+
+function removeTechStockName(name){
+  applyTechStockNames(techStockOwnerNames.filter(n=> n !== name));
+  renderTechStockChips();
+  loadAssignments(techStockOwnerNames);
+}
+
+function wireTechStockSearch(){
+  const input = document.getElementById('techStockNameInput');
+  const box = document.getElementById('techStockNameSuggestions');
+  const wrap = document.getElementById('techStockSearch');
+  if(!input || !box || !wrap) return;
+  wrap.classList.toggle('app-hidden', !techStockNames.length);
+  renderTechStockChips();
+  // Same position:fixed reasoning as wireSuggestInput() above — escapes
+  // .card's overflow:hidden.
+  function positionBox(){
+    const r = input.getBoundingClientRect();
+    box.style.position = 'fixed';
+    box.style.left = r.left + 'px';
+    box.style.top = (r.bottom + 4) + 'px';
+    box.style.width = r.width + 'px';
+  }
+  function render(){
+    const q = input.value.trim().toLowerCase();
+    const avail = techStockNames.filter(n=> !techStockOwnerNames.includes(n));
+    const matches = (q ? avail.filter(n=> n.toLowerCase().includes(q)) : avail).slice(0, 20);
+    box.innerHTML = '';
+    if(!matches.length){ box.classList.add('app-hidden'); return; }
+    positionBox();
+    matches.forEach(n=>{
+      const item = document.createElement('div');
+      item.className = 'item'; item.textContent = n;
+      item.onclick = ()=>{
+        addTechStockName(n);
+        input.value = '';
+        render();
+        input.focus();
+      };
+      box.appendChild(item);
+    });
+    box.classList.remove('app-hidden');
+  }
+  input.oninput = render;
+  input.onfocus = render;
+  input.onblur = ()=>{ setTimeout(()=>{ box.classList.add('app-hidden'); }, 150); };
+  window.addEventListener('scroll', ()=>{ if(!box.classList.contains('app-hidden')) positionBox(); }, true);
+  window.addEventListener('resize', ()=>{ if(!box.classList.contains('app-hidden')) positionBox(); });
 }
 
 async function loadTechStock(){
@@ -1022,14 +1103,14 @@ function updateProductBanner(){
   const plateTyped = !!(state.plate || '').trim();
   if(stockLock && techStock){
     const scope = stockLock.matchedByJob ? 'ที่จัดไว้สำหรับใบงานนี้โดยเฉพาะ' : 'ล่าสุดที่ตรงทะเบียนนี้';
-    banner.textContent = `แสดงอุปกรณ์จากใบเบิก${scope} ${stockLock.noStock} (${Object.keys(stockLock.items).length} รายการ) และของ Spare ของ ${techStockOwnerName} (${Object.keys(techStock).length} รายการ)`;
+    banner.textContent = `แสดงอุปกรณ์จากใบเบิก${scope} ${stockLock.noStock} (${Object.keys(stockLock.items).length} รายการ) และของ Spare ของ ${techStockOwnerNames.join(', ')} (${Object.keys(techStock).length} รายการ)`;
     banner.className = 'stock-lock-banner locked';
   } else if(stockLock){
     const scope = stockLock.matchedByJob ? 'ที่จัดไว้สำหรับใบงานนี้โดยเฉพาะ' : 'ล่าสุดที่ตรงทะเบียนนี้';
     banner.textContent = `ล็อกรายการติดตั้งตามใบเบิก${scope} ${stockLock.noStock} (${Object.keys(stockLock.items).length} รายการ)`;
     banner.className = 'stock-lock-banner locked';
   } else if(techStock){
-    banner.textContent = `แสดงเฉพาะของที่เบิกไปถืออยู่ (${techStockOwnerName}) — ${Object.keys(techStock).length} รายการ`;
+    banner.textContent = `แสดงเฉพาะของที่เบิกไปถืออยู่ (${techStockOwnerNames.join(', ')}) — ${Object.keys(techStock).length} รายการ`;
     banner.className = 'stock-lock-banner locked';
   } else if(plateTyped && techStockChecked){
     banner.textContent = 'ไม่พบใบเบิกที่ตรงกับทะเบียนนี้ และไม่พบของที่ถืออยู่ในระบบ Stock ของช่างนี้ — เลือกอุปกรณ์แบบอิสระได้';
@@ -1669,11 +1750,12 @@ function wireSuggestInput(inputId, boxId, getList, onPick){
 // instead of typed, cutting down typos. Selecting one auto-fills both
 // fields (and still lets them be edited manually after).
 //
-// Which technician to look up is a deliberate choice every time — nobody's
-// picked by default. #techStockNameSelect (see wireTechStockSearch()) drives
-// this together with their Spare stock — e.g. checking what a specific tech
-// has been given for a specific job, not just whoever happens to be logged
-// in right now.
+// Which technician(s) to look up is a deliberate choice every time —
+// nobody's picked by default. #techStockSearch (see addTechStockName()/
+// wireTechStockSearch()) drives this together with their Spare stock —
+// e.g. checking what a specific tech has been given for a specific job,
+// not just whoever happens to be logged in right now. Several technicians
+// can be selected together when more than one goes to the same job.
 //
 // The Admin web app has its OWN technician list (its "technicians"
 // collection, no shared ID with Firebase Auth) — assignedToName there is
@@ -1728,33 +1810,42 @@ let assignments = [];
 // onAssignmentSelect() and checkStockLock() below.
 let selectedAssignmentId = null;
 
-async function loadAssignments(name){
-  const techName = (name || '').trim();
-  if(!techName){
+// Accepts one name or an array of names — multiple technicians on the same
+// job each bring their own assignments, merged and deduped by doc id.
+async function loadAssignments(names){
+  const techNames = [...new Set((Array.isArray(names) ? names : [names]).map(n=> (n||'').trim()).filter(Boolean))];
+  if(!techNames.length){
     assignments = [];
     selectedAssignmentId = null;
     renderAssignmentSelect();
     updateProductBanner();
     return;
   }
-  const adminName = nameMap[techName] || techName;
+  const adminNames = [...new Set(techNames.map(n=> nameMap[n] || n))];
   try{
-    const snap = await _db.collection('assignments')
-      .where('assignedToName', '==', adminName)
-      .get();
-    assignments = snap.docs
-      .map(d=>({id:d.id, ...d.data()}))
-      .filter(a=> a.status !== 'cancelled')
-      .sort((a,b)=>{
-        const ta = typeof a.createdAt === 'number' ? a.createdAt : 0;
-        const tb = typeof b.createdAt === 'number' ? b.createdAt : 0;
-        return tb - ta;
+    const snaps = await Promise.all(adminNames.map(adminName=>
+      _db.collection('assignments').where('assignedToName', '==', adminName).get()
+    ));
+    const seen = new Set();
+    assignments = [];
+    snaps.forEach(snap=>{
+      snap.docs.forEach(d=>{
+        if(seen.has(d.id)) return;
+        seen.add(d.id);
+        const a = {id:d.id, ...d.data()};
+        if(a.status !== 'cancelled') assignments.push(a);
       });
+    });
+    assignments.sort((a,b)=>{
+      const ta = typeof a.createdAt === 'number' ? a.createdAt : 0;
+      const tb = typeof b.createdAt === 'number' ? b.createdAt : 0;
+      return tb - ta;
+    });
   }catch(e){
     console.error('[Assignments] load failed', e);
     assignments = [];
   }
-  selectedAssignmentId = null; // whichever job was picked belonged to the previous technician's list
+  selectedAssignmentId = null; // whichever job was picked belonged to the previous technician selection
   renderAssignmentSelect();
   updateProductBanner();
 }
@@ -2440,8 +2531,13 @@ function renderProblemRows(){
   });
 }
 
-function addFixRow(){
-  state.fixes.push({product:"", qty:1, custom:"", oldModel:"", oldModelCustom:"", newSN:"", oldSN:"", ch:"", section:"pair"});
+// `extra` (optional) flags a row as "ของนอกเหนือรายการ" — equipment a
+// technician brought over from another job, not part of this job's
+// ใบเบิก/ของ Spare. Such a row always gets the full free-pick catalog in
+// buildProductHalf() regardless of whether the rest of the form is locked
+// to a ใบเบิก/Spare list, and doesn't count against lockedOptionsCount.
+function addFixRow(extra){
+  state.fixes.push({product:"", qty:1, custom:"", oldModel:"", oldModelCustom:"", newSN:"", oldSN:"", ch:"", section:"pair", extra: !!extra});
   renderFixRows();
   updatePreview();
 }
@@ -2450,13 +2546,13 @@ function addFixRow(){
 // tied together by sharing one row object; "edit" rows are a standalone
 // product-only entry shown only in "แก้ไข" (ถ้ามี), same shape as any
 // other template's plain fix row.
-function addRemovePairRow(){
-  state.fixes.push({product:"", qty:1, custom:"", oldModel:"", oldModelCustom:"", newSN:"", oldSN:"", ch:"", section:"pair"});
+function addRemovePairRow(extra){
+  state.fixes.push({product:"", qty:1, custom:"", oldModel:"", oldModelCustom:"", newSN:"", oldSN:"", ch:"", section:"pair", extra: !!extra});
   renderFixRows();
   updatePreview();
 }
-function addRemoveEditRow(){
-  state.fixes.push({product:"", qty:1, custom:"", oldModel:"", oldModelCustom:"", newSN:"", oldSN:"", ch:"", section:"edit"});
+function addRemoveEditRow(extra){
+  state.fixes.push({product:"", qty:1, custom:"", oldModel:"", oldModelCustom:"", newSN:"", oldSN:"", ch:"", section:"edit", extra: !!extra});
   renderFixRows();
   updatePreview();
 }
@@ -2492,7 +2588,11 @@ function fixRowsStockContext(){
   // สำรองมี "ADAS" อยู่แล้ว แต่ไม่มี "DMS")
   const baseCatalog = liveCatalog || PRODUCTS;
   const genericDeviceTypes = ['DMS', 'ADAS'].filter(g=> !baseCatalog.includes(g));
-  const options = locked ? [] : [...genericDeviceTypes, ...baseCatalog, "อื่นๆ (พิมพ์เอง)"];
+  // Always computed, even while locked — a row flagged row.extra (ของ
+  // นอกเหนือรายการ: equipment a technician brought over from another job,
+  // not part of this job's ใบเบิก/ของ Spare) still needs the full
+  // free-pick catalog regardless of the rest of the form's lock state.
+  const freeOptions = [...genericDeviceTypes, ...baseCatalog, "อื่นๆ (พิมพ์เอง)"];
   const lockedOptionsCount = Object.keys(lockItems).length;
 
   // ล็อกรายการจากใบเบิก/ของ Spare มีจำนวนจำกัดต่อชิ้น — ถ้ามีของชิ้นเดียวกัน
@@ -2508,76 +2608,147 @@ function fixRowsStockContext(){
     }, 0);
     return Math.max(0, (lockItems[product]||0) - usedElsewhere);
   }
-  return { hasLock, hasTechStock, locked, lockItems, options, lockedOptionsCount, remainingFor };
+  return { hasLock, hasTechStock, locked, lockItems, freeOptions, lockedOptionsCount, remainingFor };
+}
+
+// Searchable, optionally-grouped replacement for a plain <select> — the
+// equipment catalog/locked lists can run long, so typing narrows them
+// down like every other suggest-field in this form already does (see
+// wireSuggestInput() above). Returns the wrapper element to insert in
+// place of a <select>; commits through onChange(value) on every pick (or
+// clear) instead of the caller reading .value back out later.
+//
+// groups: [{label: string|null, options: [{value, text}]}]
+//
+// position:fixed dropdown (not absolute) for the same clipping reason
+// wireSuggestInput() uses it — .card sets overflow:hidden, and a row near
+// the bottom of a long fixesCard would otherwise get its dropdown cut off.
+function buildSearchableSelect(groups, selectedValue, placeholder, onChange){
+  const wrap = document.createElement('div');
+  wrap.className = 'suggest-field';
+  const input = document.createElement('input');
+  input.type = 'text'; input.autocomplete = 'off';
+  input.placeholder = placeholder || '-- เลือก --';
+  const box = document.createElement('div');
+  box.className = 'suggest-dropdown app-hidden';
+  wrap.appendChild(input); wrap.appendChild(box);
+
+  let value = selectedValue || '';
+  function labelFor(v){
+    for(const g of groups){
+      const m = g.options.find(o=> o.value === v);
+      if(m) return m.text;
+    }
+    return '';
+  }
+  input.value = labelFor(value);
+
+  function positionBox(){
+    const r = input.getBoundingClientRect();
+    box.style.position = 'fixed';
+    box.style.left = r.left + 'px';
+    box.style.top = (r.bottom + 4) + 'px';
+    box.style.width = r.width + 'px';
+  }
+  function pick(v, text){
+    value = v; input.value = text;
+    box.classList.add('app-hidden');
+    onChange(value);
+  }
+  function render(){
+    const q = input.value.trim().toLowerCase();
+    box.innerHTML = '';
+    const clearItem = document.createElement('div');
+    clearItem.className = 'item'; clearItem.style.color = 'var(--text-faint)';
+    clearItem.textContent = placeholder || '-- เลือก --';
+    clearItem.onclick = ()=> pick('', '');
+    box.appendChild(clearItem);
+    groups.forEach(g=>{
+      const matches = q ? g.options.filter(o=> o.text.toLowerCase().includes(q)) : g.options;
+      if(!matches.length) return;
+      if(g.label){
+        const gl = document.createElement('div');
+        gl.className = 'suggest-group-label'; gl.textContent = g.label;
+        box.appendChild(gl);
+      }
+      matches.forEach(o=>{
+        const item = document.createElement('div');
+        item.className = 'item'; item.textContent = o.text;
+        item.onclick = ()=> pick(o.value, o.text);
+        box.appendChild(item);
+      });
+    });
+    positionBox();
+    box.classList.remove('app-hidden');
+  }
+  input.addEventListener('focus', ()=>{ input.select(); render(); });
+  input.addEventListener('input', render);
+  input.addEventListener('blur', ()=>{
+    setTimeout(()=>{ box.classList.add('app-hidden'); input.value = labelFor(value); }, 150);
+  });
+  return wrap;
 }
 
 // The "product" half of a fix row — เลือกอุปกรณ์/จำนวน/ลบ, plus CH (ติดตั้งใหม่
 // only) /ชื่อเอง /SN ใหม่. Used as-is for every template's combined row, and
 // as the standalone "ติดตั้ง"/"แก้ไข" entry for ถอดย้ายอุปกรณ์.
 function buildProductHalf(row, idx, ctx){
-  const { hasLock, hasTechStock, locked, lockItems, options, remainingFor } = ctx;
+  const { hasLock, hasTechStock, locked, freeOptions, remainingFor } = ctx;
+  // row.extra (ของนอกเหนือรายการ — see addFixRow()) always gets the free
+  // catalog, even when the rest of the form is locked to a ใบเบิก/Spare list.
+  const rowLocked = locked && !row.extra;
   const wrap = document.createElement('div');
   wrap.className = 'fix-entry';
+
+  if(row.extra){
+    const tag = document.createElement('div');
+    tag.className = 'hint'; tag.style.marginBottom = '8px';
+    tag.textContent = '📦 ของนอกเหนือรายการ (ไม่หักจากใบเบิก/ของ Spare)';
+    wrap.appendChild(tag);
+  }
 
   const line = document.createElement('div');
   line.className = 'item-row';
 
-  const sel = document.createElement('select');
-  sel.required = true;
-  const blank = document.createElement('option');
-  blank.value=''; blank.textContent='-- เลือกอุปกรณ์ --'; sel.appendChild(blank);
-  if(locked){
+  const groups = [];
+  if(rowLocked){
     if(hasLock){
-      const og = document.createElement('optgroup');
-      og.label = `จากใบเบิก ${stockLock.noStock}`;
-      Object.keys(stockLock.items).forEach(p=>{
-        const o = document.createElement('option');
-        o.value=p; o.textContent = `${p} (เบิก ${remainingFor(p, idx)})`;
-        if(p===row.product) o.selected=true;
-        og.appendChild(o);
+      groups.push({
+        label: `จากใบเบิก ${stockLock.noStock}`,
+        options: Object.keys(stockLock.items).map(p=> ({ value: p, text: `${p} (เบิก ${remainingFor(p, idx)})` })),
       });
-      sel.appendChild(og);
     }
     if(hasTechStock){
-      const og = document.createElement('optgroup');
-      og.label = `ของ Spare (${techStockOwnerName})`;
-      Object.keys(techStock).forEach(p=>{
-        const o = document.createElement('option');
-        o.value=p; o.textContent = `${p} (คงเหลือ ${remainingFor(p, idx)})`;
-        if(p===row.product) o.selected=true;
-        og.appendChild(o);
+      groups.push({
+        label: `ของ Spare (${techStockOwnerNames.join(', ')})`,
+        options: Object.keys(techStock).map(p=> ({ value: p, text: `${p} (คงเหลือ ${remainingFor(p, idx)})` })),
       });
-      sel.appendChild(og);
     }
   } else {
-    options.forEach(p=>{
-      const o = document.createElement('option');
-      o.value=p; o.textContent = p;
-      if(p===row.product) o.selected=true;
-      sel.appendChild(o);
-    });
+    groups.push({ label: null, options: freeOptions.map(p=> ({ value: p, text: p })) });
   }
+
   // จำนวนตั้งต้นที่ 1 เสมอตอนเพิ่งเลือกอุปกรณ์ — เดิม default เป็นจำนวน
   // คงเหลือทั้งหมด (remainingFor) ทำให้เลือกของที่เหลือเยอะๆ แล้วจำนวน
   // เด้งไปเท่าที่มีในสต็อกทันทีโดยไม่ได้ตั้งใจ (เช่น เครื่องรูดบัตรเหลือ 23
   // แต่ใช้จริงแค่ 1) ยังปรับเพิ่มได้เองในช่องจำนวน ไม่เกิน max ที่กำหนดไว้แล้ว
-  sel.onchange = ()=>{
-    row.product = sel.value;
-    row.qty = locked ? 1 : row.qty;
+  const sel = buildSearchableSelect(groups, row.product, '-- เลือกอุปกรณ์ --', (newValue)=>{
+    row.product = newValue;
+    row.qty = rowLocked ? 1 : row.qty;
     // เปลี่ยนไปเป็นของที่ไม่ต้องมี CH — ล้างช่อง CH เดิมทิ้ง ไม่งั้นค่าเก่าจะ
     // ค้างอยู่และหลุดไปเขียนทับคอลัมน์ Ch ผิดชิ้นตอน buildSheetUpdates()
     if(!rowNeedsChannel(row.product)) row.ch = '';
     applyStockDeviceAutofill(row, idx);
     updatePreview(); renderFixRows();
-  };
+  });
 
   const qty = document.createElement('input');
-  qty.type = locked ? 'number' : 'text';
-  if(locked){ qty.min = 0; qty.max = remainingFor(row.product, idx) || 0; }
+  qty.type = rowLocked ? 'number' : 'text';
+  if(rowLocked){ qty.min = 0; qty.max = remainingFor(row.product, idx) || 0; }
   qty.className='qty'; qty.value=row.qty; qty.placeholder='จำนวน';
   qty.oninput = ()=>{
     let v = qty.value;
-    if(locked){
+    if(rowLocked){
       const max = remainingFor(row.product, idx) || 0;
       v = Math.max(0, Math.min(parseInt(v)||0, max));
       qty.value = v;
@@ -2614,7 +2785,7 @@ function buildProductHalf(row, idx, ctx){
     wrap.appendChild(chSel);
   }
 
-  if(!locked && row.product === "อื่นๆ (พิมพ์เอง)"){
+  if(!rowLocked && row.product === "อื่นๆ (พิมพ์เอง)"){
     const custom = document.createElement('input');
     custom.type='text'; custom.placeholder='พิมพ์ชื่ออุปกรณ์'; custom.value=row.custom;
     custom.style.marginTop='6px';
@@ -2662,31 +2833,21 @@ function buildOldModelHalf(row, idx, standalone){
   oldWrap.className = standalone ? 'fix-entry' : 'old-model-row';
   const oldLabel = document.createElement('label');
   oldLabel.textContent = standalone ? 'อุปกรณ์เดิมที่ถอด' : 'รุ่นเก่าที่เปลี่ยน (ถ้ามี)';
-  const oldSel = document.createElement('select');
-  const oldBlank = document.createElement('option');
-  oldBlank.value=''; oldBlank.textContent='-- ไม่มีการเปลี่ยนอุปกรณ์ --'; oldSel.appendChild(oldBlank);
   // Only ever sourced from this vehicle's actual recorded equipment —
   // no generic PRODUCTS catalog fallback group. If nothing's on file
   // for this plate yet, the only option is "ไม่มีการเปลี่ยนอุปกรณ์";
   // we don't want techs picking a guessed/generic old model that
   // isn't really what's on the vehicle.
-  if(vehicleOldModels.length){
-    const vehGroup = document.createElement('optgroup');
-    vehGroup.label = `จากประวัติทะเบียนนี้ (${state.plate})`;
-    vehicleOldModels.forEach(m=>{
-      const o = document.createElement('option');
-      o.value=m.label; o.textContent=m.label;
-      if(m.label===row.oldModel) o.selected=true;
-      vehGroup.appendChild(o);
-    });
-    oldSel.appendChild(vehGroup);
-  }
-  oldSel.onchange = ()=>{
-    row.oldModel = oldSel.value;
+  const oldGroups = vehicleOldModels.length ? [{
+    label: `จากประวัติทะเบียนนี้ (${state.plate})`,
+    options: vehicleOldModels.map(m=> ({ value: m.label, text: m.label })),
+  }] : [];
+  const oldSel = buildSearchableSelect(oldGroups, row.oldModel, '-- ไม่มีการเปลี่ยนอุปกรณ์ --', (newValue)=>{
+    row.oldModel = newValue;
     const type = deviceTypeForProduct(row.oldModel);
     if(type && !row.oldSN && deviceLookup[type]) row.oldSN = deviceLookup[type].sn || '';
     updatePreview(); renderFixRows();
-  };
+  });
   oldWrap.appendChild(oldLabel); oldWrap.appendChild(oldSel);
 
   if(row.oldModel === "อื่นๆ (พิมพ์เอง)"){
@@ -2736,7 +2897,12 @@ function renderFixRows(){
     container.appendChild(wrap);
   });
   const addBtn = document.getElementById('addFixBtn');
-  addBtn.disabled = ctx.locked ? state.fixes.length >= ctx.lockedOptionsCount : false;
+  // row.extra rows ("ของนอกเหนือรายการ") draw from the free catalog, not
+  // the ใบเบิก/Spare pool — don't count them against lockedOptionsCount.
+  const lockedRowCount = state.fixes.filter(r=> !r.extra).length;
+  addBtn.disabled = ctx.locked ? lockedRowCount >= ctx.lockedOptionsCount : false;
+  const addExtraBtn = document.getElementById('addFixExtraBtn');
+  if(addExtraBtn) addExtraBtn.classList.toggle('app-hidden', !ctx.locked);
 }
 
 // ถอดย้ายอุปกรณ์ only — same state.fixes array as every other template, just
@@ -2766,10 +2932,16 @@ function renderRemoveSections(ctx){
 
   // Same stock-lock accounting as the normal single-list render — one
   // shared pool across both add buttons, since every row (pair or edit)
-  // still draws from the same state.fixes/lockItems count.
-  const atCap = ctx.locked && state.fixes.length >= ctx.lockedOptionsCount;
+  // still draws from the same state.fixes/lockItems count. row.extra rows
+  // don't count against it (see renderFixRows()).
+  const lockedRowCount = state.fixes.filter(r=> !r.extra).length;
+  const atCap = ctx.locked && lockedRowCount >= ctx.lockedOptionsCount;
   document.getElementById('addRemovePairBtn').disabled = atCap;
   document.getElementById('addRemoveEditBtn').disabled = atCap;
+  ['addRemovePairExtraBtn', 'addRemoveEditExtraBtn'].forEach(id=>{
+    const btn = document.getElementById(id);
+    if(btn) btn.classList.toggle('app-hidden', !ctx.locked);
+  });
 }
 
 function renderStickers(){
@@ -3111,10 +3283,11 @@ function fixLine(row){
   const newTag = (deviceTypeForProduct(row.product) && row.newSN) ? ` (SN: ${row.newSN})` : '';
   const oldTag = (tplHasOldModel(state.tpl) && deviceTypeForProduct(row.oldModel) && row.oldSN) ? ` (SN เดิม: ${row.oldSN})` : '';
   const chTag = (state.tpl === 'new_install' && row.ch) ? ` (${row.ch})` : '';
-  if(oldName && name) return `- ทำการเปลี่ยน ${oldName}${oldTag} เป็น ${name}${newTag}${chTag}`;
+  const extraTag = row.extra ? ' [ของนอกเหนือรายการ]' : '';
+  if(oldName && name) return `- ทำการเปลี่ยน ${oldName}${oldTag} เป็น ${name}${newTag}${chTag}${extraTag}`;
   if(name){
     const qty = row.qty ? ` x${row.qty}` : '';
-    return `- ทำการติดตั้ง ${name}${qty}${newTag}${chTag}`;
+    return `- ทำการติดตั้ง ${name}${qty}${newTag}${chTag}${extraTag}`;
   }
   if(oldName) return `- ทำการถอด ${oldName}${oldTag}`;
   return null;
