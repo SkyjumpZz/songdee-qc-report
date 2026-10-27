@@ -10,7 +10,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.62.0">
+<meta name="app-version" content="1.62.1">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -2561,6 +2561,19 @@ function removeFixRow(idx){
   renderFixRows();
   updatePreview();
 }
+// Stock's live catalog carries near-duplicate entries like "DMS Camera V3"
+// alongside "DMS Camera V3  - NEW" — same part, just flagged as a newer
+// batch. Hide the "- NEW" variant from the equipment picker whenever the
+// plain name is ALSO in the catalog (a real duplicate to collapse); if no
+// plain counterpart exists, it isn't actually a duplicate, so it's kept as-is.
+function dedupeNewVariants(list){
+  const set = new Set(list);
+  return list.filter(name=>{
+    const base = name.replace(/\s*-\s*new\s*$/i, '').trim();
+    return base === name || !set.has(base);
+  });
+}
+
 // Shared by both the normal single-list render and ถอดย้ายอุปกรณ์'s 3-column
 // split — stock-lock/Spare accounting doesn't depend on template.
 function fixRowsStockContext(){
@@ -2586,7 +2599,7 @@ function fixRowsStockContext(){
   // autofillDeviceSN() จะเปลี่ยนเป็นรุ่นที่ถูกต้องให้เองถ้าเจอข้อมูลแม่นยำ (ดู
   // ด้านล่าง) — ข้ามถ้า catalog มีคำนี้อยู่แล้วเป๊ะๆ กันตัวเลือกซ้ำ (PRODUCTS
   // สำรองมี "ADAS" อยู่แล้ว แต่ไม่มี "DMS")
-  const baseCatalog = liveCatalog || PRODUCTS;
+  const baseCatalog = dedupeNewVariants(liveCatalog || PRODUCTS);
   const genericDeviceTypes = ['DMS', 'ADAS'].filter(g=> !baseCatalog.includes(g));
   // Always computed, even while locked — a row flagged row.extra (ของ
   // นอกเหนือรายการ: equipment a technician brought over from another job,
