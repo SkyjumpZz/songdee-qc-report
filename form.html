@@ -10,7 +10,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.65.0">
+<meta name="app-version" content="1.66.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -1238,12 +1238,23 @@ async function checkStockLock(){
 // accurate than picking blind from the generic PRODUCTS catalog.
 // ---------------------------------------------------------------
 const VEHICLE_LOOKUP_ENDPOINT = 'https://songdee-vehicle-lookup.songdeegps.workers.dev/vehicle';
-let vehicleOldModels = [];
+let vehicleOldModels = []; // non-empty equipment columns — "what's already on this vehicle"
+// Equipment columns that are currently BLANK on this vehicle — a column
+// that never had anything logged isn't "an old model to replace" (nothing
+// there) and usually isn't a Ch1-9 channel either, so without this there
+// was no way to target it from the form at all; a tech installing one for
+// the first time had to misuse some other already-populated column as a
+// workaround (see the "Buzzer written into Alarm Sound" bug this fixes).
+// Same {column, value, label} shape as vehicleOldModels (value always ''),
+// so buildSheetUpdates()/buildSheetClears()'s src.column lookup works the
+// same way regardless of which list an entry came from.
+let vehicleEmptySlots = [];
 
 async function loadVehicleOldModels(){
   const plate = (state.plate || '').trim();
   if(!plate){
     vehicleOldModels = [];
+    vehicleEmptySlots = [];
     renderFixRows();
     renderVehicleEquipmentBanner();
     return;
@@ -1252,9 +1263,13 @@ async function loadVehicleOldModels(){
     const res = await fetch(`${VEHICLE_LOOKUP_ENDPOINT}?plate=${encodeURIComponent(plate)}`);
     const data = await res.json();
     vehicleOldModels = Array.isArray(data.items) ? data.items : [];
+    vehicleEmptySlots = Array.isArray(data.emptySlots)
+      ? data.emptySlots.map(s=> ({ column: s.column, value: '', label: s.label }))
+      : [];
   }catch(e){
     console.error('[Vehicle lookup]', e);
     vehicleOldModels = [];
+    vehicleEmptySlots = [];
   }
   renderFixRows();
   renderVehicleEquipmentBanner();
@@ -2133,6 +2148,7 @@ function startNewReport(){
   stockLock = null;
   selectedAssignmentId = null;
   vehicleOldModels = [];
+  vehicleEmptySlots = [];
   deviceLookup = {};
   openIssues = [];
   renderIssueBanner();
@@ -2163,6 +2179,7 @@ function startNextVehicle(){
   stockLock = null;
   selectedAssignmentId = null;
   vehicleOldModels = [];
+  vehicleEmptySlots = [];
   deviceLookup = {};
   openIssues = [];
   renderIssueBanner();
@@ -2899,16 +2916,30 @@ function buildOldModelHalf(row, idx, standalone){
   const oldWrap = document.createElement('div');
   oldWrap.className = standalone ? 'fix-entry' : 'old-model-row';
   const oldLabel = document.createElement('label');
-  oldLabel.textContent = standalone ? 'อุปกรณ์เดิมที่ถอด' : 'รุ่นเก่าที่เปลี่ยน (ถ้ามี)';
+  oldLabel.textContent = standalone ? 'อุปกรณ์เดิมที่ถอด' : 'รุ่นเก่าที่เปลี่ยน หรือช่องว่างที่ยังไม่มีอุปกรณ์ (ถ้ามี)';
   // Only ever sourced from this vehicle's actual recorded equipment —
   // no generic PRODUCTS catalog fallback group. If nothing's on file
   // for this plate yet, the only option is "ไม่มีการเปลี่ยนอุปกรณ์";
   // we don't want techs picking a guessed/generic old model that
   // isn't really what's on the vehicle.
-  const oldGroups = vehicleOldModels.length ? [{
-    label: `จากประวัติทะเบียนนี้ (${state.plate})`,
-    options: vehicleOldModels.map(m=> ({ value: m.label, text: m.label })),
-  }] : [];
+  const oldGroups = [];
+  if(vehicleOldModels.length){
+    oldGroups.push({
+      label: `จากประวัติทะเบียนนี้ (${state.plate})`,
+      options: vehicleOldModels.map(m=> ({ value: m.label, text: m.label })),
+    });
+  }
+  // Empty equipment columns — only in the combined upgrade/repair row
+  // (picking BOTH halves — "nothing here yet" + the new product — tells
+  // buildSheetUpdates() which column to write the new install into).
+  // Never offered standalone (ถอดย้ายอุปกรณ์'s "อุปกรณ์เดิมที่ถอด"): removing
+  // something that was never installed doesn't make sense there.
+  if(!standalone && vehicleEmptySlots.length){
+    oldGroups.push({
+      label: `ช่องว่าง — ยังไม่มีอุปกรณ์ (${state.plate})`,
+      options: vehicleEmptySlots.map(m=> ({ value: m.label, text: m.label })),
+    });
+  }
   const oldSel = buildSearchableSelect(oldGroups, row.oldModel, '-- ไม่มีการเปลี่ยนอุปกรณ์ --', (newValue)=>{
     row.oldModel = newValue;
     const type = deviceTypeForProduct(row.oldModel);
@@ -3396,10 +3427,27 @@ function fixLine(row){
 // MDVR Tracking's Ch1-Ch9 columns record DMS/ADAS generically — checked the
 // real sheet data: "DMS"/"ADAS" literal are by far the dominant values
 // there (1602/1503 occurrences), the specific catalog variant ("DMS Camera
-// V3") never appears. Every other equipment column (Buzzer, SD Card Slot 1,
-// MCR, ...) DOES want the specific product/brand name written in full, so
-// this only overrides the value when writing an actual Ch column.
+// V3") never appears.
+//
+// These columns are a plain install-presence Yes/No in the real sheet too —
+// checked every value across the whole sheet (not a guess): IP Resolution/
+// Motor/Buzzer/LED switch/Mic/Panic/Rear Sensor/Sensor Display/Front
+// Sensor/Power Plug are >99% "Yes"/"No", the rare exception is an obvious
+// typo ("yes", "Yes 2k"), never a brand/model name — unlike MCR/Intercom/
+// SD Card Slot/Alarm Sound/Monitor/Fuel Sensor, which DO legitimately
+// record a brand/model (Effon, Speaker AI, DataHUB, "Monitor 8CH", MP3
+// versions, ...) and must keep getting the full product name. Whatever
+// catalog product a tech actually picks for one of the Yes/No columns
+// (there's no brand to distinguish — it's just "is one installed"), the
+// sheet only ever wants "Yes" written. Writing the picked product's name
+// instead is exactly the bug that put the literal text "Buzzer" in a
+// ทะเบียน's Buzzer cell — see git log for the fix.
+const YES_NO_EQUIPMENT_COLUMNS = new Set([
+  "IP Resolution", "Motor", "Buzzer", "LED switch", "Mic", "Panic",
+  "Rear Sensor", "Sensor Display", "Front Sensor", "Power Plug",
+]);
 function sheetValueForColumn(column, product){
+  if(YES_NO_EQUIPMENT_COLUMNS.has(column)) return "Yes";
   const type = deviceTypeForProduct(product);
   if(/^Ch[1-9]$/.test(column) && (type === 'dms' || type === 'adas')){
     return type.toUpperCase();
@@ -3439,7 +3487,11 @@ function buildSheetUpdates(){
   }
   if(tplHasOldModel(state.tpl)){
     state.fixes.forEach(row=>{
-      const src = vehicleOldModels.find(m=> m.label === row.oldModel);
+      // vehicleEmptySlots too — the combined row's buildOldModelHalf() also
+      // offers empty columns as a pick ("nothing here yet, install into
+      // this one"), not just existing equipment to replace.
+      const src = vehicleOldModels.find(m=> m.label === row.oldModel)
+        || vehicleEmptySlots.find(m=> m.label === row.oldModel);
       if(!src) return;
       const newName = row.product === "อื่นๆ (พิมพ์เอง)" ? (row.custom || "") : row.product;
       if(!newName) return;
