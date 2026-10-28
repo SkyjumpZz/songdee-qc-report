@@ -10,7 +10,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.66.0">
+<meta name="app-version" content="1.67.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -1045,6 +1045,16 @@ function removeTechStockName(name){
   loadAssignments(techStockOwnerNames);
 }
 
+// ชื่อช่างหน้างานจริง — ตามที่ขอ ให้คอลัมน์ TECHNICIAN/Technician1 ในชีตต่างๆ
+// (MDVR Tracking, AI Box/ADAS/DMS Tracking, ISSUES-All) บันทึกชื่อช่างที่ลง
+// มือทำงานจริงหน้างาน ("ช่างที่กำลังทำรายงานนี้" — รองรับเลือกได้หลายคน) ไม่ใช่
+// แค่ชื่อบัญชีที่ login เข้าแอป (tester.techName) ซึ่งอาจเป็นคนละคนกัน (เช่น
+// แอดมิน/หัวหน้าทีม login ให้ แต่ช่างอื่นเป็นคนลงพื้นที่จริง) — ไม่ได้เลือกใคร
+// ไว้เลยค่อย fallback กลับไปใช้ชื่อบัญชีที่ login เหมือนพฤติกรรมเดิม
+function onSiteTechName(){
+  return techStockOwnerNames.length ? techStockOwnerNames.join(', ') : tester.techName;
+}
+
 function wireTechStockSearch(){
   const input = document.getElementById('techStockNameInput');
   const box = document.getElementById('techStockNameSuggestions');
@@ -1404,7 +1414,7 @@ async function pushMdvrInstall(){
     headers:{'Content-Type':'application/json'},
     body: JSON.stringify({
       imei: state.mdvrImei, deviceId: state.mdvrDeviceId, server: state.mdvrServer,
-      plate: state.plate, customer: state.customer, date: state.date, technician: tester.techName,
+      plate: state.plate, customer: state.customer, date: state.date, technician: onSiteTechName(),
     })
   });
   const data = await res.json();
@@ -2220,6 +2230,14 @@ function deviceTypeForProduct(name){
   if(n.includes('ai box') || n.includes('aibox')) return 'aibox';
   return undefined;
 }
+// ซิม — identity คือเบอร์โทร ไม่ใช่ยี่ห้อ/รุ่นเหมือนอุปกรณ์อื่น เลือกแล้วโชว์
+// ช่องกรอกเบอร์ (row.phoneNo) แทนที่จะเขียนชื่อ "ซิมการ์ด" ลงชีตตรงๆ — ดู
+// buildSheetUpdates() ที่เขียนเบอร์ลงคอลัมน์ "Phone No." แทนชื่อ product
+function isSimProduct(product){
+  if(!product) return false;
+  const p = product.toLowerCase();
+  return p.includes('ซิม') || p.includes('sim');
+}
 // กล้อง/อุปกรณ์ที่ต้องเลือกช่อง CH (Ch1-Ch9) ตอนติดตั้งใหม่ — ของใน Stock's
 // "Camera" category (DOME/Reverse ฯลฯ) บวก DMS/ADAS (ก็ต่อสายเข้าช่องกล้อง
 // ของ MDVR เหมือนกัน แค่ identity ติดตามด้วย SN คนละชีต) ไม่รวม AI Box (ไม่ได้
@@ -2454,7 +2472,7 @@ function defaultState(){
     // ดู renderTabs()/buildSheetUpdates()/buildDeviceSwaps()
     newPlate: "",
     problems: [{symptom:""}],
-    fixes: [{product:"", qty:1, custom:"", oldModel:"", oldModelCustom:"", newSN:"", oldSN:"", ch:"", section:"pair"}],
+    fixes: [{product:"", qty:1, custom:"", oldModel:"", oldModelCustom:"", newSN:"", oldSN:"", ch:"", phoneNo:"", section:"pair"}],
     stickers: {},
     checklist: {},
     photos: [],
@@ -2608,7 +2626,7 @@ function renderProblemRows(){
 // buildProductHalf() regardless of whether the rest of the form is locked
 // to a ใบเบิก/Spare list, and doesn't count against lockedOptionsCount.
 function addFixRow(extra){
-  state.fixes.push({product:"", qty:1, custom:"", oldModel:"", oldModelCustom:"", newSN:"", oldSN:"", ch:"", section:"pair", extra: !!extra});
+  state.fixes.push({product:"", qty:1, custom:"", oldModel:"", oldModelCustom:"", newSN:"", oldSN:"", ch:"", phoneNo:"", section:"pair", extra: !!extra});
   renderFixRows();
   updatePreview();
 }
@@ -2618,12 +2636,12 @@ function addFixRow(extra){
 // product-only entry shown only in "แก้ไข" (ถ้ามี), same shape as any
 // other template's plain fix row.
 function addRemovePairRow(extra){
-  state.fixes.push({product:"", qty:1, custom:"", oldModel:"", oldModelCustom:"", newSN:"", oldSN:"", ch:"", section:"pair", extra: !!extra});
+  state.fixes.push({product:"", qty:1, custom:"", oldModel:"", oldModelCustom:"", newSN:"", oldSN:"", ch:"", phoneNo:"", section:"pair", extra: !!extra});
   renderFixRows();
   updatePreview();
 }
 function addRemoveEditRow(extra){
-  state.fixes.push({product:"", qty:1, custom:"", oldModel:"", oldModelCustom:"", newSN:"", oldSN:"", ch:"", section:"edit", extra: !!extra});
+  state.fixes.push({product:"", qty:1, custom:"", oldModel:"", oldModelCustom:"", newSN:"", oldSN:"", ch:"", phoneNo:"", section:"edit", extra: !!extra});
   renderFixRows();
   updatePreview();
 }
@@ -2875,6 +2893,16 @@ function buildProductHalf(row, idx, ctx){
     custom.style.marginTop='6px';
     custom.oninput = ()=>{ row.custom = custom.value; updatePreview(); };
     wrap.appendChild(custom);
+  }
+
+  // ซิม — เบอร์โทรคือ identity ของมัน ไม่ใช่ยี่ห้อ/รุ่น ดู isSimProduct()/
+  // buildSheetUpdates() ที่เขียนเบอร์นี้ลงคอลัมน์ "Phone No." แทนชื่อ product
+  if(isSimProduct(row.product)){
+    const phoneInput = document.createElement('input');
+    phoneInput.type='tel'; phoneInput.placeholder='เบอร์ซิม (เช่น 0812345678)';
+    phoneInput.value = row.phoneNo || ''; phoneInput.style.marginTop='6px';
+    phoneInput.oninput = ()=>{ row.phoneNo = phoneInput.value; updatePreview(); };
+    wrap.appendChild(phoneInput);
   }
 
   const snType = deviceTypeForProduct(row.product);
@@ -3414,11 +3442,12 @@ function fixLine(row){
   const newTag = (deviceTypeForProduct(row.product) && row.newSN) ? ` (SN: ${row.newSN})` : '';
   const oldTag = (tplHasOldModel(state.tpl) && deviceTypeForProduct(row.oldModel) && row.oldSN) ? ` (SN เดิม: ${row.oldSN})` : '';
   const chTag = (state.tpl === 'new_install' && row.ch) ? ` (${row.ch})` : '';
+  const phoneTag = (isSimProduct(row.product) && row.phoneNo) ? ` (เบอร์: ${row.phoneNo})` : '';
   const extraTag = row.extra ? ' [ของนอกเหนือรายการ]' : '';
-  if(oldName && name) return `- ทำการเปลี่ยน ${oldName}${oldTag} เป็น ${name}${newTag}${chTag}${extraTag}`;
+  if(oldName && name) return `- ทำการเปลี่ยน ${oldName}${oldTag} เป็น ${name}${newTag}${chTag}${phoneTag}${extraTag}`;
   if(name){
     const qty = row.qty ? ` x${row.qty}` : '';
-    return `- ทำการติดตั้ง ${name}${qty}${newTag}${chTag}${extraTag}`;
+    return `- ทำการติดตั้ง ${name}${qty}${newTag}${chTag}${phoneTag}${extraTag}`;
   }
   if(oldName) return `- ทำการถอด ${oldName}${oldTag}`;
   return null;
@@ -3455,6 +3484,9 @@ function sheetValueForColumn(column, product){
   return null; // no override — caller falls back to the full product name
 }
 
+// ซิม — column เดียวกันที่ MDVR Tracking ใช้เก็บเบอร์ (ดู isSimProduct()).
+const PHONE_NO_COLUMN = "Phone No.";
+
 // Sheet write-back — two sources, never both (a report is one job type):
 // 1) รุ่นเก่า picked from the "จากประวัติทะเบียนนี้" group — only then do we
 //    know which sheet column to overwrite (the label carries its source
@@ -3477,6 +3509,13 @@ function buildSheetUpdates(){
     if(!newPlate) return updates;
     state.fixes.forEach(row=>{
       if(row.section === 'edit') return;
+      // ซิม — ย้ายไปลงทะเบียนใหม่ด้วยเบอร์ที่กรอก ไม่ใช่ช่อง Ch (ซิมไม่มี
+      // channel) เลยต้องเช็คแยกก่อนเงื่อนไข row.ch/rowNeedsChannel ด้านล่าง
+      if(isSimProduct(row.product)){
+        const phone = (row.phoneNo || '').trim();
+        if(phone) updates.push({ plate: newPlate, column: PHONE_NO_COLUMN, value: phone });
+        return;
+      }
       if(!row.ch || !rowNeedsChannel(row.product)) return;
       const newName = row.product === "อื่นๆ (พิมพ์เอง)" ? (row.custom || "") : row.product;
       if(!newName) return;
@@ -3493,6 +3532,11 @@ function buildSheetUpdates(){
       const src = vehicleOldModels.find(m=> m.label === row.oldModel)
         || vehicleEmptySlots.find(m=> m.label === row.oldModel);
       if(!src) return;
+      if(isSimProduct(row.product)){
+        const phone = (row.phoneNo || '').trim();
+        if(phone) updates.push({ plate: state.plate, column: src.column, value: phone });
+        return;
+      }
       const newName = row.product === "อื่นๆ (พิมพ์เอง)" ? (row.custom || "") : row.product;
       if(!newName) return;
       const value = sheetValueForColumn(src.column, row.product) || newName;
@@ -3570,7 +3614,7 @@ async function pushMdvrClears(){
     const res = await fetch('https://songdee-vehicle-lookup.songdeegps.workers.dev/mdvr-clear', {
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ plate, column: c.column, date: dateStr, technician: tester.techName })
+      body: JSON.stringify({ plate, column: c.column, date: dateStr, technician: onSiteTechName() })
     });
     const data = await res.json();
     if(!res.ok || !data.ok) throw new Error(data.error || ('HTTP ' + res.status));
@@ -3611,13 +3655,13 @@ function buildDeviceSwaps(){
       // ย้ายข้ามคัน (ฝั่งถอดต้องบันทึกว่าออกจากทะเบียนเก่า ฝั่งติดตั้งต้องบันทึก
       // ว่าไปอยู่ทะเบียนใหม่) แยกยิงคนละคำขอคนละทะเบียนแทน — ฝั่งติดตั้งข้ามไป
       // ถ้ายังไม่ได้ระบุทะเบียนใหม่ (ไม่รู้จะเขียนลงคันไหน)
-      if(oldSN) swaps.push({ type, plate: state.plate, customer: state.customer, technician: tester.techName, date: dateStr, oldSN, newSN: '' });
-      if(newSN && newPlate) swaps.push({ type, plate: newPlate, customer: state.customer, technician: tester.techName, date: dateStr, oldSN: '', newSN });
+      if(oldSN) swaps.push({ type, plate: state.plate, customer: state.customer, technician: onSiteTechName(), date: dateStr, oldSN, newSN: '' });
+      if(newSN && newPlate) swaps.push({ type, plate: newPlate, customer: state.customer, technician: onSiteTechName(), date: dateStr, oldSN: '', newSN });
       return;
     }
     swaps.push({
       type, plate: state.plate, customer: state.customer,
-      technician: tester.techName, date: dateStr, oldSN, newSN,
+      technician: onSiteTechName(), date: dateStr, oldSN, newSN,
     });
   });
   return swaps;
@@ -3662,7 +3706,7 @@ async function pushIssueClose(){
       headers:{'Content-Type':'application/json'},
       body: JSON.stringify({
         plate: state.plate, ticketNo: issue.ticketNo,
-        fixedDetails: fixLines.join('\n'), technician: tester.techName, date: dateStr,
+        fixedDetails: fixLines.join('\n'), technician: onSiteTechName(), date: dateStr,
         cause: issue.cause || '',
       })
     });
