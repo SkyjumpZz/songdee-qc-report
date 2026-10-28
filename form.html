@@ -10,7 +10,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.63.0">
+<meta name="app-version" content="1.63.1">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -3895,6 +3895,16 @@ async function sendToLine(){
     if(!tester.techName){
       const ok = confirm('บัญชีนี้ยังไม่มีชื่อช่าง (techName) — รายงานที่ส่งจะไม่ระบุชื่อผู้ทดสอบ\n\nยืนยันส่งรายงานนี้โดยไม่มีชื่อช่างหรือไม่?');
       if(!ok){ showToast('ยกเลิกการส่ง (ยังไม่มีชื่อช่าง)'); return; }
+    }
+
+    // "ช่างที่กำลังทำรายงานนี้" (techStockOwnerNames — ดู wireTechStockSearch())
+    // ไม่เคยถูกบังคับเลือกมาก่อน แค่เป็นตัวช่วยดึงใบเบิก/ของ Spare เท่านั้น
+    // เตือนให้ยืนยันก่อนส่งถ้ายังไม่ได้เลือกเลยสักคน แต่เฉพาะตอนช่องนี้มีให้
+    // เลือกจริง (techStockNames.length) — ถ้าไม่มีชื่อช่างในระบบให้เลือกเลย
+    // (ช่องถูกซ่อนไปแล้ว) ก็ไม่ต้องเตือนซ้ำ
+    if(techStockNames.length && !techStockOwnerNames.length){
+      const ok = confirm('ยังไม่ได้เลือก "ช่างที่กำลังทำรายงานนี้"\n\nยืนยันส่งรายงานนี้โดยไม่ระบุช่างหรือไม่?');
+      if(!ok){ showToast('ยกเลิกการส่ง (ยังไม่ได้เลือกช่าง)'); return; }
     }
 
     // ยังไม่มี currentReportId แปลว่าเป็นรายงานใหม่ (ไม่ใช่กำลังแก้ไข/ส่งซ้ำ
