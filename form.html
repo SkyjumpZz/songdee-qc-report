@@ -10,7 +10,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.67.0">
+<meta name="app-version" content="1.68.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -749,12 +749,12 @@
       <div class="remove-subsection">
         <div class="remove-subsection-title">① ถอด</div>
         <div id="removeOldRows"></div>
-        <button class="btn-add" type="button" id="addRemovePairBtn" onclick="addRemovePairRow()">+ เพิ่มรายการถอด/ติดตั้ง</button>
-        <button class="btn-add app-hidden" type="button" id="addRemovePairExtraBtn" onclick="addRemovePairRow(true)">+ เพิ่มของนอกเหนือรายการ</button>
+        <button class="btn-add" type="button" id="addRemoveOldBtn" onclick="addRemoveOldRow()">+ เพิ่มอุปกรณ์ที่ถอด</button>
       </div>
       <div class="remove-subsection">
         <div class="remove-subsection-title">② ติดตั้ง</div>
         <div id="removeNewRows"></div>
+        <button class="btn-add" type="button" id="addRemoveNewBtn" onclick="addRemoveNewRow()">+ เพิ่มอุปกรณ์ที่ติดตั้ง</button>
       </div>
       <div class="remove-subsection">
         <div class="remove-subsection-title">③ แก้ไข (ถ้ามี)</div>
@@ -2472,7 +2472,12 @@ function defaultState(){
     // ดู renderTabs()/buildSheetUpdates()/buildDeviceSwaps()
     newPlate: "",
     problems: [{symptom:""}],
-    fixes: [{product:"", qty:1, custom:"", oldModel:"", oldModelCustom:"", newSN:"", oldSN:"", ch:"", phoneNo:"", section:"pair"}],
+    // section "remove" only matters for ถอดย้ายอุปกรณ์ (renderRemoveSections())
+    // — other templates ignore it entirely. A brand-new report's one
+    // starting row shows up under "① ถอด" only if that template ends up
+    // picked, not paired with an empty "② ติดตั้ง" slot (ตามที่ขอ แยกอิสระ
+    // จากกัน) — "+ เพิ่มอุปกรณ์ที่ติดตั้ง" adds that side separately now.
+    fixes: [{product:"", qty:1, custom:"", oldModel:"", oldModelCustom:"", newSN:"", oldSN:"", ch:"", phoneNo:"", section:"remove"}],
     stickers: {},
     checklist: {},
     photos: [],
@@ -2630,13 +2635,21 @@ function addFixRow(extra){
   renderFixRows();
   updatePreview();
 }
-// ถอดย้ายอุปกรณ์ only — see renderRemoveSections(). "pair" rows show in
-// both the "ถอด" (old-model half) and "ติดตั้ง" (product half) columns,
-// tied together by sharing one row object; "edit" rows are a standalone
+// ถอดย้ายอุปกรณ์ only — see renderRemoveSections(). "remove"/"install" rows
+// are independent entries, each its own row object — adding/removing one
+// side never touches the other (ตามที่ขอ). "edit" rows are a standalone
 // product-only entry shown only in "แก้ไข" (ถ้ามี), same shape as any
-// other template's plain fix row.
-function addRemovePairRow(extra){
-  state.fixes.push({product:"", qty:1, custom:"", oldModel:"", oldModelCustom:"", newSN:"", oldSN:"", ch:"", phoneNo:"", section:"pair", extra: !!extra});
+// other template's plain fix row. "pair" is legacy only (reports saved
+// before this split, when ① ถอด/② ติดตั้ง shared one row) — still rendered
+// in both columns for backward compatibility, see renderRemoveSections();
+// never created new.
+function addRemoveOldRow(extra){
+  state.fixes.push({product:"", qty:1, custom:"", oldModel:"", oldModelCustom:"", newSN:"", oldSN:"", ch:"", phoneNo:"", section:"remove", extra: !!extra});
+  renderFixRows();
+  updatePreview();
+}
+function addRemoveNewRow(extra){
+  state.fixes.push({product:"", qty:1, custom:"", oldModel:"", oldModelCustom:"", newSN:"", oldSN:"", ch:"", phoneNo:"", section:"install", extra: !!extra});
   renderFixRows();
   updatePreview();
 }
@@ -3033,41 +3046,50 @@ function renderFixRows(){
 
 // ถอดย้ายอุปกรณ์ only — same state.fixes array as every other template, just
 // shown as 3 separate lists instead of one combined row:
-//  - "pair" rows (default, added via "+ เพิ่มรายการถอด/ติดตั้ง") pair the old-
-//    model half ("ถอด") with the product half ("ติดตั้ง") by sharing one row
-//    object — leaving the ติดตั้ง half blank is a pure removal (nothing
-//    replaces it in that slot); fixLine()/buildSheetUpdates() already read
-//    that correctly (a "ทำการถอด" line, and a cleared+logged sheet column).
+//  - "remove" rows (added via "+ เพิ่มอุปกรณ์ที่ถอด") are a standalone
+//    old-model-only entry in "① ถอด".
+//  - "install" rows (added via "+ เพิ่มอุปกรณ์ที่ติดตั้ง") are a standalone
+//    product-only entry in "② ติดตั้ง" — ตามที่ขอ ไม่ผูกกับฝั่งถอดอีกต่อไป:
+//    เพิ่ม/ลบฝั่งไหนไม่กระทบอีกฝั่ง ไม่บังคับต้องมีคู่กัน. Always free-pick
+//    from the full catalog regardless of ใบเบิก/ของ Spare lock state (ตามที่
+//    ขอ — ยังไม่ต้องดึงของจาก Stock มาก็ได้ในส่วนติดตั้งนี้) — see unlockedCtx
+//    below.
+//  - "pair" is legacy only (reports saved before this split, when ① ถอด/
+//    ② ติดตั้ง shared one row object) — still rendered in both columns so
+//    reopening an old report doesn't silently drop either half; never
+//    created new (addRemoveOldRow()/addRemoveNewRow() always write "remove"/
+//    "install" separately).
 //  - "edit" rows (added via "+ เพิ่มรายการแก้ไข" under แก้ไข) are a plain
 //    product-only entry with no old-model pairing, for anything else done
-//    on the visit that isn't a remove/install.
+//    on the visit that isn't a remove/install — still respects the normal
+//    ใบเบิก/ของ Spare lock, unlike ② ติดตั้ง above.
 function renderRemoveSections(ctx){
   const oldContainer = document.getElementById('removeOldRows');
   const newContainer = document.getElementById('removeNewRows');
   const editContainer = document.getElementById('removeEditRows');
   oldContainer.innerHTML = ''; newContainer.innerHTML = ''; editContainer.innerHTML = '';
 
+  const unlockedCtx = { ...ctx, locked: false };
   state.fixes.forEach((row, idx)=>{
     if(row.section === 'edit'){
       editContainer.appendChild(buildProductHalf(row, idx, ctx));
-    } else {
+      return;
+    }
+    if(row.section === 'remove' || row.section === 'pair'){
       oldContainer.appendChild(buildOldModelHalf(row, idx, true));
-      newContainer.appendChild(buildProductHalf(row, idx, ctx));
+    }
+    if(row.section === 'install' || row.section === 'pair'){
+      newContainer.appendChild(buildProductHalf(row, idx, unlockedCtx));
     }
   });
 
-  // Same stock-lock accounting as the normal single-list render — one
-  // shared pool across both add buttons, since every row (pair or edit)
-  // still draws from the same state.fixes/lockItems count. row.extra rows
-  // don't count against it (see renderFixRows()).
+  // ① ถอด/② ติดตั้ง ไม่มีแคปจำนวนจากใบเบิก/ของ Spare อีกต่อไป (ถอดอิงประวัติ
+  // รถเอง, ติดตั้งเป็น free-pick เสมอแล้ว) — เหลือแค่ ③ แก้ไข ที่ยังล็อกตาม
+  // ใบเบิก/ของ Spare ปกติ เหมือน renderFixRows() ด้านบน
   const lockedRowCount = state.fixes.filter(r=> !r.extra).length;
-  const atCap = ctx.locked && lockedRowCount >= ctx.lockedOptionsCount;
-  document.getElementById('addRemovePairBtn').disabled = atCap;
-  document.getElementById('addRemoveEditBtn').disabled = atCap;
-  ['addRemovePairExtraBtn', 'addRemoveEditExtraBtn'].forEach(id=>{
-    const btn = document.getElementById(id);
-    if(btn) btn.classList.toggle('app-hidden', !ctx.locked);
-  });
+  document.getElementById('addRemoveEditBtn').disabled = ctx.locked && lockedRowCount >= ctx.lockedOptionsCount;
+  const addRemoveEditExtraBtn = document.getElementById('addRemoveEditExtraBtn');
+  if(addRemoveEditExtraBtn) addRemoveEditExtraBtn.classList.toggle('app-hidden', !ctx.locked);
 }
 
 function renderStickers(){
@@ -3585,12 +3607,13 @@ async function pushSheetUpdates(){
   return results;
 }
 
-// ถอดย้ายอุปกรณ์ only — a "pair" row with an old model picked (รุ่นเก่าที่เปลี่ยน
-// matched a known sheet column) always needs its slot actively cleared +
-// logged on ทะเบียนเก่า (state.plate) — ไม่ว่าจะมีของใหม่มาแทนที่หรือไม่ก็ตาม,
-// เพราะของใหม่ (ถ้ามี) ไปเขียนที่ "ทะเบียนใหม่" คนละคันแล้ว (ดู
-// buildSheetUpdates() — เดิมเคยข้ามการเคลียร์ตอนมีของใหม่มาแทน โดยสมมติว่า
-// เป็นการสลับอุปกรณ์บนคันเดิม ซึ่งผิดสำหรับการย้ายข้ามคัน).
+// ถอดย้ายอุปกรณ์ only — a "remove" (or legacy "pair") row with an old model
+// picked (รุ่นเก่าที่เปลี่ยน matched a known sheet column) always needs its
+// slot actively cleared + logged on ทะเบียนเก่า (state.plate) — ไม่ว่าจะมีของ
+// ใหม่มาแทนที่หรือไม่ก็ตาม (รวมถึงไม่ว่าจะมีการเพิ่ม "② ติดตั้ง" คู่กันหรือไม่
+// เลยก็ตาม ตั้งแต่แยกเป็นอิสระจากกัน), เพราะของใหม่ (ถ้ามี) ไปเขียนที่ "ทะเบียน
+// ใหม่" คนละคันแล้ว (ดู buildSheetUpdates() — เดิมเคยข้ามการเคลียร์ตอนมีของ
+// ใหม่มาแทน โดยสมมติว่าเป็นการสลับอุปกรณ์บนคันเดิม ซึ่งผิดสำหรับการย้ายข้ามคัน).
 function buildSheetClears(){
   if(state.tpl !== 'remove') return [];
   const clears = [];
