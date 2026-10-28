@@ -7,7 +7,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>Dashboard · SONGDEE GPS</title>
-<meta name="app-version" content="1.25.0">
+<meta name="app-version" content="1.25.1">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -433,6 +433,11 @@
     margin:18px 0 8px;
   }
   .list-subheading:first-of-type{margin-top:4px;}
+  /* ลิสต์ยาว (ลูกค้า/Fleet อาจมีเป็นร้อยรายการ) — เลื่อนในกรอบตัวเองแทนที่จะ
+     ดันความสูงทั้งการ์ด/หน้าเพจยาวไม่รู้จบ */
+  .scroll-list{
+    max-height:360px; overflow-y:auto; padding-right:4px; margin-top:4px;
+  }
   .tester-roster-row{
     display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:5px 10px;
     padding:10px 0; border-bottom:1px solid var(--line-soft);
@@ -640,20 +645,20 @@
       เพิ่ม/ลบรายชื่อได้เฉพาะ Super Admin เท่านั้น ข้อมูลชุดเดียวกับที่ songdee-stock ใช้อยู่
     </div>
     <div class="list-subheading">ลูกค้า</div>
-    <div id="customerListRows"></div>
     <div class="name-map-add single-col">
       <input type="text" id="customerListNew" placeholder="ชื่อลูกค้าใหม่">
       <button type="button" onclick="addCustomerListRow()">+ เพิ่ม</button>
     </div>
     <div class="name-map-status" id="customerListStatus"></div>
+    <div class="scroll-list" id="customerListRows"></div>
 
     <div class="list-subheading">Fleet</div>
-    <div id="fleetListRows"></div>
     <div class="name-map-add single-col">
       <input type="text" id="fleetListNew" placeholder="ชื่อ Fleet ใหม่">
       <button type="button" onclick="addFleetListRow()">+ เพิ่ม</button>
     </div>
     <div class="name-map-status" id="fleetListStatus"></div>
+    <div class="scroll-list" id="fleetListRows"></div>
   </div>
 
   <div id="stats" class="app-hidden">
