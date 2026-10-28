@@ -10,7 +10,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.70.0">
+<meta name="app-version" content="1.71.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -3606,6 +3606,18 @@ function buildSheetUpdates(){
       if(!newName) return;
       const value = sheetValueForColumn(src.column, row.product) || newName;
       updates.push({ plate: state.plate, column: src.column, value });
+      // เปลี่ยน MDVR ตัวเครื่องเอง (คอลัมน์ "Device type") — ไม่ใช่แค่อุปกรณ์
+      // ต่อพ่วงอย่างกล้อง/Buzzer/ฯลฯ — อัปเดต Customer/Installed Date/
+      // Technician1 ของทั้งทะเบียนด้วย ให้ตรงกับที่ installMdvrDevice()/
+      // swapDevice() ทำอยู่แล้วตอนติดตั้ง MDVR/อุปกรณ์ที่แกะ SN ใหม่
+      // (ตามที่ขอ — เฉพาะตอนเปลี่ยน MDVR เท่านั้น ไม่รวมอุปกรณ์ชิ้นอื่น ที่ไม่
+      // ควรไปทับวันที่ติดตั้งระบบ MDVR เดิม)
+      if(src.column === 'Device type'){
+        if(state.customer) updates.push({ plate: state.plate, column: 'Customer', value: state.customer });
+        if(state.date) updates.push({ plate: state.plate, column: 'Installed Date', value: state.date });
+        const tech = onSiteTechName();
+        if(tech) updates.push({ plate: state.plate, column: 'Technician1', value: tech });
+      }
     });
   } else if(state.tpl === 'new_install'){
     state.fixes.forEach(row=>{
