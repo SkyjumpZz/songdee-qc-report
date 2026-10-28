@@ -10,7 +10,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.69.0">
+<meta name="app-version" content="1.70.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -949,11 +949,32 @@ _auth.onAuthStateChanged(async user=>{
 let stockLock = null; // { noStock, items: {name: qty}, devices: {name: {imei, sn}} } or null
 let _stockLockTimer = null;
 let liveCatalog = null; // string[] once loaded, else null (fall back to PRODUCTS)
-// Product names under Stock's own "Camera" category (sd_cats) — combined
-// with DMS/ADAS (deviceTypeForProduct()) to decide which fix rows get the
-// CH picker on new_install. Not AI Box — tracked by SN same as DMS/ADAS,
-// but doesn't occupy an MDVR video channel.
-let cameraProductNames = new Set();
+// Camera/channel model names as actually used in the real MDVR Tracking
+// sheet's Ch1-Ch9 columns — checked every distinct value across the whole
+// sheet (same method as YES_NO_EQUIPMENT_COLUMNS below), per the user's
+// instruction that Ch-column naming should reference MDVR Tracking itself,
+// not just Stock's own "Camera" category (sd_cats), which doesn't
+// necessarily carry every name the sheet already uses in practice.
+const MDVR_CAMERA_MODELS = [
+  "v16", "V26", "v30", "v30/IR", "v38", "v39", "Momenta",
+  "DOME CP WHITE", "DOME CP WHITE/IR", "DOME CP BLACK/IR", "DOME CP/IR",
+  "DOME CP BLACK", "DOME CP BLACK/MIC", "DOME CP BLACK/MIC/IR",
+  "DOME CP OUTDOOR", "Dome CP Outdoor (แบบมีขา)", "AI Box DMS", "AI Box ADAS",
+  "IP Camera", "IP Camera (2022)", "IP V30", "IP OUTDOOR", "Dahua 1080P",
+  "Splitter", "OUTDOOR 1080P", "ACP104CX-155(Reverse)", "Trailer", "AVS-D1",
+  "CP OUTDOOR (2023)", "ADAS", "DMS", "Mdvr 2ch (Splitter)", "MDVR4CH DTC",
+  "IP Camera V.9 (2023)", "Reverse (test)", "CP OUTDOOR V2 (2023)",
+  "IP Camera V.30 (2024)", "Care drive", "Reverse Small", "Reverse 608IR",
+  "BSD", "DMS C29N", "IP V26", "DVS", "Camera 360", "F6N (Splitter)",
+  "AI Box ADAS + DOME CP BLACK ตัด IR", "V.62", "CPM / B",
+];
+// Product names under Stock's own "Camera" category (sd_cats) — unioned
+// with MDVR_CAMERA_MODELS above and DMS/ADAS (deviceTypeForProduct()) to
+// decide which fix rows get the CH picker on new_install. Not AI Box —
+// tracked by SN same as DMS/ADAS, but doesn't occupy an MDVR video channel.
+// Starts seeded with MDVR_CAMERA_MODELS (not empty) so rowNeedsChannel()
+// already works correctly before Stock's own catalog finishes loading.
+let cameraProductNames = new Set(MDVR_CAMERA_MODELS);
 let allTechStock = {}; // raw sd:tech blob: {techName: [{name,qty,used,ret,pend}, ...]}
 let techStock = null; // {name: remainingQty} merged across techStockOwnerNames below, or null
 let techStockOwnerNames = []; // whose stock+assignments are currently combined (multi-select — several techs can go to the same job)
@@ -967,7 +988,7 @@ async function loadLiveCatalog(){
     if(flat.length) liveCatalog = flat;
     const cameraCat = cats.find(c=> c.cat === 'Camera');
     if(cameraCat && Array.isArray(cameraCat.items) && cameraCat.items.length){
-      cameraProductNames = new Set(cameraCat.items.filter(Boolean));
+      cameraProductNames = new Set([...MDVR_CAMERA_MODELS, ...cameraCat.items.filter(Boolean)]);
     }
   }catch(e){
     console.error('[Stock catalog]', e);
@@ -2719,7 +2740,11 @@ function fixRowsStockContext(){
   // autofillDeviceSN() จะเปลี่ยนเป็นรุ่นที่ถูกต้องให้เองถ้าเจอข้อมูลแม่นยำ (ดู
   // ด้านล่าง) — ข้ามถ้า catalog มีคำนี้อยู่แล้วเป๊ะๆ กันตัวเลือกซ้ำ (PRODUCTS
   // สำรองมี "ADAS" อยู่แล้ว แต่ไม่มี "DMS")
-  const baseCatalog = dedupeNewVariants(liveCatalog || PRODUCTS);
+  // Unioned with MDVR_CAMERA_MODELS (see cameraProductNames above) so a
+  // camera name actually used in MDVR Tracking's Ch1-Ch9 columns is always
+  // pickable for a new install, even if Stock's own catalog doesn't (yet)
+  // carry that exact name.
+  const baseCatalog = dedupeNewVariants([...new Set([...(liveCatalog || PRODUCTS), ...MDVR_CAMERA_MODELS])]);
   const genericDeviceTypes = ['DMS', 'ADAS'].filter(g=> !baseCatalog.includes(g));
   // Always computed, even while locked — a row flagged row.extra (ของ
   // นอกเหนือรายการ: equipment a technician brought over from another job,
