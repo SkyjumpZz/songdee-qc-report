@@ -10,7 +10,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.64.0">
+<meta name="app-version" content="1.65.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -1966,6 +1966,11 @@ function diffReportFields(oldDoc, payload){
       if(a !== b) changes.push({ label: `รายการตรวจสอบ: ${checklistLabel(tplForLabels, key)}`, from: a, to: b });
       return;
     }
+    if(key === 'db9'){
+      const a = db9Label(oldChecklist[key]), b = db9Label(newChecklist[key]);
+      if(a !== b) changes.push({ label: `รายการตรวจสอบ: ${checklistLabel(tplForLabels, key)}`, from: a, to: b });
+      return;
+    }
     const a = !!oldChecklist[key], b = !!newChecklist[key];
     if(a !== b){
       changes.push({ label: `รายการตรวจสอบ: ${checklistLabel(tplForLabels, key)}`, from: a ? 'ทำแล้ว' : 'ยังไม่ทำ', to: b ? 'ทำแล้ว' : 'ยังไม่ทำ' });
@@ -2316,6 +2321,30 @@ const STATUS_OPTS = {
   sticker: ["-- เลือกผล --","ติดเรียบร้อย","ลูกค้าไม่ให้ติด"]
 };
 
+// DB9 ({status}) — ไม่ใช่แค่ติ๊กผ่าน/ไม่ผ่านแบบช่องอื่น มี 3 ทางเลือกว่าทำไม
+// ไม่ได้ใส่น็อต (ถ้าไม่ได้ใส่) เก็บเป็น {status} เหมือนแพทเทิร์น steelbox
+// ({has, reason}) ข้างบน
+const DB9_STATUS_OPTIONS = [
+  { value: 'done',         label: 'ใส่น็อตแล้ว' },
+  { value: 'rushed',       label: 'รถรีบวิ่งงาน' },
+  { value: 'out_of_stock', label: 'ช่างของหมด' },
+];
+// รายงานเก่า (ก่อนเปลี่ยนเป็น 3 ทางเลือก) เก็บ db9 เป็นบูลีนล้วนตัวเดียว —
+// เปิดแก้ไขรายงานเก่าแล้วต้องยังอ่าน/แสดงผลถูก (true -> เหมือนกด "ใส่น็อต
+// แล้ว", false/ไม่มีค่า -> ยังไม่ตรวจสอบ) ไม่ใช่พังเงียบๆ ตอนเขียนทับ v.status
+// บนบูลีน (ไม่ error แต่ assignment จะเฉยๆไม่มีผลเพราะ property บน primitive)
+function normalizeDb9(v){
+  if(v && typeof v === 'object') return v;
+  return { status: v === true ? 'done' : null };
+}
+function db9Label(v){
+  v = normalizeDb9(v);
+  if(!v.status) return '(ยังไม่ตรวจสอบ)';
+  const opt = DB9_STATUS_OPTIONS.find(o=> o.value === v.status);
+  if(v.status === 'done') return CHECK_PASS_LABEL.db9;
+  return `ยังไม่ได้ใส่น็อต — ${opt ? opt.label : v.status}`;
+}
+
 // Checklist items are pass/fail-free — a single checkbox confirms the check
 // was done. This is the label shown once checked (no "ต้องแก้ไข" option
 // anymore; a failed check belongs in the ปัญหา section instead).
@@ -2348,6 +2377,7 @@ function checklistItemLabel(item){
     if(!v || v.has === null || v.has === undefined) return '(ยังไม่ตรวจสอบ)';
     return v.has ? 'มีการติดตั้งกล่องเหล็ก' : `ไม่มีการติดตั้งกล่องเหล็ก — เหตุผล: ${v.reason || '-'}`;
   }
+  if(item.type === 'db9') return db9Label(state.checklist[item.key]);
   return state.checklist[item.key] ? CHECK_PASS_LABEL[item.type] : '(ยังไม่ตรวจสอบ)';
 }
 
@@ -3051,6 +3081,39 @@ function renderChecklist(){
       return;
     }
 
+    // DB9 — 3 ทางเลือก (ใส่น็อตแล้ว / รถรีบวิ่งงาน / ช่างของหมด) แทนติ๊กผ่าน/
+    // ไม่ผ่านเฉยๆ เก็บเป็น {status} เหมือนแพทเทิร์นกล่องเหล็กข้างบน
+    if(item.type === 'db9'){
+      const v = normalizeDb9(state.checklist[item.key]);
+      state.checklist[item.key] = v;
+      const footer = document.createElement('div');
+      footer.className = 'check-toggle';
+      footer.style.cssText = 'flex-direction:column;align-items:stretch;gap:6px;';
+      const btnRow = document.createElement('div');
+      btnRow.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;';
+      const btns = DB9_STATUS_OPTIONS.map(opt=>{
+        const b = document.createElement('button');
+        b.type = 'button'; b.textContent = opt.label;
+        b.style.cssText = 'flex:1;min-width:110px;padding:6px 8px;border-radius:8px;border:1px solid var(--line);background:transparent;color:inherit;font:inherit;cursor:pointer;';
+        b.onclick = ()=>{ v.status = opt.value; syncDb9UI(); updatePreview(); };
+        btnRow.appendChild(b);
+        return b;
+      });
+      function syncDb9UI(){
+        btns.forEach((b, i)=>{
+          const active = v.status === DB9_STATUS_OPTIONS[i].value;
+          const color = DB9_STATUS_OPTIONS[i].value === 'done' ? 'var(--accent-2)' : 'var(--danger)';
+          b.style.background = active ? color : 'transparent';
+          b.style.color = active ? '#fff' : 'inherit';
+        });
+      }
+      syncDb9UI();
+      footer.appendChild(btnRow);
+      box.appendChild(lbl); box.appendChild(footer);
+      wrap.appendChild(box);
+      return;
+    }
+
     const toggle = document.createElement('label');
     toggle.className = 'check-toggle' + (state.checklist[item.key] ? ' checked' : '');
     const cb = document.createElement('input');
@@ -3719,6 +3782,10 @@ function getMissingFields(){
       const v = state.checklist[item.key];
       if(!v || v.has === null || v.has === undefined) missing.push(item.text);
       else if(v.has === false && !(v.reason||'').trim()) missing.push(item.text + ' (เหตุผลที่ไม่มีกล่องเหล็ก)');
+      return;
+    }
+    if(item.type === 'db9'){
+      if(!normalizeDb9(state.checklist[item.key]).status) missing.push(item.text);
       return;
     }
     if(!state.checklist[item.key]) missing.push(item.text);
