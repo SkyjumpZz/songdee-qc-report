@@ -7,7 +7,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>Dashboard · SONGDEE GPS</title>
-<meta name="app-version" content="1.24.0">
+<meta name="app-version" content="1.25.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -389,6 +389,7 @@
   #testerRosterCard{--card-hue:var(--hue-blue);}
   #adminNameMapCard{--card-hue:var(--hue-purple);}
   #lineGroupMapCard{--card-hue:var(--hue-pink);}
+  #customerFleetListCard{--card-hue:var(--hue-cyan);}
   .card-title{
     display:flex; align-items:center; gap:11px;
     font-family:'Kanit',sans-serif; font-weight:600; font-size:15.5px; margin-bottom:12px;
@@ -424,6 +425,14 @@
   .name-map-status{font-size:12px; color:var(--text-dim); margin-top:9px; min-height:1em;}
   .name-map-status.ok{color:var(--accent-2);}
   .name-map-status.err{color:var(--danger);}
+  /* single-column variant — a plain list (ลูกค้า/Fleet) instead of a
+     key-value map like nameMap/lineGroupMap: one input + button, not two. */
+  .name-map-row.single-col, .name-map-add.single-col{grid-template-columns:1fr auto;}
+  .list-subheading{
+    font-family:'Kanit',sans-serif; font-weight:600; font-size:13px; color:var(--text-dim);
+    margin:18px 0 8px;
+  }
+  .list-subheading:first-of-type{margin-top:4px;}
   .tester-roster-row{
     display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:5px 10px;
     padding:10px 0; border-bottom:1px solid var(--line-soft);
@@ -463,6 +472,7 @@
   #testerRosterCard{animation-delay:.02s;}
   #adminNameMapCard{animation-delay:.07s;}
   #lineGroupMapCard{animation-delay:.12s;}
+  #customerFleetListCard{animation-delay:.17s;}
   #list .history-item:nth-child(1){animation-delay:.12s;}
   #list .history-item:nth-child(2){animation-delay:.16s;}
   #list .history-item:nth-child(3){animation-delay:.2s;}
@@ -621,6 +631,29 @@
       <button type="button" onclick="addLineGroupMapRow()">+ เพิ่ม</button>
     </div>
     <div class="name-map-status" id="lineGroupMapStatus"></div>
+  </div>
+
+  <div class="card app-hidden" id="customerFleetListCard">
+    <div class="card-title"><span class="dot">🏢</span>จัดการลูกค้า &amp; Fleet</div>
+    <div class="admin-hint">
+      รายชื่อที่ช่างเลือกได้ในช่อง "ชื่อลูกค้า"/"Fleet" ตอนกรอกรายงาน (ล็อกไว้ — เลือกได้เฉพาะจากลิสต์นี้ พิมพ์ชื่อใหม่เองไม่ได้) —
+      เพิ่ม/ลบรายชื่อได้เฉพาะ Super Admin เท่านั้น ข้อมูลชุดเดียวกับที่ songdee-stock ใช้อยู่
+    </div>
+    <div class="list-subheading">ลูกค้า</div>
+    <div id="customerListRows"></div>
+    <div class="name-map-add single-col">
+      <input type="text" id="customerListNew" placeholder="ชื่อลูกค้าใหม่">
+      <button type="button" onclick="addCustomerListRow()">+ เพิ่ม</button>
+    </div>
+    <div class="name-map-status" id="customerListStatus"></div>
+
+    <div class="list-subheading">Fleet</div>
+    <div id="fleetListRows"></div>
+    <div class="name-map-add single-col">
+      <input type="text" id="fleetListNew" placeholder="ชื่อ Fleet ใหม่">
+      <button type="button" onclick="addFleetListRow()">+ เพิ่ม</button>
+    </div>
+    <div class="name-map-status" id="fleetListStatus"></div>
   </div>
 
   <div id="stats" class="app-hidden">
@@ -810,6 +843,7 @@ _auth.onAuthStateChanged(async user=>{
     // loadNameMap()/loadTesterRoster() ด้านล่าง)
     document.getElementById('adminNameMapCard').classList.toggle('app-hidden', !role.superAdmin);
     document.getElementById('testerRosterCard').classList.toggle('app-hidden', !role.superAdmin);
+    document.getElementById('customerFleetListCard').classList.toggle('app-hidden', !role.superAdmin);
     // ซ่อนไว้ก่อน — ช่องชื่อช่างเป็นพิมพ์เองอิสระ อยากให้เป็น Dropdown จาก
     // รายชื่อช่างฝั่ง Admin แทนก่อนเปิดใช้งานจริง (ตามที่ขอ ยังไม่ได้ต่อสาย
     // ดึงรายชื่อช่างจาก Admin เข้ามา)
@@ -821,6 +855,7 @@ _auth.onAuthStateChanged(async user=>{
     if(role.superAdmin){
       await loadNameMap();
       await loadTesterRoster();
+      await loadCustomerFleetLists();
     }
   }catch(e){
     err.textContent = t('errRoleLoad') + e.message;
@@ -978,6 +1013,136 @@ function addLineGroupMapRow(){
   techInput.value = ''; groupInput.value = '';
   renderLineGroupMapEditor();
   persistLineGroupMap();
+}
+
+// ---------------------------------------------------------------
+// Super-Admin-only ลูกค้า/Fleet list editor — NOT a new data store. Reads
+// and writes the exact same sd_customers/sd_fleet docs form.html's
+// jobCustomer/jobFleet dropdowns already read (see loadCustomerFleetSuggestions()
+// there), same shared "sd" blob collection/doc shape as sd_nameMap/
+// sd_lineGroupMap above ({v: JSON.stringify([...])}). Those two fields used
+// to also accept free-typed text; now locked to only what's in this list
+// (see wireSuggestInput()'s `locked` option in form.html) — this editor is
+// the only way a new ลูกค้า/Fleet name gets in, and only Super Admin sees it.
+// merge:true on save so any other field Stock's own code might keep on
+// these docs (e.g. a "k" label) survives untouched.
+let customerList = [];
+let fleetList = [];
+
+async function loadCustomerFleetLists(){
+  try{
+    const [cSnap, fSnap] = await Promise.all([
+      _db.collection('sd').doc('sd_customers').get(),
+      _db.collection('sd').doc('sd_fleet').get(),
+    ]);
+    customerList = cSnap.exists ? JSON.parse(cSnap.data().v || '[]') : [];
+    fleetList = fSnap.exists ? JSON.parse(fSnap.data().v || '[]') : [];
+  }catch(e){
+    console.error('[Customer/Fleet list] load failed', e);
+    customerList = []; fleetList = [];
+  }
+  renderCustomerListEditor();
+  renderFleetListEditor();
+}
+
+async function saveCustomerList(){
+  await _db.collection('sd').doc('sd_customers').set({ v: JSON.stringify(customerList) }, { merge: true });
+}
+async function saveFleetList(){
+  await _db.collection('sd').doc('sd_fleet').set({ v: JSON.stringify(fleetList) }, { merge: true });
+}
+
+async function persistCustomerList(){
+  const statusEl = document.getElementById('customerListStatus');
+  statusEl.textContent = 'กำลังบันทึก...';
+  statusEl.className = 'name-map-status';
+  try{
+    await saveCustomerList();
+    statusEl.textContent = 'บันทึกแล้ว ✓';
+    statusEl.className = 'name-map-status ok';
+  }catch(e){
+    statusEl.textContent = 'บันทึกไม่สำเร็จ: ' + e.message;
+    statusEl.className = 'name-map-status err';
+  }
+}
+async function persistFleetList(){
+  const statusEl = document.getElementById('fleetListStatus');
+  statusEl.textContent = 'กำลังบันทึก...';
+  statusEl.className = 'name-map-status';
+  try{
+    await saveFleetList();
+    statusEl.textContent = 'บันทึกแล้ว ✓';
+    statusEl.className = 'name-map-status ok';
+  }catch(e){
+    statusEl.textContent = 'บันทึกไม่สำเร็จ: ' + e.message;
+    statusEl.className = 'name-map-status err';
+  }
+}
+
+function renderCustomerListEditor(){
+  const wrap = document.getElementById('customerListRows');
+  wrap.innerHTML = '';
+  [...customerList].sort((a,b)=>a.localeCompare(b)).forEach(name=>{
+    const row = document.createElement('div');
+    row.className = 'name-map-row single-col';
+
+    const input = document.createElement('input');
+    input.type = 'text'; input.value = name; input.disabled = true;
+
+    const rm = document.createElement('button');
+    rm.type = 'button'; rm.textContent = 'ลบ';
+    rm.onclick = ()=>{
+      customerList = customerList.filter(n=> n !== name);
+      renderCustomerListEditor();
+      persistCustomerList();
+    };
+
+    row.appendChild(input); row.appendChild(rm);
+    wrap.appendChild(row);
+  });
+}
+
+function addCustomerListRow(){
+  const input = document.getElementById('customerListNew');
+  const name = input.value.trim();
+  if(!name || customerList.includes(name)) return;
+  customerList.push(name);
+  input.value = '';
+  renderCustomerListEditor();
+  persistCustomerList();
+}
+
+function renderFleetListEditor(){
+  const wrap = document.getElementById('fleetListRows');
+  wrap.innerHTML = '';
+  [...fleetList].sort((a,b)=>a.localeCompare(b)).forEach(name=>{
+    const row = document.createElement('div');
+    row.className = 'name-map-row single-col';
+
+    const input = document.createElement('input');
+    input.type = 'text'; input.value = name; input.disabled = true;
+
+    const rm = document.createElement('button');
+    rm.type = 'button'; rm.textContent = 'ลบ';
+    rm.onclick = ()=>{
+      fleetList = fleetList.filter(n=> n !== name);
+      renderFleetListEditor();
+      persistFleetList();
+    };
+
+    row.appendChild(input); row.appendChild(rm);
+    wrap.appendChild(row);
+  });
+}
+
+function addFleetListRow(){
+  const input = document.getElementById('fleetListNew');
+  const name = input.value.trim();
+  if(!name || fleetList.includes(name)) return;
+  fleetList.push(name);
+  input.value = '';
+  renderFleetListEditor();
+  persistFleetList();
 }
 
 // Admin-only roster: who can log in (email) and what techName they test

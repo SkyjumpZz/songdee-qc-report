@@ -10,7 +10,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.63.1">
+<meta name="app-version" content="1.64.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -650,14 +650,14 @@
       </div>
       <div class="suggest-field">
         <label>ชื่อลูกค้า</label>
-        <input type="text" id="jobCustomer" placeholder="เช่น บริษัท เอบีซี จำกัด" autocomplete="off">
+        <input type="text" id="jobCustomer" placeholder="แตะเพื่อเลือกจากลิสต์..." autocomplete="off">
         <div class="suggest-dropdown app-hidden" id="jobCustomerSuggestions"></div>
       </div>
     </div>
     <div class="row2">
       <div class="suggest-field">
         <label>Fleet</label>
-        <input type="text" id="jobFleet" placeholder="เช่น Fleet A" autocomplete="off">
+        <input type="text" id="jobFleet" placeholder="แตะเพื่อเลือกจากลิสต์..." autocomplete="off">
         <div class="suggest-dropdown app-hidden" id="jobFleetSuggestions"></div>
       </div>
       <div class="suggest-field">
@@ -1590,28 +1590,32 @@ async function loadPlateSuggestions(){
   }
 }
 
-// ชื่อลูกค้า / Fleet autocomplete — primary source is Stock's own master
-// lists (sd:customers / sd:fleet in the shared "sd" collection — same
-// project, same doc shape Stock's sg()/ss() use: {v: JSON.stringify(...)}
+// ชื่อลูกค้า / Fleet — locked dropdown, sourced only from Stock's own
+// master lists (sd:customers / sd:fleet in the shared "sd" collection —
+// same project, same doc shape Stock's sg()/ss() use: {v: JSON.stringify(...)}
 // under doc id "sd_customers"/"sd_fleet", colons swapped for underscores
-// same as Stock's own _id()). Unioned with this app's own report history
-// (qc_reports) and every customer name in Admin web's "assignments"
-// collection, so nothing already typed here disappears just because it
-// isn't (yet) in Stock's list. Still free text either way — a brand-new
-// name not seen anywhere can always just be typed; the dropdown only
-// suggests names seen before so the same one doesn't need retyping.
+// same as Stock's own _id()). Same docs Super Admin edits from index.html's
+// "จัดการลูกค้า & Fleet" card. Used to also union in names seen in
+// qc_reports/assignments and allow free typing, but พิมพ์ผิดช่อง/สะกดต่างกัน
+// kept leaking permanent garbage into the suggestions — now locked: a
+// technician can only pick a name already on Stock's list (see
+// wireSuggestInput()'s `locked` option below), new names only ever come
+// in through the Super-Admin-only editor.
 let customerSuggestions = [];
 let fleetSuggestions = [];
 // Same race as plateSuggestions above: wire immediately (reads the live
 // array), re-render after data loads only if that field is still focused.
+// locked: true — ชื่อลูกค้า/Fleet เลือกได้เฉพาะจากลิสต์ที่ Super Admin ดูแล
+// (sd_customers/sd_fleet, แก้ไขได้จาก index.html) เท่านั้น พิมพ์ชื่อใหม่เอง
+// ไม่ได้อีกต่อไป — กันชื่อซ้ำ/สะกดต่างกันหลุดเข้ามาปนในรายงาน
 const renderCustomerSuggest = wireSuggestInput('jobCustomer', 'jobCustomerSuggestions', ()=>customerSuggestions, name=>{
   state.customer = name;
   updatePreview();
-});
+}, { locked: true, getValue: ()=> state.customer });
 const renderFleetSuggest = wireSuggestInput('jobFleet', 'jobFleetSuggestions', ()=>fleetSuggestions, name=>{
   state.fleet = name;
   updatePreview();
-});
+}, { locked: true, getValue: ()=> state.fleet });
 
 async function loadCustomerFleetSuggestions(){
   const customers = new Set();
@@ -1687,7 +1691,15 @@ async function loadCustomerFleetSuggestions(){
 // data loads asynchronously (a fetch/Firestore read) can force a refresh
 // once that data arrives, in case the field already has focus by then —
 // see loadPlateSuggestions()/loadCustomerFleetSuggestions() below.
-function wireSuggestInput(inputId, boxId, getList, onPick){
+// opts.locked (ชื่อลูกค้า/Fleet — ดูด้านล่าง): rejects free text. Typing
+// still filters the dropdown as normal, but blurring without clicking a
+// suggestion reverts the input back to whatever opts.getValue() currently
+// holds (the last value actually committed via onPick), instead of leaving
+// unmatched typed text sitting in the field. Every other field stays free
+// text as before (opts omitted).
+function wireSuggestInput(inputId, boxId, getList, onPick, opts){
+  const locked = !!(opts && opts.locked);
+  const getValue = opts && opts.getValue;
   const input = document.getElementById(inputId);
   const box = document.getElementById(boxId);
   if(!input || !box) return ()=>{};
@@ -1737,7 +1749,13 @@ function wireSuggestInput(inputId, boxId, getList, onPick){
   });
   input.addEventListener('blur', ()=>{
     // Delay so a click on a suggestion item registers before it disappears.
-    setTimeout(()=>{ box.classList.add('app-hidden'); }, 150);
+    setTimeout(()=>{
+      box.classList.add('app-hidden');
+      if(locked && getValue){
+        const committed = getValue() || '';
+        if(input.value !== committed) input.value = committed;
+      }
+    }, 150);
   });
   // position:fixed ไม่ขยับตามช่องอินพุตเองเวลาหน้าเลื่อน/ปรับขนาด (ต่างจาก
   // position:absolute เดิมที่เกาะกับ .suggest-field อัตโนมัติ) — ต้องคำนวณ
@@ -3753,8 +3771,9 @@ syncJobDateSelectsFromState();
 document.getElementById('jobDateDay').addEventListener('change', onJobDateSelectChange);
 document.getElementById('jobDateMonth').addEventListener('change', onJobDateSelectChange);
 document.getElementById('jobDateYear').addEventListener('change', onJobDateSelectChange);
-document.getElementById('jobCustomer').addEventListener('input', e=>{ state.customer = e.target.value; updatePreview(); });
-document.getElementById('jobFleet').addEventListener('input', e=>{ state.fleet = e.target.value; updatePreview(); });
+// ชื่อลูกค้า/Fleet ไม่มี raw 'input' listener อีกต่อไป — locked (ดู
+// wireSuggestInput() ด้านบน) state.customer/state.fleet อัปเดตเฉพาะตอน
+// เลือกจาก dropdown (onPick) เท่านั้น พิมพ์เฉยๆ แค่กรองลิสต์ ไม่ commit ค่า
 document.getElementById('jobPlate').addEventListener('input', e=>{ state.plate = e.target.value; updatePreview(); scheduleStockLockCheck(); });
 document.getElementById('jobNewPlate').addEventListener('input', e=>{ state.newPlate = e.target.value; updatePreview(); renderFixRows(); });
 document.getElementById('jobAssignSelect').addEventListener('change', e=>{ onAssignmentSelect(e.target.value); });
