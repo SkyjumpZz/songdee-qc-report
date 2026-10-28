@@ -10,7 +10,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.68.0">
+<meta name="app-version" content="1.69.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -352,6 +352,16 @@
   #photoCard.dragover{
     border-color:var(--accent); background:rgba(216,25,33,0.06);
     box-shadow:0 0 0 2px rgba(216,25,33,0.18) inset;
+  }
+  .sticker-remark{
+    border:1.5px solid var(--amber); border-radius:var(--r-md); padding:11px 13px;
+    background:rgba(216,25,33,.05); margin-bottom:14px;
+  }
+  .sticker-remark label{
+    margin:0 0 7px; font-weight:800; color:var(--amber); font-size:12.5px;
+  }
+  .sticker-remark textarea{
+    resize:vertical; font-weight:700; min-height:44px;
   }
   .sticker-grid{display:grid; gap:10px;}
   .sticker-row{
@@ -767,6 +777,10 @@
 
   <div class="card" id="stickerCard">
     <div class="card-title"><span class="dot">🏷️</span>ตรวจสอบสติ๊กเกอร์ 3 จุด</div>
+    <div class="sticker-remark">
+      <label for="stickerRemarkInput">Remark เพิ่มเติม (ถ้ามี)</label>
+      <textarea id="stickerRemarkInput" rows="2" placeholder="พิมพ์หมายเหตุเพิ่มเติม..."></textarea>
+    </div>
     <div class="sticker-grid" id="stickerGrid"></div>
   </div>
 
@@ -1966,6 +1980,7 @@ const REPORT_FIELD_LABELS = {
   network: 'เครือข่ายอุปกรณ์', mdvrImei: 'IMEI', mdvrDeviceId: 'Device ID', mdvrServer: 'Server',
   installMdvrPlacement: 'จุดวาง MDVR', installPowerSource: 'จุดจ่ายไฟ',
   installSpeakerPlacement: 'จุดติดตั้งลำโพง', installMicPlacement: 'จุดติดตั้งไมค์',
+  stickerRemark: 'Remark สติ๊กเกอร์',
 };
 function diffReportFields(oldDoc, payload){
   const changes = [];
@@ -2043,7 +2058,7 @@ async function saveReport(){
     tpl: state.tpl, date: state.date, customer: state.customer, fleet: state.fleet, plate: state.plate,
     // ถอดย้ายอุปกรณ์ only — ทะเบียนใหม่ (ปลายทาง) ดู defaultState()/renderTabs()
     newPlate: state.newPlate || '',
-    problems: state.problems, fixes: state.fixes, stickers: state.stickers, checklist: state.checklist,
+    problems: state.problems, fixes: state.fixes, stickers: state.stickers, stickerRemark: state.stickerRemark || '', checklist: state.checklist,
     // Only ever persist uploaded photos (name + Drive viewUrl) — never the
     // local base64 bytes, which would bloat/overflow a Firestore doc.
     photos: state.photos.filter(p=> p.driveUrl).map(p=> ({ name: p.name, driveUrl: p.driveUrl })),
@@ -2094,6 +2109,7 @@ function loadReportIntoForm(doc){
     problems: (doc.problems && doc.problems.length) ? doc.problems : [{symptom:''}],
     fixes: (doc.fixes && doc.fixes.length) ? doc.fixes.map(r=> ({section:'pair', ...r})) : [{product:'', qty:1, custom:'', oldModel:'', oldModelCustom:'', newSN:'', oldSN:'', ch:'', section:'pair'}],
     stickers: doc.stickers || {},
+    stickerRemark: doc.stickerRemark || "",
     checklist: doc.checklist || {},
     photos: (doc.photos || []).map(p=> ({
       id: makePhotoId(), name: p.name || '', driveUrl: p.driveUrl || '',
@@ -2479,6 +2495,7 @@ function defaultState(){
     // จากกัน) — "+ เพิ่มอุปกรณ์ที่ติดตั้ง" adds that side separately now.
     fixes: [{product:"", qty:1, custom:"", oldModel:"", oldModelCustom:"", newSN:"", oldSN:"", ch:"", phoneNo:"", section:"remove"}],
     stickers: {},
+    stickerRemark: "", // optional free-text note shown above the sticker checklist — never required
     checklist: {},
     photos: [],
     driveFolderUrl: null,
@@ -2560,6 +2577,7 @@ function syncFormInputsFromState(){
   document.getElementById('installPowerSourceInput').value = state.installPowerSource || '';
   document.getElementById('installSpeakerPlacementInput').value = state.installSpeakerPlacement || '';
   document.getElementById('installMicPlacementInput').value = state.installMicPlacement || '';
+  document.getElementById('stickerRemarkInput').value = state.stickerRemark || '';
 }
 
 const TPL_ICON = { upgrade: '⬆️', new_install: '✨', repair: '🛠️', remove: '📤' };
@@ -3768,6 +3786,9 @@ function buildMessage(){
   }
 
   lines.push('🔹ตรวจสอบ สติ๊กเกอร์ 3 จุด🔹');
+  if((state.stickerRemark || '').trim()){
+    lines.push(`📝 Remark: ${state.stickerRemark.trim()}`);
+  }
   STICKERS.forEach(s=>{
     const v = state.stickers[s.key];
     lines.push(`> ${s.text} : ${v && v !== STATUS_OPTS.sticker[0] ? v : '(ยังไม่เลือก)'}`);
@@ -3835,10 +3856,13 @@ function buildLineCard(){
   }
   sections.push({
     heading: '🔹 สติ๊กเกอร์ 3 จุด',
-    lines: STICKERS.map(s=>{
-      const v = state.stickers[s.key];
-      return `• ${s.text}: ${v && v !== STATUS_OPTS.sticker[0] ? v : '(ยังไม่เลือก)'}`;
-    })
+    lines: [
+      ...((state.stickerRemark || '').trim() ? [`📝 Remark: ${state.stickerRemark.trim()}`] : []),
+      ...STICKERS.map(s=>{
+        const v = state.stickers[s.key];
+        return `• ${s.text}: ${v && v !== STATUS_OPTS.sticker[0] ? v : '(ยังไม่เลือก)'}`;
+      }),
+    ]
   });
   sections.push({
     heading: '✅ รายการตรวจสอบ',
@@ -3971,6 +3995,7 @@ document.getElementById('installMdvrPlacementInput').addEventListener('input', e
 document.getElementById('installPowerSourceInput').addEventListener('input', e=>{ state.installPowerSource = e.target.value; updatePreview(); });
 document.getElementById('installSpeakerPlacementInput').addEventListener('input', e=>{ state.installSpeakerPlacement = e.target.value; updatePreview(); });
 document.getElementById('installMicPlacementInput').addEventListener('input', e=>{ state.installMicPlacement = e.target.value; updatePreview(); });
+document.getElementById('stickerRemarkInput').addEventListener('input', e=>{ state.stickerRemark = e.target.value; updatePreview(); });
 
 function showToast(msg){
   const t = document.getElementById('toast');
