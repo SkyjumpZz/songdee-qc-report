@@ -10,7 +10,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.72.0">
+<meta name="app-version" content="1.73.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -2394,28 +2394,32 @@ const STATUS_OPTS = {
   sticker: ["-- เลือกผล --","ติดเรียบร้อย","ลูกค้าไม่ให้ติด"]
 };
 
-// DB9 ({status}) — ไม่ใช่แค่ติ๊กผ่าน/ไม่ผ่านแบบช่องอื่น มี 3 ทางเลือกว่าทำไม
-// ไม่ได้ใส่น็อต (ถ้าไม่ได้ใส่) เก็บเป็น {status} เหมือนแพทเทิร์น steelbox
-// ({has, reason}) ข้างบน
-const DB9_STATUS_OPTIONS = [
-  { value: 'done',         label: 'ใส่น็อตแล้ว' },
-  { value: 'rushed',       label: 'รถรีบวิ่งงาน' },
-  { value: 'out_of_stock', label: 'ช่างของหมด' },
-];
-// รายงานเก่า (ก่อนเปลี่ยนเป็น 3 ทางเลือก) เก็บ db9 เป็นบูลีนล้วนตัวเดียว —
-// เปิดแก้ไขรายงานเก่าแล้วต้องยังอ่าน/แสดงผลถูก (true -> เหมือนกด "ใส่น็อต
-// แล้ว", false/ไม่มีค่า -> ยังไม่ตรวจสอบ) ไม่ใช่พังเงียบๆ ตอนเขียนทับ v.status
-// บนบูลีน (ไม่ error แต่ assignment จะเฉยๆไม่มีผลเพราะ property บน primitive)
+// DB9 ({has, reason}) — เหมือนแพทเทิร์น steelbox ข้างบนเป๊ะ: ปุ่ม "ใส่น็อต
+// แล้ว"/"ยังไม่ได้ใส่" + ถ้ายังไม่ได้ใส่ พิมพ์เหตุผลเองได้อิสระ (ก่อนหน้านี้
+// เคยล็อกเป็น 3 ปุ่มตายตัว "ใส่น็อตแล้ว/รถรีบวิ่งงาน/ช่างของหมด" — ตามที่ขอ
+// เปลี่ยนสองตัวหลังเป็นช่องพิมพ์เองแทน ยังใส่ข้อความเดิมเป็นตัวอย่างได้)
+//
+// รองรับรายงานเก่า 2 รูปแบบก่อนหน้า: บูลีนล้วนตัวเดียว (ก่อนมีตัวเลือกอะไร
+// เลย — true -> เหมือนกด "ใส่น็อตแล้ว", false/ไม่มีค่า -> ยังไม่ตรวจสอบ) และ
+// {status} แบบ 3 ปุ่มตายตัว (เวอร์ชันก่อนหน้านี้ทันที) — ไม่ใช่พังเงียบๆ ตอน
+// เปิดแก้ไขรายงานเก่า
 function normalizeDb9(v){
-  if(v && typeof v === 'object') return v;
-  return { status: v === true ? 'done' : null };
+  if(v && typeof v === 'object'){
+    if('has' in v) return v; // รูปแบบปัจจุบัน
+    if('status' in v){ // migrate จากเวอร์ชัน 3 ปุ่มตายตัว
+      if(v.status === 'done') return { has: true, reason: '' };
+      if(v.status === 'rushed') return { has: false, reason: 'รถรีบวิ่งงาน' };
+      if(v.status === 'out_of_stock') return { has: false, reason: 'ช่างของหมด' };
+      return { has: null, reason: '' };
+    }
+    return { has: null, reason: '' };
+  }
+  return { has: v === true ? true : null, reason: '' }; // migrate จากบูลีนล้วน
 }
 function db9Label(v){
   v = normalizeDb9(v);
-  if(!v.status) return '(ยังไม่ตรวจสอบ)';
-  const opt = DB9_STATUS_OPTIONS.find(o=> o.value === v.status);
-  if(v.status === 'done') return CHECK_PASS_LABEL.db9;
-  return `ยังไม่ได้ใส่น็อต — ${opt ? opt.label : v.status}`;
+  if(v.has === null || v.has === undefined) return '(ยังไม่ตรวจสอบ)';
+  return v.has ? CHECK_PASS_LABEL.db9 : `ยังไม่ได้ใส่น็อต${v.reason ? ' — ' + v.reason : ''}`;
 }
 
 // Checklist items are pass/fail-free — a single checkbox confirms the check
@@ -3217,8 +3221,9 @@ function renderChecklist(){
       return;
     }
 
-    // DB9 — 3 ทางเลือก (ใส่น็อตแล้ว / รถรีบวิ่งงาน / ช่างของหมด) แทนติ๊กผ่าน/
-    // ไม่ผ่านเฉยๆ เก็บเป็น {status} เหมือนแพทเทิร์นกล่องเหล็กข้างบน
+    // DB9 — เหมือนกล่องเหล็กข้างบนเป๊ะ: มี/ไม่มี (ใส่น็อตแล้ว/ยังไม่ได้ใส่) +
+    // ถ้ายังไม่ได้ใส่ พิมพ์เหตุผลเองได้อิสระ (ตามที่ขอ แทนที่จะล็อกเป็นปุ่ม
+    // ตายตัว "รถรีบวิ่งงาน"/"ช่างของหมด" เหมือนเวอร์ชันก่อนหน้า)
     if(item.type === 'db9'){
       const v = normalizeDb9(state.checklist[item.key]);
       state.checklist[item.key] = v;
@@ -3226,25 +3231,30 @@ function renderChecklist(){
       footer.className = 'check-toggle';
       footer.style.cssText = 'flex-direction:column;align-items:stretch;gap:6px;';
       const btnRow = document.createElement('div');
-      btnRow.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;';
-      const btns = DB9_STATUS_OPTIONS.map(opt=>{
-        const b = document.createElement('button');
-        b.type = 'button'; b.textContent = opt.label;
-        b.style.cssText = 'flex:1;min-width:110px;padding:6px 8px;border-radius:8px;border:1px solid var(--line);background:transparent;color:inherit;font:inherit;cursor:pointer;';
-        b.onclick = ()=>{ v.status = opt.value; syncDb9UI(); updatePreview(); };
-        btnRow.appendChild(b);
-        return b;
-      });
+      btnRow.style.cssText = 'display:flex;gap:8px;';
+      const yesBtn = document.createElement('button');
+      yesBtn.type = 'button'; yesBtn.textContent = 'ใส่น็อตแล้ว';
+      const noBtn = document.createElement('button');
+      noBtn.type = 'button'; noBtn.textContent = 'ยังไม่ได้ใส่';
+      [yesBtn, noBtn].forEach(b=>{ b.style.cssText = 'flex:1;padding:6px 8px;border-radius:8px;border:1px solid var(--line);background:transparent;color:inherit;font:inherit;cursor:pointer;'; });
+      const reasonInput = document.createElement('input');
+      reasonInput.type = 'text';
+      reasonInput.placeholder = 'เหตุผลที่ยังไม่ได้ใส่ (เช่น รถรีบวิ่งงาน, ช่างของหมด)';
+      reasonInput.value = v.reason || '';
+      reasonInput.style.cssText = 'width:100%;box-sizing:border-box;';
+      reasonInput.oninput = ()=>{ v.reason = reasonInput.value; updatePreview(); };
       function syncDb9UI(){
-        btns.forEach((b, i)=>{
-          const active = v.status === DB9_STATUS_OPTIONS[i].value;
-          const color = DB9_STATUS_OPTIONS[i].value === 'done' ? 'var(--accent-2)' : 'var(--danger)';
-          b.style.background = active ? color : 'transparent';
-          b.style.color = active ? '#fff' : 'inherit';
-        });
+        yesBtn.style.background = v.has === true ? 'var(--accent-2)' : 'transparent';
+        yesBtn.style.color = v.has === true ? '#fff' : 'inherit';
+        noBtn.style.background = v.has === false ? 'var(--danger)' : 'transparent';
+        noBtn.style.color = v.has === false ? '#fff' : 'inherit';
+        reasonInput.style.display = v.has === false ? '' : 'none';
       }
+      yesBtn.onclick = ()=>{ v.has = true; v.reason = ''; reasonInput.value = ''; syncDb9UI(); updatePreview(); };
+      noBtn.onclick = ()=>{ v.has = false; syncDb9UI(); updatePreview(); };
       syncDb9UI();
-      footer.appendChild(btnRow);
+      btnRow.appendChild(yesBtn); btnRow.appendChild(noBtn);
+      footer.appendChild(btnRow); footer.appendChild(reasonInput);
       box.appendChild(lbl); box.appendChild(footer);
       wrap.appendChild(box);
       return;
@@ -3983,7 +3993,9 @@ function getMissingFields(){
       return;
     }
     if(item.type === 'db9'){
-      if(!normalizeDb9(state.checklist[item.key]).status) missing.push(item.text);
+      const v = normalizeDb9(state.checklist[item.key]);
+      if(v.has === null || v.has === undefined) missing.push(item.text);
+      else if(v.has === false && !(v.reason||'').trim()) missing.push(item.text + ' (เหตุผลที่ยังไม่ได้ใส่)');
       return;
     }
     if(!state.checklist[item.key]) missing.push(item.text);
