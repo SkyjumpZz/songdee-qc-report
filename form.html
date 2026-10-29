@@ -10,7 +10,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.71.0">
+<meta name="app-version" content="1.72.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -1994,6 +1994,7 @@ function fixRowSummaryForDiff(row){
   if(row.oldModel) parts.push(`เดิม:${row.oldModel === 'อื่นๆ (พิมพ์เอง)' ? (row.oldModelCustom||'') : row.oldModel}`);
   if(row.oldSN) parts.push(`SNเดิม:${row.oldSN}`);
   if(row.ch) parts.push(`CH:${row.ch}`);
+  if(row.remark) parts.push(`หมายเหตุ:${row.remark}`);
   return parts.join(' ') || '(ว่าง)';
 }
 const REPORT_FIELD_LABELS = {
@@ -2514,7 +2515,7 @@ function defaultState(){
     // starting row shows up under "① ถอด" only if that template ends up
     // picked, not paired with an empty "② ติดตั้ง" slot (ตามที่ขอ แยกอิสระ
     // จากกัน) — "+ เพิ่มอุปกรณ์ที่ติดตั้ง" adds that side separately now.
-    fixes: [{product:"", qty:1, custom:"", oldModel:"", oldModelCustom:"", newSN:"", oldSN:"", ch:"", phoneNo:"", section:"remove"}],
+    fixes: [{product:"", qty:1, custom:"", oldModel:"", oldModelCustom:"", newSN:"", oldSN:"", ch:"", phoneNo:"", remark:"", section:"remove"}],
     stickers: {},
     stickerRemark: "", // optional free-text note shown above the sticker checklist — never required
     checklist: {},
@@ -2670,7 +2671,7 @@ function renderProblemRows(){
 // buildProductHalf() regardless of whether the rest of the form is locked
 // to a ใบเบิก/Spare list, and doesn't count against lockedOptionsCount.
 function addFixRow(extra){
-  state.fixes.push({product:"", qty:1, custom:"", oldModel:"", oldModelCustom:"", newSN:"", oldSN:"", ch:"", phoneNo:"", section:"pair", extra: !!extra});
+  state.fixes.push({product:"", qty:1, custom:"", oldModel:"", oldModelCustom:"", newSN:"", oldSN:"", ch:"", phoneNo:"", remark:"", section:"pair", extra: !!extra});
   renderFixRows();
   updatePreview();
 }
@@ -2683,17 +2684,17 @@ function addFixRow(extra){
 // in both columns for backward compatibility, see renderRemoveSections();
 // never created new.
 function addRemoveOldRow(extra){
-  state.fixes.push({product:"", qty:1, custom:"", oldModel:"", oldModelCustom:"", newSN:"", oldSN:"", ch:"", phoneNo:"", section:"remove", extra: !!extra});
+  state.fixes.push({product:"", qty:1, custom:"", oldModel:"", oldModelCustom:"", newSN:"", oldSN:"", ch:"", phoneNo:"", remark:"", section:"remove", extra: !!extra});
   renderFixRows();
   updatePreview();
 }
 function addRemoveNewRow(extra){
-  state.fixes.push({product:"", qty:1, custom:"", oldModel:"", oldModelCustom:"", newSN:"", oldSN:"", ch:"", phoneNo:"", section:"install", extra: !!extra});
+  state.fixes.push({product:"", qty:1, custom:"", oldModel:"", oldModelCustom:"", newSN:"", oldSN:"", ch:"", phoneNo:"", remark:"", section:"install", extra: !!extra});
   renderFixRows();
   updatePreview();
 }
 function addRemoveEditRow(extra){
-  state.fixes.push({product:"", qty:1, custom:"", oldModel:"", oldModelCustom:"", newSN:"", oldSN:"", ch:"", phoneNo:"", section:"edit", extra: !!extra});
+  state.fixes.push({product:"", qty:1, custom:"", oldModel:"", oldModelCustom:"", newSN:"", oldSN:"", ch:"", phoneNo:"", remark:"", section:"edit", extra: !!extra});
   renderFixRows();
   updatePreview();
 }
@@ -2988,6 +2989,17 @@ function buildProductHalf(row, idx, ctx){
       wrap.appendChild(hint);
     }
   }
+
+  // บางครั้งการ "แก้ไข" ไม่ได้เปลี่ยนอุปกรณ์เลย (เช่น สายหลวม หมุนให้แน่น) —
+  // ไม่บังคับเลือกอุปกรณ์ก็ได้ พิมพ์อธิบายตรงนี้แทน (ดู fixLine(): ถ้าไม่ได้
+  // เลือกอุปกรณ์/รุ่นเก่าเลย ใช้ข้อความนี้ตรงๆ เป็นบรรทัดของแถวนี้; ถ้าเลือก
+  // อุปกรณ์ไว้ด้วย จะต่อท้ายเป็นหมายเหตุแทน)
+  const remark = document.createElement('textarea');
+  remark.rows = 2; remark.style.marginTop = '6px';
+  remark.placeholder = 'หมายเหตุ/รายละเอียดการแก้ไข (พิมพ์ได้แม้ไม่ได้เปลี่ยนอุปกรณ์ เช่น "สายหลวม หมุนให้แน่น")';
+  remark.value = row.remark || '';
+  remark.oninput = ()=>{ row.remark = remark.value; updatePreview(); };
+  wrap.appendChild(remark);
 
   return wrap;
 }
@@ -3509,12 +3521,18 @@ function fixLine(row){
   const chTag = (state.tpl === 'new_install' && row.ch) ? ` (${row.ch})` : '';
   const phoneTag = (isSimProduct(row.product) && row.phoneNo) ? ` (เบอร์: ${row.phoneNo})` : '';
   const extraTag = row.extra ? ' [ของนอกเหนือรายการ]' : '';
-  if(oldName && name) return `- ทำการเปลี่ยน ${oldName}${oldTag} เป็น ${name}${newTag}${chTag}${phoneTag}${extraTag}`;
+  // ไม่ได้เปลี่ยนอุปกรณ์เลย (เช่น สายหลวม หมุนให้แน่น) — ใช้ remark ตรงๆ เป็น
+  // บรรทัดของแถวนี้แทน; ถ้าเลือกอุปกรณ์/รุ่นเก่าไว้ด้วย remark ต่อท้ายเป็น
+  // หมายเหตุแทน ดู buildProductHalf()'s remark textarea.
+  const remark = (row.remark || '').trim();
+  const remarkTag = remark ? ` (${remark})` : '';
+  if(oldName && name) return `- ทำการเปลี่ยน ${oldName}${oldTag} เป็น ${name}${newTag}${chTag}${phoneTag}${extraTag}${remarkTag}`;
   if(name){
     const qty = row.qty ? ` x${row.qty}` : '';
-    return `- ทำการติดตั้ง ${name}${qty}${newTag}${chTag}${phoneTag}${extraTag}`;
+    return `- ทำการติดตั้ง ${name}${qty}${newTag}${chTag}${phoneTag}${extraTag}${remarkTag}`;
   }
-  if(oldName) return `- ทำการถอด ${oldName}${oldTag}`;
+  if(oldName) return `- ทำการถอด ${oldName}${oldTag}${remarkTag}`;
+  if(remark) return `- ${remark}`;
   return null;
 }
 
