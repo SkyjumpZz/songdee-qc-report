@@ -10,7 +10,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.74.0">
+<meta name="app-version" content="1.75.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -1336,6 +1336,7 @@ async function loadVehicleOldModels(){
 // ---------------------------------------------------------------
 const MDVR_AVAILABLE_ENDPOINT = 'https://songdee-vehicle-lookup.songdeegps.workers.dev/mdvr-available';
 const MDVR_INSTALL_ENDPOINT = 'https://songdee-vehicle-lookup.songdeegps.workers.dev/mdvr-install';
+const MDVR_UNIT_SWAP_ENDPOINT = 'https://songdee-vehicle-lookup.songdeegps.workers.dev/mdvr-unit-swap';
 let mdvrAvailableDevices = [];
 
 // ติดตั้งใหม่ only — จุดวาง MDVR/จุดจ่ายไฟ/จุดติดตั้งลำโพง/จุดติดตั้งไมค์:
@@ -1462,6 +1463,44 @@ async function pushMdvrInstall(){
   const data = await res.json();
   if(!res.ok || !data.ok) throw new Error(data.error || ('HTTP ' + res.status));
   return data;
+}
+
+// เปลี่ยน MDVR ทั้งเครื่อง (upgrade/repair เท่านั้น) — ดู buildMdvrUnitSwapHalf()/
+// buildSheetUpdates() (ข้ามแถวนี้ไปเพราะเส้นทางนี้จัดการแทน) หา newMdvrImei
+// ของทุกแถวที่เลือกเปลี่ยน Device type แล้วยิง /mdvr-unit-swap ให้ — ย้าย
+// IMEI ของแถวใน MDVR Tracking ให้ตรงกับเครื่องจริงที่ติดตั้ง ปกติมีแถวเดียว
+// ต่อรายงาน แต่ไม่ได้บังคับ เผื่อมากกว่า 1 ในอนาคต
+function buildMdvrUnitSwaps(){
+  if(!tplHasOldModel(state.tpl) || state.tpl === 'remove') return [];
+  const swaps = [];
+  state.fixes.forEach(row=>{
+    const src = vehicleOldModels.find(m=> m.label === row.oldModel)
+      || vehicleEmptySlots.find(m=> m.label === row.oldModel);
+    if(!src || src.column !== 'Device type') return;
+    const newImei = (row.newMdvrImei || '').trim();
+    if(!newImei) return;
+    swaps.push({ newImei });
+  });
+  return swaps;
+}
+
+async function pushMdvrUnitSwaps(){
+  const swaps = buildMdvrUnitSwaps();
+  if(!swaps.length) return null;
+  const plate = (state.plate || '').trim();
+  if(!plate) return null;
+  const results = [];
+  for(const s of swaps){
+    const res = await fetch(MDVR_UNIT_SWAP_ENDPOINT, {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ plate, newImei: s.newImei, customer: state.customer, date: state.date, technician: onSiteTechName() })
+    });
+    const data = await res.json();
+    if(!res.ok || !data.ok) throw new Error(data.error || ('HTTP ' + res.status));
+    results.push(data);
+  }
+  return results;
 }
 
 // Reference list of everything the vehicle currently has on file, shown
@@ -2001,6 +2040,7 @@ function fixRowSummaryForDiff(row){
   if(row.oldModel) parts.push(`เดิม:${row.oldModel === 'อื่นๆ (พิมพ์เอง)' ? (row.oldModelCustom||'') : row.oldModel}`);
   if(row.oldSN) parts.push(`SNเดิม:${row.oldSN}`);
   if(row.ch) parts.push(`CH:${row.ch}`);
+  if(row.newMdvrImei) parts.push(`IMEIใหม่:${row.newMdvrImei}`);
   if(row.remark) parts.push(`หมายเหตุ:${row.remark}`);
   return parts.join(' ') || '(ว่าง)';
 }
@@ -2526,7 +2566,7 @@ function defaultState(){
     // starting row shows up under "① ถอด" only if that template ends up
     // picked, not paired with an empty "② ติดตั้ง" slot (ตามที่ขอ แยกอิสระ
     // จากกัน) — "+ เพิ่มอุปกรณ์ที่ติดตั้ง" adds that side separately now.
-    fixes: [{product:"", qty:1, custom:"", oldModel:"", oldModelCustom:"", newSN:"", oldSN:"", ch:"", phoneNo:"", remark:"", section:"remove"}],
+    fixes: [{product:"", qty:1, custom:"", oldModel:"", oldModelCustom:"", newSN:"", oldSN:"", ch:"", phoneNo:"", remark:"", newMdvrImei:"", section:"remove"}],
     stickers: {},
     stickerRemark: "", // optional free-text note shown above the sticker checklist — never required
     checklist: {},
@@ -2682,7 +2722,7 @@ function renderProblemRows(){
 // buildProductHalf() regardless of whether the rest of the form is locked
 // to a ใบเบิก/Spare list, and doesn't count against lockedOptionsCount.
 function addFixRow(extra){
-  state.fixes.push({product:"", qty:1, custom:"", oldModel:"", oldModelCustom:"", newSN:"", oldSN:"", ch:"", phoneNo:"", remark:"", section:"pair", extra: !!extra});
+  state.fixes.push({product:"", qty:1, custom:"", oldModel:"", oldModelCustom:"", newSN:"", oldSN:"", ch:"", phoneNo:"", remark:"", newMdvrImei:"", section:"pair", extra: !!extra});
   renderFixRows();
   updatePreview();
 }
@@ -2695,17 +2735,17 @@ function addFixRow(extra){
 // in both columns for backward compatibility, see renderRemoveSections();
 // never created new.
 function addRemoveOldRow(extra){
-  state.fixes.push({product:"", qty:1, custom:"", oldModel:"", oldModelCustom:"", newSN:"", oldSN:"", ch:"", phoneNo:"", remark:"", section:"remove", extra: !!extra});
+  state.fixes.push({product:"", qty:1, custom:"", oldModel:"", oldModelCustom:"", newSN:"", oldSN:"", ch:"", phoneNo:"", remark:"", newMdvrImei:"", section:"remove", extra: !!extra});
   renderFixRows();
   updatePreview();
 }
 function addRemoveNewRow(extra){
-  state.fixes.push({product:"", qty:1, custom:"", oldModel:"", oldModelCustom:"", newSN:"", oldSN:"", ch:"", phoneNo:"", remark:"", section:"install", extra: !!extra});
+  state.fixes.push({product:"", qty:1, custom:"", oldModel:"", oldModelCustom:"", newSN:"", oldSN:"", ch:"", phoneNo:"", remark:"", newMdvrImei:"", section:"install", extra: !!extra});
   renderFixRows();
   updatePreview();
 }
 function addRemoveEditRow(extra){
-  state.fixes.push({product:"", qty:1, custom:"", oldModel:"", oldModelCustom:"", newSN:"", oldSN:"", ch:"", phoneNo:"", remark:"", section:"edit", extra: !!extra});
+  state.fixes.push({product:"", qty:1, custom:"", oldModel:"", oldModelCustom:"", newSN:"", oldSN:"", ch:"", phoneNo:"", remark:"", newMdvrImei:"", section:"edit", extra: !!extra});
   renderFixRows();
   updatePreview();
 }
@@ -2859,10 +2899,73 @@ function buildSearchableSelect(groups, selectedValue, placeholder, onChange){
   return wrap;
 }
 
+// เปลี่ยน MDVR ทั้งเครื่อง (ไม่ใช่อุปกรณ์ต่อพ่วงอย่างกล้อง/Buzzer) — ต้องเลือก
+// IMEI เครื่องใหม่จริงๆ จากที่ว่างอยู่ (mdvrAvailableDevices) ไม่ใช่แค่พิมพ์/
+// เลือกชื่อรุ่นเฉยๆ เพื่อให้ pushMdvrUnitSwaps() ย้าย IMEI ของแถวใน MDVR
+// Tracking ให้ตรงกับเครื่องจริงที่ติดตั้งได้ (ดู buildSheetUpdates() ที่ข้าม
+// การเขียนทับข้อความ Device type แบบเดิมไปเลยสำหรับแถวนี้) — row.product
+// ยังถูกตั้งอัตโนมัติจาก deviceType ของ IMEI ที่เลือก ให้ fixLine()/preview
+// แสดงผลเหมือนแถวอื่นปกติ
+function buildMdvrUnitSwapHalf(row, idx){
+  const wrap = document.createElement('div');
+  wrap.className = 'fix-entry';
+
+  const hint = document.createElement('div');
+  hint.className = 'hint'; hint.style.marginBottom = '8px';
+  hint.textContent = '🔄 เปลี่ยน MDVR ทั้งเครื่อง — เลือก IMEI เครื่องใหม่จากที่ว่างอยู่ (ระบบย้าย IMEI ของแถวใน Track ให้อัตโนมัติ)';
+  wrap.appendChild(hint);
+
+  const line = document.createElement('div');
+  line.className = 'item-row';
+
+  const groups = [{
+    label: null,
+    options: mdvrAvailableDevices.map(d=> ({ value: d.imei, text: `${d.imei}${d.deviceType ? ' — ' + d.deviceType : ''}` })),
+  }];
+  const sel = buildSearchableSelect(groups, row.newMdvrImei || '', '-- เลือก IMEI เครื่องใหม่ --', (newValue)=>{
+    row.newMdvrImei = newValue;
+    const dev = mdvrAvailableDevices.find(d=> d.imei === newValue);
+    row.product = dev && dev.deviceType ? dev.deviceType : newValue;
+    updatePreview(); renderFixRows();
+  });
+
+  const qty = document.createElement('input');
+  qty.type = 'text'; qty.className = 'qty'; qty.value = '1'; qty.disabled = true;
+  qty.title = 'เปลี่ยน MDVR ทั้งเครื่อง ไม่ต้องระบุจำนวน';
+
+  const rm = document.createElement('button');
+  rm.className = 'btn-remove'; rm.textContent = '×'; rm.type = 'button';
+  rm.onclick = ()=> removeFixRow(idx);
+
+  line.appendChild(sel); line.appendChild(qty); line.appendChild(rm);
+  wrap.appendChild(line);
+
+  const remark = document.createElement('textarea');
+  remark.rows = 2; remark.style.marginTop = '6px';
+  remark.placeholder = 'หมายเหตุ (ถ้ามี)';
+  remark.value = row.remark || '';
+  remark.oninput = ()=>{ row.remark = remark.value; updatePreview(); };
+  wrap.appendChild(remark);
+
+  return wrap;
+}
+
 // The "product" half of a fix row — เลือกอุปกรณ์/จำนวน/ลบ, plus CH (ติดตั้งใหม่
 // only) /ชื่อเอง /SN ใหม่. Used as-is for every template's combined row, and
 // as the standalone "ติดตั้ง"/"แก้ไข" entry for ถอดย้ายอุปกรณ์.
 function buildProductHalf(row, idx, ctx){
+  // เปลี่ยน MDVR ทั้งเครื่อง — ดู buildMdvrUnitSwapHalf() ด้านบน ไม่ใช้ UI
+  // เลือกอุปกรณ์ปกติ (vehicleEmptySlots แทบไม่มีทาง column นี้ว่างอยู่แล้วแต่
+  // เช็คไว้เผื่อ เพื่อให้ตรงกับ buildSheetUpdates()'s src lookup เป๊ะ) —
+  // เฉพาะ upgrade/repair เท่านั้น (ไม่รวม remove — buildSheetUpdates()'s
+  // state.tpl==='remove' branch คนละเส้นทางเลย ไม่รู้จัก newMdvrImei)
+  if(tplHasOldModel(state.tpl) && state.tpl !== 'remove'){
+    const unitSrc = vehicleOldModels.find(m=> m.label === row.oldModel)
+      || vehicleEmptySlots.find(m=> m.label === row.oldModel);
+    if(unitSrc && unitSrc.column === 'Device type'){
+      return buildMdvrUnitSwapHalf(row, idx);
+    }
+  }
   const { hasLock, hasTechStock, locked, freeOptions, remainingFor } = ctx;
   // row.extra (ของนอกเหนือรายการ — see addFixRow()) always gets the free
   // catalog, even when the rest of the form is locked to a ใบเบิก/Spare list.
@@ -3632,6 +3735,11 @@ function buildSheetUpdates(){
       const src = vehicleOldModels.find(m=> m.label === row.oldModel)
         || vehicleEmptySlots.find(m=> m.label === row.oldModel);
       if(!src) return;
+      // เปลี่ยน MDVR ทั้งเครื่อง (คอลัมน์ "Device type") — เขียนผ่าน
+      // pushMdvrUnitSwaps()/buildMdvrUnitSwaps() แยกต่างหากเท่านั้น (ย้าย
+      // IMEI ของแถวใน MDVR Tracking ให้ตรงกับเครื่องจริงที่ติดตั้ง ไม่ใช่แค่
+      // เขียนทับข้อความ) ข้ามแถวนี้ไปเลย ไม่เขียนผ่านเส้นทางทั่วไปด้านล่าง
+      if(src.column === 'Device type') return;
       if(isSimProduct(row.product)){
         const phone = (row.phoneNo || '').trim();
         if(phone) updates.push({ plate: state.plate, column: src.column, value: phone });
@@ -3641,18 +3749,6 @@ function buildSheetUpdates(){
       if(!newName) return;
       const value = sheetValueForColumn(src.column, row.product) || newName;
       updates.push({ plate: state.plate, column: src.column, value });
-      // เปลี่ยน MDVR ตัวเครื่องเอง (คอลัมน์ "Device type") — ไม่ใช่แค่อุปกรณ์
-      // ต่อพ่วงอย่างกล้อง/Buzzer/ฯลฯ — อัปเดต Customer/Installed Date/
-      // Technician1 ของทั้งทะเบียนด้วย ให้ตรงกับที่ installMdvrDevice()/
-      // swapDevice() ทำอยู่แล้วตอนติดตั้ง MDVR/อุปกรณ์ที่แกะ SN ใหม่
-      // (ตามที่ขอ — เฉพาะตอนเปลี่ยน MDVR เท่านั้น ไม่รวมอุปกรณ์ชิ้นอื่น ที่ไม่
-      // ควรไปทับวันที่ติดตั้งระบบ MDVR เดิม)
-      if(src.column === 'Device type'){
-        if(state.customer) updates.push({ plate: state.plate, column: 'Customer', value: state.customer });
-        if(state.date) updates.push({ plate: state.plate, column: 'Installed Date', value: state.date });
-        const tech = onSiteTechName();
-        if(tech) updates.push({ plate: state.plate, column: 'Technician1', value: tech });
-      }
     });
   } else if(state.tpl === 'new_install'){
     state.fixes.forEach(row=>{
@@ -4266,6 +4362,20 @@ async function sendToLine(){
     }catch(e){
       console.error('[MDVR install]', e);
       saveSuffix += ` (อัปเดตเครื่อง MDVR ไม่สำเร็จ: ${e.message})`;
+    }
+
+    // เปลี่ยน MDVR ทั้งเครื่อง (upgrade/repair) — ต้องรันก่อน pushSheetUpdates()
+    // ด้านล่างเหมือนกัน ด้วยเหตุผลเดียวกับ pushMdvrInstall(): ถ้ามีการสลับ
+    // อุปกรณ์อื่นในรายงานเดียวกันด้วย ต้องให้ plate ย้ายไปอยู่แถวเครื่องใหม่
+    // ก่อน การเขียนคอลัมน์อื่นๆ ถึงจะลงถูกแถว
+    try{
+      const unitSwapRes = await pushMdvrUnitSwaps();
+      if(unitSwapRes){
+        saveSuffix += ` · เปลี่ยน MDVR ${unitSwapRes.length} เครื่อง ✓`;
+      }
+    }catch(e){
+      console.error('[MDVR unit swap]', e);
+      saveSuffix += ` (เปลี่ยน MDVR ไม่สำเร็จ: ${e.message})`;
     }
 
     // Update the MDVR Tracking sheet for any equipment swapped from the
