@@ -10,7 +10,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.73.0">
+<meta name="app-version" content="1.74.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -1086,8 +1086,15 @@ function removeTechStockName(name){
 // แค่ชื่อบัญชีที่ login เข้าแอป (tester.techName) ซึ่งอาจเป็นคนละคนกัน (เช่น
 // แอดมิน/หัวหน้าทีม login ให้ แต่ช่างอื่นเป็นคนลงพื้นที่จริง) — ไม่ได้เลือกใคร
 // ไว้เลยค่อย fallback กลับไปใช้ชื่อบัญชีที่ login เหมือนพฤติกรรมเดิม
+// ชื่อที่เขียนลง Track (MDVR Tracking/AI Box-ADAS-DMS Tracking/ISSUES-All)
+// ต้องเป็นภาษาอังกฤษตามที่ใช้จริงในชีต (เช่น "Pornthep"/"Shell"/"Team
+// mecnoi") — ไม่ใช่ชื่อที่ตั้งไว้ตอน login (roles.techName อาจเป็นภาษาไทย/
+// ชื่อเล่นคนละแบบ) ใช้สะพาน nameMap เดียวกับที่ loadAssignments() ใช้แปลง
+// ชื่อ login -> ชื่อฝั่ง Admin web อยู่แล้ว (ดู "จัดการชื่อช่าง" ใน index.html)
+// ไม่มี mapping ไว้ก็ใช้ชื่อดิบตามเดิม
 function onSiteTechName(){
-  return techStockOwnerNames.length ? techStockOwnerNames.join(', ') : tester.techName;
+  const names = techStockOwnerNames.length ? techStockOwnerNames : (tester.techName ? [tester.techName] : []);
+  return names.map(n=> nameMap[n] || n).join(', ');
 }
 
 function wireTechStockSearch(){
