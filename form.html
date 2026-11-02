@@ -10,7 +10,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.85.0">
+<meta name="app-version" content="1.86.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -2465,6 +2465,7 @@ const MDVR_DEVICE_TYPE_MATCH = {
 // straight back after a rebuild. Harmless if a row removal shifts indices
 // around — worst case a stale hint briefly shows against the wrong row.
 let snHints = {};
+let oldSnHints = {}; // รุ่น (version) ของ SN เครื่องเดิมที่เจอในชีต — ดู autofillOldDeviceVersion() ด้านล่าง
 
 // ใส่ SN เครื่อง DMS/ADAS แล้วให้ระบบเติมรุ่นให้เอง (คำขอผู้ใช้: "ใส่ SN แล้ว
 // ขึ้นรุ่นเลย ... Lock เลย") — ดึงข้อมูลจริงจากชีต DMS/ADAS Tracking ทาง
@@ -2509,6 +2510,33 @@ async function autofillDeviceSN(row, idx, type, sn){
     snHints[idx] = '';
   }
   renderFixRows(); updatePreview();
+}
+
+// เหมือน autofillDeviceSN() ด้านบนแต่สำหรับฝั่ง "รุ่นเก่าที่เปลี่ยน" (oldSN) —
+// ต่างกันตรงไม่แตะ row.oldModel เลย (รุ่นเก่าที่เลือกไว้มาจากประวัติทะเบียนจริง
+// อยู่แล้ว ไม่ใช่ชื่อ product อิสระที่ต้องเดา/auto-match) แค่โชว์ให้เห็นว่า SN
+// เก่าตัวนี้คือรุ่นอะไรตามชีต DMS/ADAS Tracking จริง (ตามที่ขอ: "เลือกรุ่นกล้อง
+// เก่าที่เปลี่ยนให้มันบอกชื่อรุ่นเก่าด้วย" — เดิมช่อง SN เครื่องเดิมไม่มีการค้นหา/
+// โชว์ข้อมูลอะไรเลย ต่างจากฝั่ง SN เครื่องใหม่ที่มี hint นี้อยู่แล้ว)
+async function autofillOldDeviceVersion(idx, type, sn){
+  const target = (sn || '').trim();
+  if(!target || !type){ oldSnHints[idx] = ''; renderFixRows(); return; }
+  oldSnHints[idx] = 'กำลังค้นหา SN...';
+  renderFixRows();
+  try{
+    const res = await fetch(`https://songdee-vehicle-lookup.songdeegps.workers.dev/device-sn?type=${encodeURIComponent(type)}&sn=${encodeURIComponent(target)}`);
+    const data = await res.json();
+    if(!data || !data.found){
+      oldSnHints[idx] = 'ไม่พบ SN นี้ในชีต Tracking';
+    } else {
+      const version = (data.version || '').trim();
+      oldSnHints[idx] = version ? `รุ่นเดิม (จากชีต): ${version}` : '';
+    }
+  }catch(e){
+    console.error('[Old device SN lookup]', e);
+    oldSnHints[idx] = '';
+  }
+  renderFixRows();
 }
 
 const STATUS_OPTS = {
@@ -3242,6 +3270,7 @@ function buildOldModelHalf(row, idx, standalone){
     const type = deviceTypeForProduct(row.oldModel);
     if(type && !row.oldSN && deviceLookup[type]) row.oldSN = deviceLookup[type].sn || '';
     updatePreview(); renderFixRows();
+    if(type && row.oldSN) autofillOldDeviceVersion(idx, type, row.oldSN);
   });
   oldWrap.appendChild(oldLabel); oldWrap.appendChild(oldSel);
 
@@ -3253,12 +3282,25 @@ function buildOldModelHalf(row, idx, standalone){
     oldWrap.appendChild(oldCustom);
   }
 
-  if(deviceTypeForProduct(row.oldModel)){
+  const oldSnType = deviceTypeForProduct(row.oldModel);
+  if(oldSnType){
     const oldSN = document.createElement('input');
     oldSN.type='text'; oldSN.placeholder='SN เครื่องเดิม (auto จากประวัติทะเบียนถ้ามี)';
     oldSN.value = row.oldSN || ''; oldSN.style.marginTop='6px';
     oldSN.oninput = ()=>{ row.oldSN = oldSN.value; updatePreview(); };
+    oldSN.onblur = ()=> autofillOldDeviceVersion(idx, oldSnType, oldSN.value);
+    oldSN.onkeydown = (e)=>{ if(e.key === 'Enter'){ e.preventDefault(); oldSN.blur(); } };
     oldWrap.appendChild(oldSN);
+    // row.oldSN มาจาก deviceLookup auto-fill (หรือเปิดรายงานเดิมมาแก้ไข) โดย
+    // ที่ยังไม่เคยค้นหารุ่นเลย — ค้นหาให้ครั้งเดียว (เช็ค oldSnHints[idx] ===
+    // undefined กันยิงซ้ำทุกครั้งที่ renderFixRows() ถูกเรียก)
+    if(row.oldSN && oldSnHints[idx] === undefined) autofillOldDeviceVersion(idx, oldSnType, row.oldSN);
+    if(oldSnHints[idx]){
+      const oldHint = document.createElement('div');
+      oldHint.className = 'hint'; oldHint.style.marginTop = '4px';
+      oldHint.textContent = oldSnHints[idx];
+      oldWrap.appendChild(oldHint);
+    }
   }
 
   if(standalone){
