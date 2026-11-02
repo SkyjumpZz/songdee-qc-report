@@ -10,7 +10,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.77.0">
+<meta name="app-version" content="1.78.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -1679,8 +1679,21 @@ function fillProblemFromIssue(issue){
 // the data arrives), and once the fetch resolves, if ทะเบียน still has
 // focus, the box is explicitly re-rendered so it pops open right away
 // instead of silently waiting for another click.
-let plateSuggestions = [];
-const renderPlateSuggest = wireSuggestInput('jobPlate', 'jobPlateSuggestions', ()=>plateSuggestions, plate=>{
+let allPlateSuggestions = [];
+// plate -> Customer column value จาก MDVR Tracking (/plates's plateCustomers)
+// ใช้กรองลิสต์ทะเบียนให้เหลือเฉพาะของลูกค้าที่เลือกไว้ (ถ้าเลือกแล้ว) — ทะเบียน
+// ที่ยังไม่มีประวัติ Customer ในชีต (plateCustomerMap ไม่มี key นั้น) ยังโชว์
+// เสมอไม่ว่าจะเลือกลูกค้าอะไรอยู่ กันไม่ให้ทะเบียนใหม่ๆหายไปจากลิสต์เฉยๆ
+let plateCustomerMap = {};
+function plateSuggestionsForCustomer(){
+  const customer = (state.customer || '').trim().toLowerCase();
+  if(!customer) return allPlateSuggestions;
+  return allPlateSuggestions.filter(p=>{
+    const c = plateCustomerMap[p];
+    return !c || c.trim().toLowerCase() === customer;
+  });
+}
+const renderPlateSuggest = wireSuggestInput('jobPlate', 'jobPlateSuggestions', plateSuggestionsForCustomer, plate=>{
   state.plate = plate;
   updatePreview();
   scheduleStockLockCheck();
@@ -1689,7 +1702,8 @@ async function loadPlateSuggestions(){
   try{
     const res = await fetch('https://songdee-vehicle-lookup.songdeegps.workers.dev/plates');
     const data = await res.json();
-    plateSuggestions = (Array.isArray(data.plates) ? data.plates : []).sort();
+    allPlateSuggestions = (Array.isArray(data.plates) ? data.plates : []).sort();
+    plateCustomerMap = (data.plateCustomers && typeof data.plateCustomers === 'object') ? data.plateCustomers : {};
     if(document.activeElement && document.activeElement.id === 'jobPlate') renderPlateSuggest();
   }catch(e){
     console.error('[Plate suggestions]', e);
