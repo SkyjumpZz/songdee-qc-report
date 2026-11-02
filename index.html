@@ -7,7 +7,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>Dashboard · SONGDEE GPS</title>
-<meta name="app-version" content="1.31.0">
+<meta name="app-version" content="1.32.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -629,17 +629,17 @@
   </div>
 
   <div class="card app-hidden" id="adminNameMapCard">
-    <div class="card-title"><span class="dot">🔧</span>จัดการชื่อช่าง (เชื่อมกับ Admin web)</div>
+    <div class="card-title"><span class="dot">🔧</span>จัดการชื่อช่าง (ชื่อที่เขียนลง Track + Admin web)</div>
     <div class="admin-hint">
-      ชื่อในระบบนี้ (เลือกจากลิสต์ — ชื่อเดียวกับที่เลือกได้ในช่อง "ช่างที่กำลังทำรายงานนี้" ตอนกรอกฟอร์ม)
-      → ชื่อที่ใช้คู่กัน ใช้ทั้ง 2 อย่าง: (1) จับคู่กับชื่อใน Admin web (ตอนมอบหมายงาน) ถ้าสองชื่อนี้ไม่ตรงกัน
-      หน้าฟอร์มจะดึงงานที่มอบหมาย/ของ Spare ของช่างคนนั้นไม่เจอ และ (2) ชื่อที่เขียนลง Sheet (MDVR/AI Box/ADAS/DMS
-      Tracking ฯลฯ) ตอนช่างคนนี้แก้ไข Track — แก้ตรงนี้ได้เลยโดยไม่ต้องรอแก้โค้ด
+      <b>ชื่อขวา = ชื่อที่จะเขียนลง Track (MDVR/AI Box/ADAS/DMS Tracking) ตอนช่างคนนี้แก้ไขงาน</b> — เลือกชื่อช่าง
+      จากลิสต์ฝั่งซ้าย (ชื่อเดียวกับที่เลือกได้ในช่อง "ช่างที่กำลังทำรายงานนี้" ตอนกรอกฟอร์ม) แล้วพิมพ์ชื่อขวาที่
+      ต้องการ ชื่อขวานี้ใช้จับคู่กับ Admin web ด้วย (ถ้าไม่ตรงกัน หน้าฟอร์มจะดึงงานที่มอบหมาย/ของ Spare ของ
+      ช่างคนนั้นไม่เจอ) — แก้ตรงนี้ได้เลยโดยไม่ต้องรอแก้โค้ด
     </div>
     <div id="nameMapRows"></div>
     <div class="name-map-add">
       <select id="nameMapNewTech"><option value="">-- เลือกชื่อช่าง --</option></select>
-      <input type="text" id="nameMapNewAdmin" placeholder="ชื่อคู่ (Admin web / Sheet)">
+      <input type="text" id="nameMapNewAdmin" placeholder="ชื่อที่จะเขียนลง Track">
       <button type="button" onclick="addNameMapRow()">+ เพิ่ม</button>
     </div>
     <div class="name-map-status" id="nameMapStatus"></div>
