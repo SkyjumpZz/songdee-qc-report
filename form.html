@@ -10,7 +10,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.82.0">
+<meta name="app-version" content="1.83.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -2187,6 +2187,7 @@ function loadReportIntoForm(doc){
   currentReportId = doc.id;
   originalReportDoc = { ...doc };
   isResendOfExistingReport = true;
+  isQuickResend = false; // caller (loadReportFromUrlIfAny()) sets this true right after, only for &autosend=1
   selectedAssignmentId = null;
   state = {
     tpl: doc.tpl || 'upgrade',
@@ -2241,6 +2242,7 @@ async function loadReportFromUrlIfAny(){
     if(snap.exists){
       loadReportIntoForm({id: snap.id, ...snap.data()});
       if(autosend){
+        isQuickResend = true;
         history.replaceState(null, '', location.pathname);
         if(confirm('ส่งรายงานนี้เข้า LINE อีกครั้งหรือไม่?')) sendToLine();
         return;
@@ -2266,6 +2268,7 @@ function startNewReport(){
   currentReportId = null;
   originalReportDoc = null;
   isResendOfExistingReport = false;
+  isQuickResend = false;
   state = defaultState();
   document.getElementById('editingBanner').classList.add('app-hidden');
   syncFormInputsFromState();
@@ -2293,6 +2296,7 @@ function startNextVehicle(){
   currentReportId = null;
   originalReportDoc = null;
   isResendOfExistingReport = false;
+  isQuickResend = false;
   state = defaultState();
   state.date = keepDate;
   state.customer = keepCustomer;
@@ -2628,6 +2632,13 @@ let originalReportDoc = null;
 // "แก้ไขจากรายงานเดิม" marker so readers in the LINE group don't mistake
 // it for an unrelated second report.
 let isResendOfExistingReport = false;
+// True only for the Dashboard's "ส่งเข้า LINE อีกครั้ง" quick action
+// (&autosend=1 — see loadReportFromUrlIfAny()), which sends the report
+// completely unchanged. ตามที่ขอ — ส่งซ้ำแบบนี้ไม่นับเป็น "แก้ไข" เลย ไม่ควร
+// ขึ้นป้าย "📝 แก้ไขจากรายงานเดิม" (ซึ่งสื่อว่ามีการแก้เนื้อหา) ทั้งที่ไม่ได้แตะ
+// อะไรเลย — ดูการใช้งานคู่กับ isResendOfExistingReport ที่
+// buildMessage()/buildLineCard() ด้านล่าง.
+let isQuickResend = false;
 
 // วันที่/เดือน/ปี แยก 3 ช่อง (ชื่อเดือนภาษาไทยกันสับสนลำดับ) แทน <input type="date">
 // เดิม — ตัวควบคุมของเบราว์เซอร์โชว์ลำดับวันที่ตามโลเคลของเครื่อง/OS ไม่ใช่
@@ -3965,7 +3976,8 @@ async function pushIssueClose(){
 function buildMessage(){
   const dateStr = state.date ? state.date.split('-').reverse().join('/') : '(ยังไม่ระบุวันที่)';
   const lines = [];
-  if(isResendOfExistingReport) lines.push('📝 แก้ไขจากรายงานเดิม (ส่งซ้ำ)');
+  if(isResendOfExistingReport && !isQuickResend) lines.push('📝 แก้ไขจากรายงานเดิม (ส่งซ้ำ)');
+  else if(isQuickResend) lines.push('🔁 ส่งซ้ำ (ไม่มีการแก้ไข)');
   lines.push(`${dateStr} ${TEMPLATES[state.tpl].label}${state.customer ? ' ' + state.customer : ''}`);
   if(state.fleet) lines.push(`Fleet: ${state.fleet}`);
   if(state.tpl === 'remove'){
@@ -4103,8 +4115,10 @@ function buildLineCard(){
     // Amber (same "needs a look" tone as the app's own stock-lock/issue
     // banners) for a resent/edited report, so it stands out from a normal
     // green first-send card at a glance in the LINE group, not just by text.
-    color: isResendOfExistingReport ? '#ffb020' : '#3ddc97',
-    badge: isResendOfExistingReport ? `📝 แก้ไขจากรายงานเดิม (ส่งซ้ำ) · ${dateStr}` : `📋 ${dateStr}`,
+    color: (isResendOfExistingReport && !isQuickResend) ? '#ffb020' : '#3ddc97',
+    badge: (isResendOfExistingReport && !isQuickResend)
+      ? `📝 แก้ไขจากรายงานเดิม (ส่งซ้ำ) · ${dateStr}`
+      : (isQuickResend ? `🔁 ส่งซ้ำ (ไม่มีการแก้ไข) · ${dateStr}` : `📋 ${dateStr}`),
     fields,
     sections,
     imageUrls: uploadedPhotos.map(p=> p.driveUrl),
