@@ -10,7 +10,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.86.0">
+<meta name="app-version" content="1.87.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -2086,6 +2086,7 @@ function fixRowSummaryForDiff(row){
   if(row.newSN) parts.push(`SN:${row.newSN}`);
   if(row.oldModel) parts.push(`เดิม:${row.oldModel === 'อื่นๆ (พิมพ์เอง)' ? (row.oldModelCustom||'') : row.oldModel}`);
   if(row.oldSN) parts.push(`SNเดิม:${row.oldSN}`);
+  if(row.oldModelVersion) parts.push(`รุ่นเดิม:${row.oldModelVersion}`);
   if(row.ch) parts.push(`CH:${row.ch}`);
   if(row.newMdvrImei) parts.push(`IMEIใหม่:${row.newMdvrImei}`);
   if(row.remark) parts.push(`หมายเหตุ:${row.remark}`);
@@ -2514,29 +2515,33 @@ async function autofillDeviceSN(row, idx, type, sn){
 
 // เหมือน autofillDeviceSN() ด้านบนแต่สำหรับฝั่ง "รุ่นเก่าที่เปลี่ยน" (oldSN) —
 // ต่างกันตรงไม่แตะ row.oldModel เลย (รุ่นเก่าที่เลือกไว้มาจากประวัติทะเบียนจริง
-// อยู่แล้ว ไม่ใช่ชื่อ product อิสระที่ต้องเดา/auto-match) แค่โชว์ให้เห็นว่า SN
-// เก่าตัวนี้คือรุ่นอะไรตามชีต DMS/ADAS Tracking จริง (ตามที่ขอ: "เลือกรุ่นกล้อง
-// เก่าที่เปลี่ยนให้มันบอกชื่อรุ่นเก่าด้วย" — เดิมช่อง SN เครื่องเดิมไม่มีการค้นหา/
-// โชว์ข้อมูลอะไรเลย ต่างจากฝั่ง SN เครื่องใหม่ที่มี hint นี้อยู่แล้ว)
-async function autofillOldDeviceVersion(idx, type, sn){
+// อยู่แล้ว ไม่ใช่ชื่อ product อิสระที่ต้องเดา/auto-match) แค่บันทึก version ที่
+// เจอไว้ใน row.oldModelVersion (ตามที่ขอ: "เลือกรุ่นกล้องเก่าที่เปลี่ยนให้มันบอก
+// ชื่อรุ่นเก่าด้วย" — ครั้งแรกทำแค่โชว์ในฟอร์ม พอขอเพิ่มว่า "เวลาลงงานแล้วให้มัน
+// บอกชื่อรุ่นด้วย" เลยต้องเก็บลง row เอง ไม่ใช่แค่ oldSnHints ที่เป็น UI ล้วนๆ
+// ไม่ได้ส่งเข้าข้อความ/การ์ด LINE — fixLine() ด้านล่างอ่านค่านี้ไปแสดงในรายงาน
+// จริงด้วย) oldSnHints[idx] ยังใช้แสดงสถานะชั่วคราว (กำลังค้นหา/ไม่พบ) เท่านั้น
+async function autofillOldDeviceVersion(row, idx, type, sn){
   const target = (sn || '').trim();
-  if(!target || !type){ oldSnHints[idx] = ''; renderFixRows(); return; }
+  if(!target || !type){ row.oldModelVersion = ''; oldSnHints[idx] = ''; renderFixRows(); return; }
   oldSnHints[idx] = 'กำลังค้นหา SN...';
   renderFixRows();
   try{
     const res = await fetch(`https://songdee-vehicle-lookup.songdeegps.workers.dev/device-sn?type=${encodeURIComponent(type)}&sn=${encodeURIComponent(target)}`);
     const data = await res.json();
     if(!data || !data.found){
+      row.oldModelVersion = '';
       oldSnHints[idx] = 'ไม่พบ SN นี้ในชีต Tracking';
     } else {
       const version = (data.version || '').trim();
+      row.oldModelVersion = version;
       oldSnHints[idx] = version ? `รุ่นเดิม (จากชีต): ${version}` : '';
     }
   }catch(e){
     console.error('[Old device SN lookup]', e);
     oldSnHints[idx] = '';
   }
-  renderFixRows();
+  renderFixRows(); updatePreview();
 }
 
 const STATUS_OPTS = {
@@ -3270,7 +3275,7 @@ function buildOldModelHalf(row, idx, standalone){
     const type = deviceTypeForProduct(row.oldModel);
     if(type && !row.oldSN && deviceLookup[type]) row.oldSN = deviceLookup[type].sn || '';
     updatePreview(); renderFixRows();
-    if(type && row.oldSN) autofillOldDeviceVersion(idx, type, row.oldSN);
+    if(type && row.oldSN) autofillOldDeviceVersion(row, idx, type, row.oldSN);
   });
   oldWrap.appendChild(oldLabel); oldWrap.appendChild(oldSel);
 
@@ -3288,17 +3293,20 @@ function buildOldModelHalf(row, idx, standalone){
     oldSN.type='text'; oldSN.placeholder='SN เครื่องเดิม (auto จากประวัติทะเบียนถ้ามี)';
     oldSN.value = row.oldSN || ''; oldSN.style.marginTop='6px';
     oldSN.oninput = ()=>{ row.oldSN = oldSN.value; updatePreview(); };
-    oldSN.onblur = ()=> autofillOldDeviceVersion(idx, oldSnType, oldSN.value);
+    oldSN.onblur = ()=> autofillOldDeviceVersion(row, idx, oldSnType, oldSN.value);
     oldSN.onkeydown = (e)=>{ if(e.key === 'Enter'){ e.preventDefault(); oldSN.blur(); } };
     oldWrap.appendChild(oldSN);
     // row.oldSN มาจาก deviceLookup auto-fill (หรือเปิดรายงานเดิมมาแก้ไข) โดย
-    // ที่ยังไม่เคยค้นหารุ่นเลย — ค้นหาให้ครั้งเดียว (เช็ค oldSnHints[idx] ===
-    // undefined กันยิงซ้ำทุกครั้งที่ renderFixRows() ถูกเรียก)
-    if(row.oldSN && oldSnHints[idx] === undefined) autofillOldDeviceVersion(idx, oldSnType, row.oldSN);
-    if(oldSnHints[idx]){
+    // ที่ยังไม่เคยค้นหารุ่นเลย (row.oldModelVersion ยังไม่เคยถูกตั้งค่า) —
+    // ค้นหาให้ครั้งเดียว กันยิงซ้ำทุกครั้งที่ renderFixRows() ถูกเรียก — รายงาน
+    // เก่าที่เปิดมาแก้ไขและเคยค้นหา/บันทึก oldModelVersion ไว้แล้วไม่ต้องยิง
+    // ซ้ำ โชว์ค่าที่บันทึกไว้ได้ทันที (ดู oldHintText ด้านล่าง)
+    if(row.oldSN && row.oldModelVersion === undefined) autofillOldDeviceVersion(row, idx, oldSnType, row.oldSN);
+    const oldHintText = oldSnHints[idx] || (row.oldModelVersion ? `รุ่นเดิม (จากชีต): ${row.oldModelVersion}` : '');
+    if(oldHintText){
       const oldHint = document.createElement('div');
       oldHint.className = 'hint'; oldHint.style.marginTop = '4px';
-      oldHint.textContent = oldSnHints[idx];
+      oldHint.textContent = oldHintText;
       oldWrap.appendChild(oldHint);
     }
   }
@@ -3766,7 +3774,12 @@ function fixLine(row){
     ? (row.oldModel === "อื่นๆ (พิมพ์เอง)" ? (row.oldModelCustom || "") : row.oldModel)
     : "";
   const newTag = (deviceTypeForProduct(row.product) && row.newSN) ? ` (SN: ${row.newSN})` : '';
-  const oldTag = (tplHasOldModel(state.tpl) && deviceTypeForProduct(row.oldModel) && row.oldSN) ? ` (SN เดิม: ${row.oldSN})` : '';
+  // รุ่นเดิม (จากชีต DMS/ADAS Tracking ตาม SN เดิม — ดู autofillOldDeviceVersion())
+  // ต่อท้ายในวงเล็บเดียวกับ SN เดิม ให้รายงานที่ส่งจริงบอกรุ่นด้วย ไม่ใช่แค่
+  // โชว์ในฟอร์มตอนกรอกเฉยๆ (ตามที่ขอ: "เวลาลงงานแล้วให้มันบอกชื่อรุ่นด้วย")
+  const oldTag = (tplHasOldModel(state.tpl) && deviceTypeForProduct(row.oldModel) && row.oldSN)
+    ? ` (SN เดิม: ${row.oldSN}${row.oldModelVersion ? `, รุ่น: ${row.oldModelVersion}` : ''})`
+    : '';
   const chTag = (state.tpl === 'new_install' && row.ch) ? ` (${row.ch})` : '';
   const phoneTag = (isSimProduct(row.product) && row.phoneNo) ? ` (เบอร์: ${row.phoneNo})` : '';
   const extraTag = row.extra ? ' [ของนอกเหนือรายการ]' : '';
