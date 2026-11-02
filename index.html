@@ -7,7 +7,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>Dashboard · SONGDEE GPS</title>
-<meta name="app-version" content="1.29.0">
+<meta name="app-version" content="1.30.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -685,6 +685,30 @@
     <div class="scroll-list" id="fleetListRows"></div>
   </div>
 
+  <div class="card app-hidden" id="dropdownOptionsCard">
+    <div class="card-title"><span class="dot">🔽</span>จัดการตัวเลือก Dropdown</div>
+    <div class="admin-hint">
+      ตัวเลือกในช่อง Dropdown ของฟอร์ม ที่เป็นแค่ข้อความล้วน ไม่มีผลต่อโค้ด/ช่องอื่นๆ — แก้ไขได้เฉพาะ Super Admin
+      (ตัวเลือกบรรทัดแรก "-- เลือก --"/"-- ไม่ระบุ --" คงที่เสมอ ไม่ต้องเพิ่มเอง) ลบ/เพิ่มที่นี่มีผลทันทีกับฟอร์มทุกเครื่อง
+      ไม่ต้องแก้โค้ด/deploy ใหม่
+    </div>
+    <div class="list-subheading">สถานะ Sticker (หน้ารถ/เครื่องรูดบัตร/PDPA)</div>
+    <div class="name-map-add single-col">
+      <input type="text" id="stickerOptionsNew" placeholder="ตัวเลือกใหม่ เช่น ลูกค้าไม่อยู่">
+      <button type="button" onclick="addStickerOptionRow()">+ เพิ่ม</button>
+    </div>
+    <div class="name-map-status" id="stickerOptionsStatus"></div>
+    <div class="scroll-list" id="stickerOptionsRows"></div>
+
+    <div class="list-subheading">เครือข่ายอุปกรณ์ (Network)</div>
+    <div class="name-map-add single-col">
+      <input type="text" id="networkOptionsNew" placeholder="ตัวเลือกใหม่ เช่น 5G">
+      <button type="button" onclick="addNetworkOptionRow()">+ เพิ่ม</button>
+    </div>
+    <div class="name-map-status" id="networkOptionsStatus"></div>
+    <div class="scroll-list" id="networkOptionsRows"></div>
+  </div>
+
   <div id="stats" class="app-hidden">
     <div class="dash-hero">
       <div class="dash-hero-greet" id="dashGreet"></div>
@@ -879,6 +903,7 @@ _auth.onAuthStateChanged(async user=>{
     document.getElementById('testerRosterCard').classList.toggle('app-hidden', !role.superAdmin);
     document.getElementById('customerFleetListCard').classList.toggle('app-hidden', !role.superAdmin);
     document.getElementById('lineGroupMapCard').classList.toggle('app-hidden', !role.superAdmin);
+    document.getElementById('dropdownOptionsCard').classList.toggle('app-hidden', !role.superAdmin);
     await loadDashboard();
     if(role.superAdmin){
       await loadNameMap();
@@ -886,6 +911,7 @@ _auth.onAuthStateChanged(async user=>{
       await loadCustomerFleetLists();
       await loadKnownTechNames();
       await loadLineGroupMap();
+      await loadDropdownOptionLists();
     }
   }catch(e){
     err.textContent = t('errRoleLoad') + e.message;
@@ -1220,6 +1246,129 @@ function addFleetListRow(){
   input.value = '';
   renderFleetListEditor();
   persistFleetList();
+}
+
+// ---------------------------------------------------------------
+// ตัวเลือก Dropdown ล้วนๆ (ไม่มีผลต่อโค้ด/ช่องอื่น) ที่ Super Admin แก้ได้เอง
+// โดยไม่ต้องแก้โค้ด/deploy — ต่างจาก customerList/fleetList ตรงที่ "ลำดับ"
+// ของตัวเลือกมีความหมาย (ลำดับที่โชว์ใน Dropdown) เลยไม่เรียง a-z ตอนแสดงผล
+// เหมือน 2 อันนั้น แค่เรียงตามลำดับที่เพิ่ม/บันทึกไว้ — ตัวเลือกบรรทัดแรก
+// ("-- เลือกผล --"/"-- ไม่ระบุ --") เป็นค่าคงที่ในโค้ด form.html เอง ไม่ได้
+// เก็บไว้ในนี้ กันพังกรณีลบตัวเลือกจนว่างเปล่าหมด (ดู fallback ใน form.html:
+// รายการว่าง = ใช้ชุดเริ่มต้นในโค้ดแทน ไม่ใช่ dropdown ที่ไม่มีตัวเลือกเลย)
+// เก็บแยกเอกสารต่อ Dropdown แบบเดียวกับ sd_customers/sd_fleet
+// ---------------------------------------------------------------
+let stickerOptionsList = [];
+let networkOptionsList = [];
+
+async function loadDropdownOptionLists(){
+  try{
+    const [sSnap, nSnap] = await Promise.all([
+      _db.collection('sd').doc('sd_stickerOptions').get(),
+      _db.collection('sd').doc('sd_networkOptions').get(),
+    ]);
+    stickerOptionsList = sSnap.exists ? JSON.parse(sSnap.data().v || '[]') : [];
+    networkOptionsList = nSnap.exists ? JSON.parse(nSnap.data().v || '[]') : [];
+  }catch(e){
+    console.error('[Dropdown options] load failed', e);
+    stickerOptionsList = []; networkOptionsList = [];
+  }
+  renderStickerOptionsEditor();
+  renderNetworkOptionsEditor();
+}
+
+async function saveStickerOptions(){
+  await _db.collection('sd').doc('sd_stickerOptions').set({ v: JSON.stringify(stickerOptionsList) }, { merge: true });
+}
+async function saveNetworkOptions(){
+  await _db.collection('sd').doc('sd_networkOptions').set({ v: JSON.stringify(networkOptionsList) }, { merge: true });
+}
+
+async function persistStickerOptions(){
+  const statusEl = document.getElementById('stickerOptionsStatus');
+  statusEl.textContent = 'กำลังบันทึก...';
+  statusEl.className = 'name-map-status';
+  try{
+    await saveStickerOptions();
+    statusEl.textContent = 'บันทึกแล้ว ✓';
+    statusEl.className = 'name-map-status ok';
+  }catch(e){
+    statusEl.textContent = 'บันทึกไม่สำเร็จ: ' + e.message;
+    statusEl.className = 'name-map-status err';
+  }
+}
+async function persistNetworkOptions(){
+  const statusEl = document.getElementById('networkOptionsStatus');
+  statusEl.textContent = 'กำลังบันทึก...';
+  statusEl.className = 'name-map-status';
+  try{
+    await saveNetworkOptions();
+    statusEl.textContent = 'บันทึกแล้ว ✓';
+    statusEl.className = 'name-map-status ok';
+  }catch(e){
+    statusEl.textContent = 'บันทึกไม่สำเร็จ: ' + e.message;
+    statusEl.className = 'name-map-status err';
+  }
+}
+
+function renderStickerOptionsEditor(){
+  const wrap = document.getElementById('stickerOptionsRows');
+  wrap.innerHTML = '';
+  stickerOptionsList.forEach(name=>{
+    const row = document.createElement('div');
+    row.className = 'name-map-row single-col';
+    const input = document.createElement('input');
+    input.type = 'text'; input.value = name; input.disabled = true;
+    const rm = document.createElement('button');
+    rm.type = 'button'; rm.textContent = 'ลบ';
+    rm.onclick = ()=>{
+      stickerOptionsList = stickerOptionsList.filter(n=> n !== name);
+      renderStickerOptionsEditor();
+      persistStickerOptions();
+    };
+    row.appendChild(input); row.appendChild(rm);
+    wrap.appendChild(row);
+  });
+}
+
+function addStickerOptionRow(){
+  const input = document.getElementById('stickerOptionsNew');
+  const name = input.value.trim();
+  if(!name || stickerOptionsList.includes(name)) return;
+  stickerOptionsList.push(name);
+  input.value = '';
+  renderStickerOptionsEditor();
+  persistStickerOptions();
+}
+
+function renderNetworkOptionsEditor(){
+  const wrap = document.getElementById('networkOptionsRows');
+  wrap.innerHTML = '';
+  networkOptionsList.forEach(name=>{
+    const row = document.createElement('div');
+    row.className = 'name-map-row single-col';
+    const input = document.createElement('input');
+    input.type = 'text'; input.value = name; input.disabled = true;
+    const rm = document.createElement('button');
+    rm.type = 'button'; rm.textContent = 'ลบ';
+    rm.onclick = ()=>{
+      networkOptionsList = networkOptionsList.filter(n=> n !== name);
+      renderNetworkOptionsEditor();
+      persistNetworkOptions();
+    };
+    row.appendChild(input); row.appendChild(rm);
+    wrap.appendChild(row);
+  });
+}
+
+function addNetworkOptionRow(){
+  const input = document.getElementById('networkOptionsNew');
+  const name = input.value.trim();
+  if(!name || networkOptionsList.includes(name)) return;
+  networkOptionsList.push(name);
+  input.value = '';
+  renderNetworkOptionsEditor();
+  persistNetworkOptions();
 }
 
 // Admin-only roster: who can log in (email) and what techName they test

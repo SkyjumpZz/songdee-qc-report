@@ -10,7 +10,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.87.0">
+<meta name="app-version" content="1.88.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -908,6 +908,8 @@ _auth.onAuthStateChanged(async user=>{
     loadScannedDeviceEmeis(); // not awaited, same reasoning
     await loadNameMap(); // resolved before any assignments fetch uses the real mapping
     loadLineGroupMap(); // not awaited — sendToLine() can't run before the user finishes the form anyway
+    loadStickerOptions(); // not awaited, same reasoning — re-renders once resolved
+    loadNetworkOptions(); // not awaited, same reasoning
     loadReportFromUrlIfAny();
     loadPlateSuggestions();
     loadCustomerFleetSuggestions();
@@ -2544,9 +2546,52 @@ async function autofillOldDeviceVersion(row, idx, type, sn){
   renderFixRows(); updatePreview();
 }
 
+// ตัวเลือกบรรทัดแรก ("-- เลือกผล --") คงที่ในโค้ดเสมอ ใช้เป็น sentinel เช็ค
+// "ยังไม่เลือก" ในหลายจุด (ดู STATUS_OPTS.sticker[0] ที่ใช้อยู่) — ตัวเลือกที่
+// เหลือ (DEFAULT_STICKER_OPTIONS) เป็นแค่ค่าเริ่มต้นตอนยังไม่เคยมีใครตั้งค่า
+// ใน sd_stickerOptions (Super Admin แก้ได้จาก Dashboard โดยไม่ต้องแก้โค้ด —
+// ดู loadStickerOptions() ด้านล่าง) STATUS_OPTS.sticker เป็น getter เพื่อให้
+// จุดที่เรียกใช้เดิมทุกจุดยังทำงานเหมือนเดิมทุกประการ ไม่ต้องแก้โค้ดที่อื่น
+const STICKER_PLACEHOLDER = "-- เลือกผล --";
+const DEFAULT_STICKER_OPTIONS = ["มีติดอยู่แล้ว","ติดใหม่เรียบร้อย","ลูกค้าไม่ให้ติด","ช่างของหมด"];
+let stickerOptionsList = [];
 const STATUS_OPTS = {
-  sticker: ["-- เลือกผล --","มีติดอยู่แล้ว","ติดใหม่เรียบร้อย","ลูกค้าไม่ให้ติด","ช่างของหมด"]
+  get sticker(){
+    return [STICKER_PLACEHOLDER, ...(stickerOptionsList.length ? stickerOptionsList : DEFAULT_STICKER_OPTIONS)];
+  }
 };
+
+async function loadStickerOptions(){
+  try{
+    const snap = await _db.collection('sd').doc('sd_stickerOptions').get();
+    stickerOptionsList = snap.exists ? JSON.parse(snap.data().v || '[]') : [];
+  }catch(e){
+    console.error('[Sticker options] load failed', e);
+    stickerOptionsList = [];
+  }
+  renderStickers();
+}
+
+// เดียวกับ STATUS_OPTS.sticker ข้างบน — placeholder คงที่ในโค้ด, ตัวเลือกจริง
+// (DEFAULT_NETWORK_OPTIONS) เป็นแค่ค่าเริ่มต้น Super Admin แก้ได้จาก
+// sd_networkOptions โดยไม่ต้องแก้โค้ด (ดู loadNetworkOptions())
+const DEFAULT_NETWORK_OPTIONS = ["3G","4G"];
+let networkOptionsList = [];
+function networkOptionsForSelect(){
+  const names = networkOptionsList.length ? networkOptionsList : DEFAULT_NETWORK_OPTIONS;
+  return [{ v: '', t: '-- ไม่ระบุ --' }, ...names.map(n=> ({ v: n, t: n }))];
+}
+
+async function loadNetworkOptions(){
+  try{
+    const snap = await _db.collection('sd').doc('sd_networkOptions').get();
+    networkOptionsList = snap.exists ? JSON.parse(snap.data().v || '[]') : [];
+  }catch(e){
+    console.error('[Network options] load failed', e);
+    networkOptionsList = [];
+  }
+  renderChecklist();
+}
 
 // DB9 ({has, reason}) — เหมือนแพทเทิร์น steelbox ข้างบนเป๊ะ: ปุ่ม "ใส่น็อต
 // แล้ว"/"ยังไม่ได้ใส่" + ถ้ายังไม่ได้ใส่ พิมพ์เหตุผลเองได้อิสระ (ก่อนหน้านี้
@@ -3538,7 +3583,7 @@ function renderChecklist(){
   netFooter.className = 'check-toggle';
   const netSel = document.createElement('select');
   netSel.style.cssText = 'flex:1; background:transparent; border:none; color:inherit; font:inherit;';
-  [{v:'', t:'-- ไม่ระบุ --'}, {v:'3G', t:'3G'}, {v:'4G', t:'4G'}].forEach(opt=>{
+  networkOptionsForSelect().forEach(opt=>{
     const o = document.createElement('option');
     o.value = opt.v; o.textContent = opt.t;
     if((state.network||'') === opt.v) o.selected = true;
