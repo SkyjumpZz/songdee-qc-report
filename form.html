@@ -10,7 +10,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.75.0">
+<meta name="app-version" content="1.76.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -3150,6 +3150,12 @@ function buildOldModelHalf(row, idx, standalone){
       options: vehicleEmptySlots.map(m=> ({ value: m.label, text: m.label })),
     });
   }
+  // ให้พิมพ์รุ่นเก่าเองได้เสมอ — เผื่อของจริงไม่ตรงกับประวัติที่บันทึกไว้ (ประวัติ
+  // อาจตกหล่น/ผิด) หรือยังไม่เคยมีประวัติเลย
+  oldGroups.push({
+    label: null,
+    options: [{ value: 'อื่นๆ (พิมพ์เอง)', text: 'อื่นๆ (พิมพ์เอง)' }],
+  });
   const oldSel = buildSearchableSelect(oldGroups, row.oldModel, '-- ไม่มีการเปลี่ยนอุปกรณ์ --', (newValue)=>{
     row.oldModel = newValue;
     const type = deviceTypeForProduct(row.oldModel);
