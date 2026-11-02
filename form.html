@@ -10,7 +10,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.91.0">
+<meta name="app-version" content="1.92.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -1107,6 +1107,17 @@ function onSiteTechName(){
   return names.map(n=> trackNameMap[n] || n).join(', ');
 }
 
+// ชื่อช่างดิบ — ไม่ผ่าน trackNameMap เลย (ตามที่ขอ: "ในจุดที่ลงใน note สำหรับ
+// Track เอาเป็นชื่อช่างที่ยังไม่ได้แก้ไข") บรรทัด Note ของจริงใช้ชื่อเล่น
+// ภาษาไทยดิบมาตลอด (เช่น "ช่างปุ๊") ไม่ใช่ชื่อแปลอังกฤษแบบคอลัมน์ Technician1 —
+// songdee-vehicle-lookup ใช้ค่านี้ (payload.technicianRaw) เฉพาะตอนสร้าง
+// ข้อความ Note เท่านั้น คอลัมน์ที่มีโครงสร้างจริง (Technician1/ผู้ถือเครื่อง)
+// ยังใช้ onSiteTechName() (แปลแล้ว) เหมือนเดิม
+function onSiteTechNameRaw(){
+  const names = techStockOwnerNames.length ? techStockOwnerNames : (tester.techName ? [tester.techName] : []);
+  return names.join(', ');
+}
+
 function wireTechStockSearch(){
   const input = document.getElementById('techStockNameInput');
   const box = document.getElementById('techStockNameSuggestions');
@@ -1504,7 +1515,7 @@ async function pushMdvrUnitSwaps(){
     const res = await fetch(MDVR_UNIT_SWAP_ENDPOINT, {
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ plate, newImei: s.newImei, customer: state.customer, date: state.date, technician: onSiteTechName() })
+      body: JSON.stringify({ plate, newImei: s.newImei, customer: state.customer, date: state.date, technician: onSiteTechName(), technicianRaw: onSiteTechNameRaw() })
     });
     const data = await res.json();
     if(!res.ok || !data.ok) throw new Error(data.error || ('HTTP ' + res.status));
@@ -4040,7 +4051,7 @@ async function pushMdvrClears(){
     const res = await fetch('https://songdee-vehicle-lookup.songdeegps.workers.dev/mdvr-clear', {
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ plate, column: c.column, date: dateStr, technician: onSiteTechName() })
+      body: JSON.stringify({ plate, column: c.column, date: dateStr, technician: onSiteTechName(), technicianRaw: onSiteTechNameRaw() })
     });
     const data = await res.json();
     if(!res.ok || !data.ok) throw new Error(data.error || ('HTTP ' + res.status));
@@ -4081,13 +4092,13 @@ function buildDeviceSwaps(){
       // ย้ายข้ามคัน (ฝั่งถอดต้องบันทึกว่าออกจากทะเบียนเก่า ฝั่งติดตั้งต้องบันทึก
       // ว่าไปอยู่ทะเบียนใหม่) แยกยิงคนละคำขอคนละทะเบียนแทน — ฝั่งติดตั้งข้ามไป
       // ถ้ายังไม่ได้ระบุทะเบียนใหม่ (ไม่รู้จะเขียนลงคันไหน)
-      if(oldSN) swaps.push({ type, plate: state.plate, customer: state.customer, technician: onSiteTechName(), date: dateStr, oldSN, newSN: '' });
-      if(newSN && newPlate) swaps.push({ type, plate: newPlate, customer: state.customer, technician: onSiteTechName(), date: dateStr, oldSN: '', newSN });
+      if(oldSN) swaps.push({ type, plate: state.plate, customer: state.customer, technician: onSiteTechName(), technicianRaw: onSiteTechNameRaw(), date: dateStr, oldSN, newSN: '' });
+      if(newSN && newPlate) swaps.push({ type, plate: newPlate, customer: state.customer, technician: onSiteTechName(), technicianRaw: onSiteTechNameRaw(), date: dateStr, oldSN: '', newSN });
       return;
     }
     swaps.push({
       type, plate: state.plate, customer: state.customer,
-      technician: onSiteTechName(), date: dateStr, oldSN, newSN,
+      technician: onSiteTechName(), technicianRaw: onSiteTechNameRaw(), date: dateStr, oldSN, newSN,
     });
   });
   return swaps;
