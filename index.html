@@ -7,7 +7,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>Dashboard · SONGDEE GPS</title>
-<meta name="app-version" content="1.30.0">
+<meta name="app-version" content="1.31.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -631,13 +631,15 @@
   <div class="card app-hidden" id="adminNameMapCard">
     <div class="card-title"><span class="dot">🔧</span>จัดการชื่อช่าง (เชื่อมกับ Admin web)</div>
     <div class="admin-hint">
-      ชื่อในระบบนี้ (ตอนล็อกอิน) → ชื่อที่ใช้ใน Admin web (ตอนมอบหมายงาน) — ถ้าสองชื่อนี้ไม่ตรงกัน
-      หน้าฟอร์มจะดึงงานที่มอบหมาย/ของ Spare ของช่างคนนั้นไม่เจอ แก้ตรงนี้ได้เลยโดยไม่ต้องรอแก้โค้ด
+      ชื่อในระบบนี้ (เลือกจากลิสต์ — ชื่อเดียวกับที่เลือกได้ในช่อง "ช่างที่กำลังทำรายงานนี้" ตอนกรอกฟอร์ม)
+      → ชื่อที่ใช้คู่กัน ใช้ทั้ง 2 อย่าง: (1) จับคู่กับชื่อใน Admin web (ตอนมอบหมายงาน) ถ้าสองชื่อนี้ไม่ตรงกัน
+      หน้าฟอร์มจะดึงงานที่มอบหมาย/ของ Spare ของช่างคนนั้นไม่เจอ และ (2) ชื่อที่เขียนลง Sheet (MDVR/AI Box/ADAS/DMS
+      Tracking ฯลฯ) ตอนช่างคนนี้แก้ไข Track — แก้ตรงนี้ได้เลยโดยไม่ต้องรอแก้โค้ด
     </div>
     <div id="nameMapRows"></div>
     <div class="name-map-add">
-      <input type="text" id="nameMapNewTech" placeholder="ชื่อในระบบนี้">
-      <input type="text" id="nameMapNewAdmin" placeholder="ชื่อใน Admin web">
+      <select id="nameMapNewTech"><option value="">-- เลือกชื่อช่าง --</option></select>
+      <input type="text" id="nameMapNewAdmin" placeholder="ชื่อคู่ (Admin web / Sheet)">
       <button type="button" onclick="addNameMapRow()">+ เพิ่ม</button>
     </div>
     <div class="name-map-status" id="nameMapStatus"></div>
@@ -906,10 +908,10 @@ _auth.onAuthStateChanged(async user=>{
     document.getElementById('dropdownOptionsCard').classList.toggle('app-hidden', !role.superAdmin);
     await loadDashboard();
     if(role.superAdmin){
+      await loadKnownTechNames(); // ก่อน loadNameMap()/loadLineGroupMap() — ทั้งคู่ต้องมี knownTechNames พร้อมก่อนถึง render dropdown ได้ถูกต้องตั้งแต่ครั้งแรก
       await loadNameMap();
       await loadTesterRoster();
       await loadCustomerFleetLists();
-      await loadKnownTechNames();
       await loadLineGroupMap();
       await loadDropdownOptionLists();
     }
@@ -958,9 +960,28 @@ async function persistNameMap(){
   }
 }
 
+// เติม <option> ในช่อง "เลือกชื่อช่าง" ของแถวเพิ่มใหม่ — ล็อกให้เลือกได้เฉพาะ
+// ชื่อที่เลือกได้จริงในฟอร์ม "ช่างที่กำลังทำรายงานนี้" (knownTechNames, ดู
+// loadKnownTechNames()) กันพิมพ์ผิด/สะกดต่างกัน ซึ่งทำให้ onSiteTechName()/
+// loadAssignments() ฝั่ง form.html จับคู่ไม่เจอเงียบๆ และกันไม่ให้เลือกชื่อที่
+// ตั้งคู่ไว้แล้วซ้ำ (ต้องลบแถวเดิมก่อนถ้าจะเปลี่ยนคู่ชื่อ)
+function renderNameMapTechOptions(){
+  const sel = document.getElementById('nameMapNewTech');
+  if(!sel) return;
+  const current = sel.value;
+  sel.innerHTML = '<option value="">-- เลือกชื่อช่าง --</option>';
+  knownTechNames.filter(n=> !(n in nameMap)).forEach(n=>{
+    const o = document.createElement('option');
+    o.value = n; o.textContent = n;
+    sel.appendChild(o);
+  });
+  if([...sel.options].some(o=> o.value === current)) sel.value = current;
+}
+
 function renderNameMapEditor(){
   const wrap = document.getElementById('nameMapRows');
   wrap.innerHTML = '';
+  renderNameMapTechOptions();
   Object.entries(nameMap).sort(([a],[b])=>a.localeCompare(b)).forEach(([techName, adminName])=>{
     const row = document.createElement('div');
     row.className = 'name-map-row';
@@ -1032,6 +1053,7 @@ async function loadKnownTechNames(){
     knownTechNames = [];
   }
   renderLineGroupMapTechOptions();
+  renderNameMapTechOptions();
 }
 
 async function loadLineGroupMap(){
