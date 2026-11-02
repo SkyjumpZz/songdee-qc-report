@@ -7,7 +7,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>Dashboard · SONGDEE GPS</title>
-<meta name="app-version" content="1.28.0">
+<meta name="app-version" content="1.29.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -646,16 +646,16 @@
   <div class="card app-hidden" id="lineGroupMapCard">
     <div class="card-title"><span class="dot">💬</span>ตั้งกลุ่มไลน์ตามช่าง</div>
     <div class="admin-hint">
-      กำหนดให้รายงานของช่างคนไหน ส่งเข้ากลุ่มไลน์กลุ่มไหน — เลือกชื่อช่างจากลิสต์ (ล็อกไว้ ตรงกับชื่อตอนล็อกอินจริง
-      กันพิมพ์ผิด/ตั้งกลุ่มให้ชื่อที่ไม่มีอยู่จริงเฉยๆ) แล้วใส่ Group ID (พิมพ์ "/กลุ่ม" ในกลุ่มไลน์นั้นๆ
-      เพื่อให้บอทตอบ Group ID มาให้) ช่างที่ยังไม่ตั้งไว้ที่นี่ รายงานจะยังส่งเข้ากลุ่มกลางตามเดิม
-      ส่วนช่างที่ตั้งไว้แล้ว รายงานจะส่งเข้าเฉพาะกลุ่มที่ตั้งไว้เท่านั้น (ไม่ส่งเข้ากลุ่มกลางซ้ำ) —
+      กำหนดให้รายงานของช่างคนไหน ส่งเข้ากลุ่มไลน์กลุ่มไหน — เลือกชื่อช่างจากลิสต์ (ล็อกไว้ ตรงกับชื่อที่เลือกได้จริงใน
+      ช่อง "ช่างที่กำลังทำรายงานนี้" ของฟอร์ม กันพิมพ์ผิด/ตั้งกลุ่มให้ชื่อที่ไม่มีอยู่จริงเฉยๆ) แล้วใส่ Group ID
+      (พิมพ์ "/กลุ่ม" ในกลุ่มไลน์นั้นๆ เพื่อให้บอทตอบ Group ID มาให้) ช่างที่ยังไม่ตั้งไว้ที่นี่ รายงานจะยังส่งเข้า
+      กลุ่มกลางตามเดิม ส่วนช่างที่ตั้งไว้แล้ว รายงานจะส่งเข้าเฉพาะกลุ่มที่ตั้งไว้เท่านั้น (ไม่ส่งเข้ากลุ่มกลางซ้ำ) —
       ถ้ารายงานนั้นมีช่างหลายคน (เลือกไว้ในช่อง "ช่างที่กำลังทำรายงานนี้") และแต่ละคนตั้งกลุ่มไว้คนละกลุ่ม
       ระบบจะส่งเข้าทุกกลุ่มที่เกี่ยวข้องให้อัตโนมัติ
     </div>
     <div id="lineGroupMapRows"></div>
     <div class="name-map-add">
-      <select id="lineGroupMapNewTech"><option value="">-- เลือกชื่อช่าง (ตอนล็อกอิน) --</option></select>
+      <select id="lineGroupMapNewTech"><option value="">-- เลือกชื่อช่าง --</option></select>
       <input type="text" id="lineGroupMapNewGroup" placeholder="LINE Group ID (เช่น Cxxxxxxxx...)">
       <button type="button" onclick="addLineGroupMapRow()">+ เพิ่ม</button>
     </div>
@@ -869,11 +869,12 @@ _auth.onAuthStateChanged(async user=>{
     // Super Admin เท่านั้น — ระดับเหนือ Admin ธรรมดา เห็น/แก้การ์ดเหล่านี้ได้
     // คนเดียว (ตามที่ขอ) role.role==='admin' ธรรมดายังใช้งานฟอร์ม/ประวัติได้
     // ปกติ แค่ไม่เห็นการ์ดเหล่านี้ และไม่โหลดข้อมูลมาฝั่ง client เลยด้วย (ดู
-    // loadNameMap()/loadTesterRoster()/loadLineGroupMap() ด้านล่าง) —
-    // lineGroupMapCard ย้ายมาอยู่กลุ่มนี้ด้วย (เดิมซ่อนไว้เฉยๆ ตอนช่องชื่อช่าง
-    // ยังพิมพ์เองอิสระ ไม่ได้ล็อกกับรายชื่อจริง ตอนนี้ล็อกแล้ว — ดู
-    // renderLineGroupMapTechOptions() ซึ่งต้องมี knownTechNames จาก
-    // loadTesterRoster() ก่อนถึงเรียกได้)
+    // loadNameMap()/loadTesterRoster()/loadKnownTechNames()/loadLineGroupMap()
+    // ด้านล่าง) — lineGroupMapCard ย้ายมาอยู่กลุ่มนี้ด้วย (เดิมซ่อนไว้เฉยๆ ตอน
+    // ช่องชื่อช่างยังพิมพ์เองอิสระ ไม่ได้ล็อกกับรายชื่อจริง ตอนนี้ล็อกแล้ว —
+    // ดู renderLineGroupMapTechOptions() ซึ่งต้องมี knownTechNames จาก
+    // loadKnownTechNames() ก่อนถึงเรียกได้ — รายชื่อตรงนี้คือชื่อที่เลือกได้ใน
+    // ฟอร์ม "ช่างที่กำลังทำรายงานนี้" ไม่ใช่ roles.techName ตอนล็อกอิน)
     document.getElementById('adminNameMapCard').classList.toggle('app-hidden', !role.superAdmin);
     document.getElementById('testerRosterCard').classList.toggle('app-hidden', !role.superAdmin);
     document.getElementById('customerFleetListCard').classList.toggle('app-hidden', !role.superAdmin);
@@ -883,6 +884,7 @@ _auth.onAuthStateChanged(async user=>{
       await loadNameMap();
       await loadTesterRoster();
       await loadCustomerFleetLists();
+      await loadKnownTechNames();
       await loadLineGroupMap();
     }
   }catch(e){
@@ -968,14 +970,43 @@ function addNameMapRow(){
 }
 
 // ---------------------------------------------------------------
-// Admin-editable roles.techName -> LINE group ID bridge. Same generic "sd"
-// blob store/doc-id convention as sd:nameMap (key "sd:lineGroupMap" -> doc
-// id "sd_lineGroupMap"). form.html reads the same doc: when sending a
-// report, if the tester's techName has an entry here, the push to
-// songdee-line-proxy includes that groupId and goes ONLY to that group;
-// unmapped technicians keep going to the proxy's default shared group.
+// Admin-editable "ช่างที่กำลังทำรายงานนี้" name -> LINE group ID bridge. Same
+// generic "sd" blob store/doc-id convention as sd:nameMap (key
+// "sd:lineGroupMap" -> doc id "sd_lineGroupMap"). form.html reads the same
+// doc: when sending a report, for every name picked in "ช่างที่กำลังทำ
+// รายงานนี้" (falls back to the logged-in tester's own techName if none
+// picked) that has an entry here, the push to songdee-line-proxy goes to
+// that group too (several at once if more than one name is mapped);
+// names with no entry just fall back to the proxy's default shared group.
+//
+// IMPORTANT: the key space here is NOT roles.techName (the login name) —
+// it's whatever shows up in form.html's "ช่างที่กำลังทำรายงานนี้" picker,
+// i.e. techStockNames there: the union of sd_tech's keys (ของ Spare ช่าง,
+// can include combo entries like "ช่างตอง+ช่างตี๋") and every assignedToName
+// ever seen across `assignments` docs. knownTechNames below mirrors that
+// exact union so this dropdown only ever offers names that can actually
+// be picked (and therefore matched) on the form side.
 // ---------------------------------------------------------------
 let lineGroupMap = {};
+let knownTechNames = [];
+
+async function loadKnownTechNames(){
+  try{
+    const [techSnap, assignSnap] = await Promise.all([
+      _db.collection('sd').doc('sd_tech').get(),
+      _db.collection('assignments').get(),
+    ]);
+    const allTechStock = techSnap.exists ? JSON.parse(techSnap.data().v || '{}') : {};
+    const assignedNames = assignSnap.docs
+      .map(d=> (d.data().assignedToName || '').trim())
+      .filter(Boolean);
+    knownTechNames = [...new Set([...Object.keys(allTechStock), ...assignedNames])].sort((a,b)=>a.localeCompare(b));
+  }catch(e){
+    console.error('[Known tech names] load failed', e);
+    knownTechNames = [];
+  }
+  renderLineGroupMapTechOptions();
+}
 
 async function loadLineGroupMap(){
   try{
@@ -1007,13 +1038,14 @@ async function persistLineGroupMap(){
 }
 
 // เติม <option> ในช่อง "เลือกชื่อช่าง" ของแถวเพิ่มใหม่ — ล็อกให้เลือกได้เฉพาะ
-// ชื่อจริงจาก roles collection (knownTechNames, ดู loadTesterRoster()) และ
-// กันไม่ให้เลือกชื่อที่ตั้งกลุ่มไว้แล้วซ้ำ (ต้องลบแถวเดิมก่อนถ้าจะเปลี่ยนกลุ่ม)
+// ชื่อที่เลือกได้จริงในฟอร์ม "ช่างที่กำลังทำรายงานนี้" (knownTechNames, ดู
+// loadKnownTechNames()) และกันไม่ให้เลือกชื่อที่ตั้งกลุ่มไว้แล้วซ้ำ (ต้องลบ
+// แถวเดิมก่อนถ้าจะเปลี่ยนกลุ่มของชื่อนั้น)
 function renderLineGroupMapTechOptions(){
   const sel = document.getElementById('lineGroupMapNewTech');
   if(!sel) return;
   const current = sel.value;
-  sel.innerHTML = '<option value="">-- เลือกชื่อช่าง (ตอนล็อกอิน) --</option>';
+  sel.innerHTML = '<option value="">-- เลือกชื่อช่าง --</option>';
   knownTechNames.filter(n=> !(n in lineGroupMap)).forEach(n=>{
     const o = document.createElement('option');
     o.value = n; o.textContent = n;
@@ -1192,10 +1224,6 @@ function addFleetListRow(){
 
 // Admin-only roster: who can log in (email) and what techName they test
 // as, straight from the same roles collection the Stock admin panel uses.
-// Also the source of truth for "ตั้งกลุ่มไลน์ตามช่าง"'s locked ช่างเลือกได้
-// dropdown (knownTechNames below) — ชื่อที่ไม่ได้มาจากที่นี่ไม่ใช่ชื่อล็อกอิน
-// จริง ไม่ควรตั้งกลุ่มไลน์ให้เพราะจะไม่มีทางตรงกับใครที่ login เข้ามาเลย.
-let knownTechNames = [];
 async function loadTesterRoster(){
   const wrap = document.getElementById('testerRosterRows');
   renderSkeleton(wrap, 2);
@@ -1203,8 +1231,6 @@ async function loadTesterRoster(){
     const snap = await _db.collection('roles').get();
     const rows = snap.docs.map(d=>({id: d.id, ...d.data()}));
     rows.sort((a,b)=>(a.techName||a.email||'').localeCompare(b.techName||b.email||''));
-    knownTechNames = [...new Set(rows.map(r=> (r.techName||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
-    renderLineGroupMapTechOptions();
     if(!rows.length){
       wrap.className = 'empty';
       wrap.textContent = 'ยังไม่มีผู้ใช้ในระบบ';
