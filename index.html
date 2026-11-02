@@ -7,7 +7,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>Dashboard · SONGDEE GPS</title>
-<meta name="app-version" content="1.26.0">
+<meta name="app-version" content="1.27.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -346,11 +346,12 @@
   .date-group:first-child{margin-top:0;}
   .history-item{
     border:1px solid var(--line-soft); border-radius:var(--r-md); padding:13px 15px;
-    margin-bottom:10px; cursor:pointer; background:var(--bg-panel); text-decoration:none; display:block;
+    margin-bottom:10px; background:var(--bg-panel); display:block; position:relative;
     box-shadow:var(--shadow-sm);
     transition:border-color .15s ease, transform .15s ease, box-shadow .15s ease;
   }
   .history-item:hover{border-color:var(--accent); transform:translateY(-1px); box-shadow:var(--shadow-md);}
+  .history-item .hi-link{display:block; text-decoration:none; color:inherit; cursor:pointer; padding-right:32px;}
   .history-item .hi-row{display:flex; align-items:flex-start; gap:11px;}
   .history-item .hi-icon{
     width:34px; height:34px; border-radius:11px; flex-shrink:0;
@@ -361,8 +362,28 @@
   .history-item.tpl-new_install .hi-icon{background:linear-gradient(150deg, rgba(61,220,151,.22), rgba(61,220,151,.06)); border-color:rgba(61,220,151,.28);}
   .history-item.tpl-repair .hi-icon{background:linear-gradient(150deg, rgba(220,38,38,.18), rgba(220,38,38,.06)); border-color:rgba(220,38,38,.26);}
   .history-item .hi-text{flex:1; min-width:0;}
-  .history-item .title{font-size:14px; font-weight:600; color:var(--text);}
+  .history-item .title{font-size:14px; font-weight:600; color:var(--text); display:flex; align-items:center; gap:7px; flex-wrap:wrap;}
   .history-item .meta{font-size:12px; color:var(--text-dim); margin-top:4px;}
+  .hi-sent-badge{font-size:10.5px; font-weight:700; padding:2px 7px; border-radius:20px; white-space:nowrap;}
+  .hi-sent-badge.sent{color:#3ddc97; background:rgba(61,220,151,.14); border:1px solid rgba(61,220,151,.28);}
+  .hi-sent-badge.unsent{color:#ffb020; background:rgba(255,176,32,.14); border:1px solid rgba(255,176,32,.28);}
+  .hi-menu-btn{
+    position:absolute; top:10px; right:10px; width:26px; height:26px; border-radius:8px;
+    border:1px solid var(--line-soft); background:var(--bg-panel-2); color:var(--text-dim);
+    display:flex; align-items:center; justify-content:center; font-size:15px; line-height:1; cursor:pointer;
+  }
+  .hi-menu-btn:hover{color:var(--text); border-color:var(--accent);}
+  .hi-menu{
+    position:absolute; top:38px; right:10px; z-index:30; min-width:210px;
+    background:var(--bg-panel); border:1px solid var(--line-soft); border-radius:var(--r-md);
+    box-shadow:var(--shadow-md); padding:6px; display:flex; flex-direction:column; gap:2px;
+  }
+  .hi-menu-status{font-size:11px; color:var(--text-dim); padding:6px 8px 8px; border-bottom:1px solid var(--line-soft); margin-bottom:2px;}
+  .hi-menu-item{
+    display:block; padding:8px 8px; border-radius:7px; font-size:13px; color:var(--text);
+    text-decoration:none; cursor:pointer; background:none; border:none; text-align:left; font-family:inherit;
+  }
+  .hi-menu-item:hover{background:var(--bg-panel-2);}
   .empty, .err, .loading{color:var(--text-dim); font-size:13px; padding:40px 0; text-align:center;}
   .skeleton-wrap{display:flex; flex-direction:column; gap:10px;}
   .skeleton-row{
@@ -1319,13 +1340,58 @@ function renderList(list){
     }
     const tplLabel = TEMPLATE_LABELS[doc.tpl] || doc.tpl || '';
     const tplIcon = TEMPLATE_ICONS[doc.tpl] || '📄';
-    const a = document.createElement('a');
-    a.className = 'history-item' + (doc.tpl ? ' tpl-' + doc.tpl : '');
-    a.href = `form.html?report=${encodeURIComponent(doc.id)}`;
-    a.innerHTML = `<div class="hi-row"><div class="hi-icon">${tplIcon}</div><div class="hi-text"><div class="title">${escapeHtmlLite(tplLabel)} ${escapeHtmlLite(doc.customer||'')}</div><div class="meta">ทะเบียน: ${escapeHtmlLite(doc.plate||'-')} · ผู้ทดสอบ: ${escapeHtmlLite(doc.techName||'-')}</div></div></div>`;
-    listEl.appendChild(a);
+    const editHref = `form.html?report=${encodeURIComponent(doc.id)}`;
+    const resendHref = `form.html?report=${encodeURIComponent(doc.id)}&autosend=1`;
+    const sentBadge = doc.lineSentAt
+      ? `<span class="hi-sent-badge sent">✓ ส่งแล้ว</span>`
+      : `<span class="hi-sent-badge unsent">ยังไม่ส่ง LINE</span>`;
+    const sentStatusText = doc.lineSentAt
+      ? `ส่งเข้า LINE แล้ว — ${formatSentAt(doc.lineSentAt)}`
+      : 'ยังไม่เคยส่งเข้า LINE';
+    const wrap = document.createElement('div');
+    wrap.className = 'history-item' + (doc.tpl ? ' tpl-' + doc.tpl : '');
+    wrap.innerHTML = `
+      <a class="hi-link" href="${editHref}">
+        <div class="hi-row">
+          <div class="hi-icon">${tplIcon}</div>
+          <div class="hi-text">
+            <div class="title">${escapeHtmlLite(tplLabel)} ${escapeHtmlLite(doc.customer||'')} ${sentBadge}</div>
+            <div class="meta">ทะเบียน: ${escapeHtmlLite(doc.plate||'-')} · ผู้ทดสอบ: ${escapeHtmlLite(doc.techName||'-')}</div>
+          </div>
+        </div>
+      </a>
+      <button type="button" class="hi-menu-btn" title="ตัวเลือกเพิ่มเติม">⋮</button>
+      <div class="hi-menu app-hidden">
+        <div class="hi-menu-status">${escapeHtmlLite(sentStatusText)}</div>
+        <a class="hi-menu-item" href="${resendHref}">📤 ส่งเข้า LINE อีกครั้ง</a>
+        <a class="hi-menu-item" href="${editHref}">✏️ แก้ไขรายงาน</a>
+      </div>
+    `;
+    wrap.querySelector('.hi-menu-btn').addEventListener('click', e=>{
+      e.preventDefault(); e.stopPropagation();
+      const menu = wrap.querySelector('.hi-menu');
+      const willShow = menu.classList.contains('app-hidden');
+      closeAllHiMenus();
+      menu.classList.toggle('app-hidden', !willShow);
+    });
+    listEl.appendChild(wrap);
   });
 }
+
+// วันที่/เวลาแบบ พ.ศ.-อิสระ (toLocaleString('th-TH') จะใช้ปี พ.ศ. ทำให้
+// สับสนกับที่อื่นในแอปที่ใช้ ค.ศ. ทั้งหมด) — เลขเรียบง่าย dd/mm/yyyy hh:mm
+function formatSentAt(ts){
+  if(!ts) return '';
+  const d = new Date(ts);
+  const pad = n=> String(n).padStart(2,'0');
+  return `${pad(d.getDate())}/${pad(d.getMonth()+1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+// เมนู ⋮ ของแต่ละการ์ด — เปิดได้ทีละอันเท่านั้น และปิดเองเมื่อคลิกนอกเมนู
+function closeAllHiMenus(){
+  document.querySelectorAll('.hi-menu').forEach(m=> m.classList.add('app-hidden'));
+}
+document.addEventListener('click', closeAllHiMenus);
 
 const APP_VERSION = document.querySelector('meta[name="app-version"]').content;
 document.getElementById('versionTag').textContent = 'v' + APP_VERSION;

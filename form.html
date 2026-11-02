@@ -10,7 +10,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.80.0">
+<meta name="app-version" content="1.81.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -2227,14 +2227,24 @@ function loadReportIntoForm(doc){
 // If opened as index.html?report=<id> (link from history.html/Dashboard),
 // load that report once logged in, then strip the param so a page refresh
 // doesn't keep reloading the same report over manual edits.
+// &autosend=1 (จากปุ่ม "ส่งเข้า LINE อีกครั้ง" ในการ์ดของ Dashboard) — ยืนยัน
+// สั้นๆ แล้วเรียก sendToLine() ให้เองทันทีที่โหลดรายงานเสร็จ ไม่ต้องกดปุ่ม
+// ส่งอีกรอบ — ใช้ sendToLine() เดิมเป๊ะๆ (ส่งหลายกลุ่ม/อัปเดตชีต/ปิด issue
+// ครบเหมือนกดส่งเองทุกประการ) ไม่ได้เขียนเส้นทางส่งแยกต่างหาก
 async function loadReportFromUrlIfAny(){
   const params = new URLSearchParams(location.search);
   const id = params.get('report');
+  const autosend = params.get('autosend') === '1';
   if(!id) return;
   try{
     const snap = await _db.collection('qc_reports').doc(id).get();
     if(snap.exists){
       loadReportIntoForm({id: snap.id, ...snap.data()});
+      if(autosend){
+        history.replaceState(null, '', location.pathname);
+        if(confirm('ส่งรายงานนี้เข้า LINE อีกครั้งหรือไม่?')) sendToLine();
+        return;
+      }
     }
   }catch(e){
     console.error('[Report load from URL]', e);
@@ -4490,6 +4500,14 @@ async function sendToLine(){
         const groupSuffix = destinations.length > 1 ? ` (${destinations.length} กลุ่ม)` : '';
         showToast('ส่งเข้า LINE แล้ว ✓' + groupSuffix + saveSuffix);
         celebrateSuccess();
+        // บันทึกเวลาที่ส่งเข้า LINE สำเร็จไว้ในรายงาน — ให้ Dashboard
+        // (index.html) โชว์ป้ายสถานะ "ส่งแล้ว/ยังไม่ส่ง" ต่อการ์ดได้ ไม่ต้อง
+        // เดาจาก field อื่น. Non-fatal — รายงานก็ยังถือว่าส่งสำเร็จแม้
+        // บันทึกเวลานี้ไม่สำเร็จ (เช่น เน็ตหลุดพอดีหลัง push แล้ว)
+        if(currentReportId){
+          try{ await _db.collection('qc_reports').doc(currentReportId).set({ lineSentAt: Date.now() }, {merge:true}); }
+          catch(e){ console.error('[lineSentAt save]', e); }
+        }
         // กันกดส่งซ้ำ/แก้ต่อโดยไม่ตั้งใจบนรายงานที่ส่งไปแล้ว — เดิม (v1.43.0)
         // ใช้ location.href เด้งไปหน้า Dashboard อัตโนมัติ แต่กลายเป็นเด้งออก
         // ไปหน้า Login ทุกครั้งแทน (บัญชีที่ไม่ได้ติ๊ก "จดจำฉันไว้" ใช้ Firebase
