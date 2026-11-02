@@ -10,7 +10,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.84.0">
+<meta name="app-version" content="1.85.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -1550,6 +1550,33 @@ async function loadDeviceLookup(){
 const ISSUE_ENDPOINT = 'https://songdee-vehicle-lookup.songdeegps.workers.dev/issue';
 const ISSUE_CLOSE_ENDPOINT = 'https://songdee-vehicle-lookup.songdeegps.workers.dev/issue-close';
 let openIssues = []; // [{ticketNo, feedback, closeChecked, cause}] — a plate can have more than one open ticket at once
+
+// บันทึกรายงาน QC ทุกฉบับลงสเปรดชีตแยกต่างหาก (ไม่เกี่ยวกับ MDVR/AI Box
+// Tracking) — หนึ่งแถวต่อหนึ่งรายงาน อัปเดตแถวเดิมซ้ำได้ด้วย reportId (ดู
+// upsertQcReportLog() ฝั่ง Worker) เรียกครั้งแรกตอนบันทึกรายงานสำเร็จ (สถานะ
+// "ยังไม่ส่ง") แล้วเรียกอีกครั้งตอนส่งเข้า LINE สำเร็จ (สถานะ "ส่งแล้ว")
+const QC_LOG_ENDPOINT = 'https://songdee-vehicle-lookup.songdeegps.workers.dev/qc-log';
+async function pushQcReportLog(lineSent){
+  if(!currentReportId) return null;
+  const res = await fetch(QC_LOG_ENDPOINT, {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({
+      reportId: currentReportId,
+      date: state.date || '',
+      tpl: (TEMPLATES[state.tpl]||{}).label || state.tpl || '',
+      plate: state.plate || '',
+      customer: state.customer || '',
+      onSiteTech: onSiteTechName(),
+      techName: tester.techName || '',
+      reportUrl: `${location.origin}${location.pathname}?report=${encodeURIComponent(currentReportId)}`,
+      lineSent: !!lineSent,
+    })
+  });
+  const data = await res.json();
+  if(!res.ok || !data.ok) throw new Error(data.error || ('HTTP ' + res.status));
+  return data;
+}
 
 // ตัวเลือก "Cause" ตอนปิด Issue — ตรงกับคอลัมน์ "Cause" จริงในชีต ISSUES-All
 // (ดึงจากค่าจริงที่มีอยู่แล้วในชีต เรียงจากที่ใช้บ่อยไปน้อย "Others" ไว้ท้ายสุด
@@ -4403,6 +4430,14 @@ async function sendToLine(){
     catch(e){ saveError = e; console.error('[Report save]', e); }
     let saveSuffix = (saveError ? ` (บันทึกลง database ไม่สำเร็จ: ${saveError.message})` : '') + photoSuffix;
 
+    // บันทึกลงชีต "QC Report Log" ด้วย — สถานะ "ยังไม่ส่ง" ก่อน (อัปเดตเป็น
+    // "ส่งแล้ว" อีกทีตอน push LINE สำเร็จด้านล่าง) ไม่ fatal — รายงานยังถือว่า
+    // บันทึก/ส่งสำเร็จแม้บันทึกลงชีตนี้ไม่สำเร็จ
+    if(!saveError){
+      try{ await pushQcReportLog(false); }
+      catch(e){ console.error('[QC log save]', e); }
+    }
+
     // ติดตั้งใหม่: write the picked MDVR unit's plate/Device ID/Server (and
     // customer/date/technician) into the MDVR Tracking sheet. No-ops for
     // every other job type, or if no IMEI was picked.
@@ -4534,6 +4569,8 @@ async function sendToLine(){
         if(currentReportId){
           try{ await _db.collection('qc_reports').doc(currentReportId).set({ lineSentAt: Date.now() }, {merge:true}); }
           catch(e){ console.error('[lineSentAt save]', e); }
+          try{ await pushQcReportLog(true); }
+          catch(e){ console.error('[QC log save]', e); }
         }
         // กันกดส่งซ้ำ/แก้ต่อโดยไม่ตั้งใจบนรายงานที่ส่งไปแล้ว — เดิม (v1.43.0)
         // ใช้ location.href เด้งไปหน้า Dashboard อัตโนมัติ แต่กลายเป็นเด้งออก
