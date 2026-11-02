@@ -7,7 +7,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>Dashboard · SONGDEE GPS</title>
-<meta name="app-version" content="1.25.1">
+<meta name="app-version" content="1.26.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -627,7 +627,9 @@
     <div class="admin-hint">
       กำหนดให้รายงานของช่างคนไหน ส่งเข้ากลุ่มไลน์กลุ่มไหน — ใส่ Group ID ได้เลย (พิมพ์ "/กลุ่ม" ในกลุ่มไลน์นั้นๆ
       เพื่อให้บอทตอบ Group ID มาให้) ช่างที่ยังไม่ตั้งไว้ที่นี่ รายงานจะยังส่งเข้ากลุ่มกลางตามเดิม
-      ส่วนช่างที่ตั้งไว้แล้ว รายงานจะส่งเข้าเฉพาะกลุ่มที่ตั้งไว้เท่านั้น (ไม่ส่งเข้ากลุ่มกลางซ้ำ)
+      ส่วนช่างที่ตั้งไว้แล้ว รายงานจะส่งเข้าเฉพาะกลุ่มที่ตั้งไว้เท่านั้น (ไม่ส่งเข้ากลุ่มกลางซ้ำ) —
+      ถ้ารายงานนั้นมีช่างหลายคน (เลือกไว้ในช่อง "ช่างที่กำลังทำรายงานนี้") และแต่ละคนตั้งกลุ่มไว้คนละกลุ่ม
+      ระบบจะส่งเข้าทุกกลุ่มที่เกี่ยวข้องให้อัตโนมัติ
     </div>
     <div id="lineGroupMapRows"></div>
     <div class="name-map-add">

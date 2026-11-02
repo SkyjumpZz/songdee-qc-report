@@ -10,7 +10,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.79.0">
+<meta name="app-version" content="1.80.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -1930,10 +1930,12 @@ async function loadNameMap(){
 // roles.techName -> LINE group ID bridge, same "sd" blob store as
 // sd:nameMap (key "sd:lineGroupMap" -> doc id "sd_lineGroupMap"), editable
 // from the Dashboard's admin panel (index.html). sendToLine() below looks
-// up the logged-in tester's own techName here: if mapped, the push to
-// songdee-line-proxy includes that groupId and goes ONLY to that LINE
-// group; if unmapped, the field is omitted and the proxy falls back to
-// its single default shared group (unchanged behavior).
+// up every "ช่างที่กำลังทำรายงานนี้" name here (falling back to the logged-in
+// tester's own techName if none picked) — a report can go to several of
+// them at once if each has a different group mapped (deduped), one push
+// per distinct group ID. If none of them is mapped, the field is omitted
+// and the proxy falls back to its single default shared group (unchanged
+// behavior).
 // ---------------------------------------------------------------
 let lineGroupMap = {};
 
@@ -4466,14 +4468,27 @@ async function sendToLine(){
     }
     try{
       showToast('กำลังส่ง...');
-      const groupId = lineGroupMap[tester.techName];
-      const res = await fetch(endpoint, {
-        method:'POST',
-        headers:{'Content-Type':'application/json', 'X-Api-Key': LINE_API_KEY},
-        body: JSON.stringify({ message: buildLineCard(), ...(groupId ? { groupId } : {}) })
-      });
+      // ส่งเข้าได้หลายกลุ่มพร้อมกัน — เดิมดูกลุ่มจากแค่ tester.techName (บัญชีที่
+      // ล็อกอิน) คนเดียว แต่ "ช่างที่กำลังทำรายงานนี้" เลือกได้หลายคน แต่ละคนอาจมี
+      // กลุ่มไลน์ของตัวเองคนละกลุ่ม (lineGroupMap) — ยิงเข้าทุกกลุ่มที่เกี่ยวข้อง
+      // (dedupe กันกลุ่มซ้ำถ้าหลายคนตั้งกลุ่มเดียวกันไว้) ถ้าไม่มีใครตั้งกลุ่มไว้
+      // เลย fallback ไปกลุ่มกลางเหมือนเดิม (ไม่ส่ง groupId ไปเลย)
+      const namesForGroups = techStockOwnerNames.length ? techStockOwnerNames : (tester.techName ? [tester.techName] : []);
+      const groupIds = [...new Set(namesForGroups.map(n=> lineGroupMap[n]).filter(Boolean))];
+      const destinations = groupIds.length ? groupIds : [null]; // null = กลุ่มกลาง
+      const card = buildLineCard();
+      const pushResults = await Promise.all(destinations.map(groupId=>
+        fetch(endpoint, {
+          method:'POST',
+          headers:{'Content-Type':'application/json', 'X-Api-Key': LINE_API_KEY},
+          body: JSON.stringify({ message: card, ...(groupId ? { groupId } : {}) })
+        }).then(res=> ({ ok: res.ok, status: res.status })).catch(()=> ({ ok:false, status:0 }))
+      ));
+      const okCount = pushResults.filter(r=> r.ok).length;
+      const res = { ok: okCount === destinations.length, status: pushResults.find(r=> !r.ok)?.status || 200 };
       if(res.ok){
-        showToast('ส่งเข้า LINE แล้ว ✓' + saveSuffix);
+        const groupSuffix = destinations.length > 1 ? ` (${destinations.length} กลุ่ม)` : '';
+        showToast('ส่งเข้า LINE แล้ว ✓' + groupSuffix + saveSuffix);
         celebrateSuccess();
         // กันกดส่งซ้ำ/แก้ต่อโดยไม่ตั้งใจบนรายงานที่ส่งไปแล้ว — เดิม (v1.43.0)
         // ใช้ location.href เด้งไปหน้า Dashboard อัตโนมัติ แต่กลายเป็นเด้งออก
@@ -4488,7 +4503,11 @@ async function sendToLine(){
           document.getElementById('sentLinkWrap').classList.remove('app-hidden');
         }
       }
-      else{ showToast('ส่งไม่สำเร็จ (' + res.status + ') — คัดลอกข้อความสำรองไว้แล้ว' + saveSuffix); navigator.clipboard.writeText(text).catch(()=>{}); }
+      else{
+        const partial = okCount > 0 ? ` (สำเร็จ ${okCount}/${destinations.length} กลุ่ม)` : ' (' + res.status + ')';
+        showToast('ส่งไม่สำเร็จ' + partial + ' — คัดลอกข้อความสำรองไว้แล้ว' + saveSuffix);
+        navigator.clipboard.writeText(text).catch(()=>{});
+      }
     }catch(err){
       showToast('เชื่อมต่อ endpoint ไม่ได้ — คัดลอกข้อความสำรองไว้แล้ว' + saveSuffix);
       navigator.clipboard.writeText(text).catch(()=>{});
