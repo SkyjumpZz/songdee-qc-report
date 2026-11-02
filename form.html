@@ -10,7 +10,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.89.0">
+<meta name="app-version" content="1.90.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -674,6 +674,12 @@
         <label><span id="jobPlateLabel">ทะเบียน</span><span class="req">*</span></label>
         <input type="text" id="jobPlate" placeholder="เช่น 1กก-1234" autocomplete="off">
         <div class="suggest-dropdown app-hidden" id="jobPlateSuggestions"></div>
+      </div>
+    </div>
+    <div class="row2">
+      <div class="suggest-field">
+        <label>ทะเบียนหาง (ถ้ามี)</label>
+        <input type="text" id="jobTrailerPlate" placeholder="เช่น 1กก-1234" autocomplete="off">
       </div>
     </div>
     <div class="row2 app-hidden" id="jobNewPlateRow">
@@ -2096,7 +2102,7 @@ function fixRowSummaryForDiff(row){
   return parts.join(' ') || '(ว่าง)';
 }
 const REPORT_FIELD_LABELS = {
-  tpl: 'ประเภทงาน', date: 'วันที่', customer: 'ลูกค้า', fleet: 'Fleet', plate: 'ทะเบียน',
+  tpl: 'ประเภทงาน', date: 'วันที่', customer: 'ลูกค้า', fleet: 'Fleet', plate: 'ทะเบียน', trailerPlate: 'ทะเบียนหาง',
   network: 'เครือข่ายอุปกรณ์', mdvrImei: 'IMEI', mdvrDeviceId: 'Device ID', mdvrServer: 'Server',
   installMdvrPlacement: 'จุดวาง MDVR', installPowerSource: 'จุดจ่ายไฟ',
   installSpeakerPlacement: 'จุดติดตั้งลำโพง', installMicPlacement: 'จุดติดตั้งไมค์',
@@ -2176,6 +2182,7 @@ async function logReportChange(action, payload, changes){
 async function saveReport(){
   const payload = {
     tpl: state.tpl, date: state.date, customer: state.customer, fleet: state.fleet, plate: state.plate,
+    trailerPlate: state.trailerPlate || '',
     // ถอดย้ายอุปกรณ์ only — ทะเบียนใหม่ (ปลายทาง) ดู defaultState()/renderTabs()
     newPlate: state.newPlate || '',
     problems: state.problems, fixes: state.fixes, stickers: state.stickers, stickerRemark: state.stickerRemark || '', checklist: state.checklist,
@@ -2231,6 +2238,7 @@ function loadReportIntoForm(doc){
     customer: doc.customer || '',
     fleet: doc.fleet || '',
     plate: doc.plate || '',
+    trailerPlate: doc.trailerPlate || '',
     newPlate: doc.newPlate || '',
     problems: (doc.problems && doc.problems.length) ? doc.problems : [{symptom:''}],
     fixes: (doc.fixes && doc.fixes.length) ? doc.fixes.map(r=> ({section:'pair', ...r})) : [{product:'', qty:1, custom:'', oldModel:'', oldModelCustom:'', newSN:'', oldSN:'', ch:'', section:'pair'}],
@@ -2709,6 +2717,7 @@ function defaultState(){
     customer: "",
     fleet: "",
     plate: "",
+    trailerPlate: "", // ทะเบียนหาง (ถ้ามี) — ไม่บังคับ แค่ข้อความประกอบรายงาน ไม่ผูกกับ Sheet/ใบเบิกใดๆ
     // ถอดย้ายอุปกรณ์ only — ทะเบียนใหม่ (ปลายทางที่ย้ายอุปกรณ์ไปติดตั้ง) ถ้ามี;
     // state.plate สำหรับ template นี้หมายถึง "ทะเบียนเก่า" (คันที่ถอดออกมา) —
     // ดู renderTabs()/buildSheetUpdates()/buildDeviceSwaps()
@@ -2802,6 +2811,7 @@ function syncFormInputsFromState(){
   document.getElementById('jobCustomer').value = state.customer || '';
   document.getElementById('jobFleet').value = state.fleet || '';
   document.getElementById('jobPlate').value = state.plate || '';
+  document.getElementById('jobTrailerPlate').value = state.trailerPlate || '';
   document.getElementById('jobNewPlate').value = state.newPlate || '';
   document.getElementById('mdvrDeviceId').value = state.mdvrDeviceId || '';
   document.getElementById('mdvrServerSelect').value = state.mdvrServer || '';
@@ -3476,8 +3486,9 @@ function renderChecklist(){
     lbl.className = 'lbl';
     lbl.innerHTML = `<span class="mark">🔺</span><span>${item.text}</span>`;
 
-    // กล่องเหล็ก — มี/ไม่มี ไม่ใช่แค่ติ๊กผ่านเฉยๆ แบบช่องอื่น ถ้าไม่มีต้องบังคับ
-    // ใส่เหตุผล (ดู getMissingFields()) เก็บเป็น {has, reason} แทนบูลีนตัวเดียว
+    // กล่องเหล็ก — มี/ไม่มี ไม่ใช่แค่ติ๊กผ่านเฉยๆ แบบช่องอื่น เลือก "ไม่มี" แล้ว
+    // ใส่เหตุผลหรือไม่ก็ได้ (ไม่บังคับ — ดู getMissingFields()) เก็บเป็น
+    // {has, reason} แทนบูลีนตัวเดียว
     if(item.type === 'steelbox'){
       const v = state.checklist[item.key] || { has: null, reason: '' };
       state.checklist[item.key] = v;
@@ -3493,7 +3504,7 @@ function renderChecklist(){
       [yesBtn, noBtn].forEach(b=>{ b.style.cssText = 'flex:1;padding:6px 8px;border-radius:8px;border:1px solid var(--line);background:transparent;color:inherit;font:inherit;cursor:pointer;'; });
       const reasonInput = document.createElement('input');
       reasonInput.type = 'text';
-      reasonInput.placeholder = 'เหตุผลที่ไม่มีกล่องเหล็ก';
+      reasonInput.placeholder = 'เหตุผลที่ไม่มีกล่องเหล็ก (ถ้ามี)';
       reasonInput.value = v.reason || '';
       reasonInput.style.cssText = 'width:100%;box-sizing:border-box;';
       reasonInput.oninput = ()=>{ v.reason = reasonInput.value; updatePreview(); };
@@ -4127,6 +4138,7 @@ function buildMessage(){
   } else {
     lines.push(`ทะเบียน: ${state.plate || '(ยังไม่ระบุ)'}`);
   }
+  if(state.trailerPlate) lines.push(`ทะเบียนหาง: ${state.trailerPlate}`);
   lines.push('');
 
   const problemLines = tplHasProblems(state.tpl) ? state.problems.map(problemLine).filter(Boolean) : [];
@@ -4200,6 +4212,7 @@ function buildLineCard(){
   } else {
     fields.push({label:'ทะเบียน', value: state.plate || '-'});
   }
+  if(state.trailerPlate) fields.push({label:'ทะเบียนหาง', value: state.trailerPlate});
   fields.push({label:'ผู้ทดสอบ', value: tester.techName || '-'});
 
   const sections = [];
@@ -4281,9 +4294,10 @@ function getMissingFields(){
   });
   TEMPLATES[state.tpl].checklist.forEach(item=>{
     if(item.type === 'steelbox'){
+      // เลือก "ไม่มีกล่องเหล็ก" แล้ว ไม่บังคับใส่เหตุผลอีกต่อไป (ตามที่ขอ) —
+      // ต่างจาก DB9 ด้านล่างที่ยังบังคับอยู่เหมือนเดิม
       const v = state.checklist[item.key];
       if(!v || v.has === null || v.has === undefined) missing.push(item.text);
-      else if(v.has === false && !(v.reason||'').trim()) missing.push(item.text + ' (เหตุผลที่ไม่มีกล่องเหล็ก)');
       return;
     }
     if(item.type === 'db9'){
@@ -4346,6 +4360,7 @@ document.getElementById('jobDateYear').addEventListener('change', onJobDateSelec
 // wireSuggestInput() ด้านบน) state.customer/state.fleet อัปเดตเฉพาะตอน
 // เลือกจาก dropdown (onPick) เท่านั้น พิมพ์เฉยๆ แค่กรองลิสต์ ไม่ commit ค่า
 document.getElementById('jobPlate').addEventListener('input', e=>{ state.plate = e.target.value; updatePreview(); scheduleStockLockCheck(); });
+document.getElementById('jobTrailerPlate').addEventListener('input', e=>{ state.trailerPlate = e.target.value; updatePreview(); });
 document.getElementById('jobNewPlate').addEventListener('input', e=>{ state.newPlate = e.target.value; updatePreview(); renderFixRows(); });
 document.getElementById('jobAssignSelect').addEventListener('change', e=>{ onAssignmentSelect(e.target.value); });
 document.getElementById('mdvrImeiInput').addEventListener('input', e=>{ state.mdvrImei = e.target.value; updatePreview(); });
