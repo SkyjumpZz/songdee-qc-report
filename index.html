@@ -7,7 +7,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>Dashboard · SONGDEE GPS</title>
-<meta name="app-version" content="1.27.0">
+<meta name="app-version" content="1.28.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -173,7 +173,7 @@
     display:block; font-size:12.5px; color:var(--text-dim); margin:10px 0 5px;
     font-weight:500;
   }
-  input[type=text], input[type=password]{
+  input[type=text], input[type=password], select{
     width:100%;
     background:var(--bg-panel-2);
     border:1px solid var(--line);
@@ -184,7 +184,7 @@
     font-family:inherit;
     transition:border-color .15s ease, box-shadow .15s ease;
   }
-  input:focus{
+  input:focus, select:focus{
     outline:none; border-color:var(--accent);
     box-shadow:var(--shadow-glow-accent);
   }
@@ -440,7 +440,7 @@
   .name-map-row button{background:none; border:1px solid var(--line); color:var(--danger);}
   .name-map-row button:hover{background:rgba(220,38,38,.08); border-color:var(--danger);}
   .name-map-add{display:grid; grid-template-columns:1fr 1fr auto; gap:8px; margin-top:6px;}
-  .name-map-add input{background:var(--bg-input); border-radius:var(--r-sm); box-shadow:inset 0 1px 2px rgba(0,0,0,.25);}
+  .name-map-add input, .name-map-add select{background:var(--bg-input); border-radius:var(--r-sm); box-shadow:inset 0 1px 2px rgba(0,0,0,.25);}
   .name-map-add button{background:linear-gradient(135deg, var(--accent-2), #2bc386); border:none; color:#06251a; font-weight:700;}
   .name-map-add button:hover{filter:brightness(1.08);}
   .name-map-status{font-size:12px; color:var(--text-dim); margin-top:9px; min-height:1em;}
@@ -646,7 +646,8 @@
   <div class="card app-hidden" id="lineGroupMapCard">
     <div class="card-title"><span class="dot">💬</span>ตั้งกลุ่มไลน์ตามช่าง</div>
     <div class="admin-hint">
-      กำหนดให้รายงานของช่างคนไหน ส่งเข้ากลุ่มไลน์กลุ่มไหน — ใส่ Group ID ได้เลย (พิมพ์ "/กลุ่ม" ในกลุ่มไลน์นั้นๆ
+      กำหนดให้รายงานของช่างคนไหน ส่งเข้ากลุ่มไลน์กลุ่มไหน — เลือกชื่อช่างจากลิสต์ (ล็อกไว้ ตรงกับชื่อตอนล็อกอินจริง
+      กันพิมพ์ผิด/ตั้งกลุ่มให้ชื่อที่ไม่มีอยู่จริงเฉยๆ) แล้วใส่ Group ID (พิมพ์ "/กลุ่ม" ในกลุ่มไลน์นั้นๆ
       เพื่อให้บอทตอบ Group ID มาให้) ช่างที่ยังไม่ตั้งไว้ที่นี่ รายงานจะยังส่งเข้ากลุ่มกลางตามเดิม
       ส่วนช่างที่ตั้งไว้แล้ว รายงานจะส่งเข้าเฉพาะกลุ่มที่ตั้งไว้เท่านั้น (ไม่ส่งเข้ากลุ่มกลางซ้ำ) —
       ถ้ารายงานนั้นมีช่างหลายคน (เลือกไว้ในช่อง "ช่างที่กำลังทำรายงานนี้") และแต่ละคนตั้งกลุ่มไว้คนละกลุ่ม
@@ -654,7 +655,7 @@
     </div>
     <div id="lineGroupMapRows"></div>
     <div class="name-map-add">
-      <input type="text" id="lineGroupMapNewTech" placeholder="ชื่อช่าง (ตอนล็อกอิน)">
+      <select id="lineGroupMapNewTech"><option value="">-- เลือกชื่อช่าง (ตอนล็อกอิน) --</option></select>
       <input type="text" id="lineGroupMapNewGroup" placeholder="LINE Group ID (เช่น Cxxxxxxxx...)">
       <button type="button" onclick="addLineGroupMapRow()">+ เพิ่ม</button>
     </div>
@@ -865,25 +866,24 @@ _auth.onAuthStateChanged(async user=>{
     testerBar.classList.remove('app-hidden');
     pageTabs.classList.remove('app-hidden');
     stats.classList.remove('app-hidden');
-    // Super Admin เท่านั้น — ระดับเหนือ Admin ธรรมดา เห็น/แก้การ์ดทั้งสองนี้ได้
+    // Super Admin เท่านั้น — ระดับเหนือ Admin ธรรมดา เห็น/แก้การ์ดเหล่านี้ได้
     // คนเดียว (ตามที่ขอ) role.role==='admin' ธรรมดายังใช้งานฟอร์ม/ประวัติได้
-    // ปกติ แค่ไม่เห็น 2 การ์ดนี้ และไม่โหลดข้อมูลมาฝั่ง client เลยด้วย (ดู
-    // loadNameMap()/loadTesterRoster() ด้านล่าง)
+    // ปกติ แค่ไม่เห็นการ์ดเหล่านี้ และไม่โหลดข้อมูลมาฝั่ง client เลยด้วย (ดู
+    // loadNameMap()/loadTesterRoster()/loadLineGroupMap() ด้านล่าง) —
+    // lineGroupMapCard ย้ายมาอยู่กลุ่มนี้ด้วย (เดิมซ่อนไว้เฉยๆ ตอนช่องชื่อช่าง
+    // ยังพิมพ์เองอิสระ ไม่ได้ล็อกกับรายชื่อจริง ตอนนี้ล็อกแล้ว — ดู
+    // renderLineGroupMapTechOptions() ซึ่งต้องมี knownTechNames จาก
+    // loadTesterRoster() ก่อนถึงเรียกได้)
     document.getElementById('adminNameMapCard').classList.toggle('app-hidden', !role.superAdmin);
     document.getElementById('testerRosterCard').classList.toggle('app-hidden', !role.superAdmin);
     document.getElementById('customerFleetListCard').classList.toggle('app-hidden', !role.superAdmin);
-    // ซ่อนไว้ก่อน — ช่องชื่อช่างเป็นพิมพ์เองอิสระ อยากให้เป็น Dropdown จาก
-    // รายชื่อช่างฝั่ง Admin แทนก่อนเปิดใช้งานจริง (ตามที่ขอ ยังไม่ได้ต่อสาย
-    // ดึงรายชื่อช่างจาก Admin เข้ามา)
-    document.getElementById('lineGroupMapCard').classList.add('app-hidden');
+    document.getElementById('lineGroupMapCard').classList.toggle('app-hidden', !role.superAdmin);
     await loadDashboard();
-    if(role.role === 'admin'){
-      await loadLineGroupMap();
-    }
     if(role.superAdmin){
       await loadNameMap();
       await loadTesterRoster();
       await loadCustomerFleetLists();
+      await loadLineGroupMap();
     }
   }catch(e){
     err.textContent = t('errRoleLoad') + e.message;
@@ -1006,9 +1006,26 @@ async function persistLineGroupMap(){
   }
 }
 
+// เติม <option> ในช่อง "เลือกชื่อช่าง" ของแถวเพิ่มใหม่ — ล็อกให้เลือกได้เฉพาะ
+// ชื่อจริงจาก roles collection (knownTechNames, ดู loadTesterRoster()) และ
+// กันไม่ให้เลือกชื่อที่ตั้งกลุ่มไว้แล้วซ้ำ (ต้องลบแถวเดิมก่อนถ้าจะเปลี่ยนกลุ่ม)
+function renderLineGroupMapTechOptions(){
+  const sel = document.getElementById('lineGroupMapNewTech');
+  if(!sel) return;
+  const current = sel.value;
+  sel.innerHTML = '<option value="">-- เลือกชื่อช่าง (ตอนล็อกอิน) --</option>';
+  knownTechNames.filter(n=> !(n in lineGroupMap)).forEach(n=>{
+    const o = document.createElement('option');
+    o.value = n; o.textContent = n;
+    sel.appendChild(o);
+  });
+  if([...sel.options].some(o=> o.value === current)) sel.value = current;
+}
+
 function renderLineGroupMapEditor(){
   const wrap = document.getElementById('lineGroupMapRows');
   wrap.innerHTML = '';
+  renderLineGroupMapTechOptions();
   Object.entries(lineGroupMap).sort(([a],[b])=>a.localeCompare(b)).forEach(([techName, groupId])=>{
     const row = document.createElement('div');
     row.className = 'name-map-row';
@@ -1175,6 +1192,10 @@ function addFleetListRow(){
 
 // Admin-only roster: who can log in (email) and what techName they test
 // as, straight from the same roles collection the Stock admin panel uses.
+// Also the source of truth for "ตั้งกลุ่มไลน์ตามช่าง"'s locked ช่างเลือกได้
+// dropdown (knownTechNames below) — ชื่อที่ไม่ได้มาจากที่นี่ไม่ใช่ชื่อล็อกอิน
+// จริง ไม่ควรตั้งกลุ่มไลน์ให้เพราะจะไม่มีทางตรงกับใครที่ login เข้ามาเลย.
+let knownTechNames = [];
 async function loadTesterRoster(){
   const wrap = document.getElementById('testerRosterRows');
   renderSkeleton(wrap, 2);
@@ -1182,6 +1203,8 @@ async function loadTesterRoster(){
     const snap = await _db.collection('roles').get();
     const rows = snap.docs.map(d=>({id: d.id, ...d.data()}));
     rows.sort((a,b)=>(a.techName||a.email||'').localeCompare(b.techName||b.email||''));
+    knownTechNames = [...new Set(rows.map(r=> (r.techName||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+    renderLineGroupMapTechOptions();
     if(!rows.length){
       wrap.className = 'empty';
       wrap.textContent = 'ยังไม่มีผู้ใช้ในระบบ';
