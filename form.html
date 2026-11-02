@@ -10,7 +10,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.78.0">
+<meta name="app-version" content="1.79.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -2004,7 +2004,11 @@ function renderAssignmentSelect(){
     const o = document.createElement('option');
     o.value = a.id;
     const custLabel = a.customer || '(ไม่ระบุลูกค้า)';
-    o.textContent = `${custLabel} · ${a.vehicle || '(ไม่ระบุทะเบียน)'}`;
+    // ใส่ชื่อช่างที่ได้รับมอบหมายไว้ด้วย — เลือกช่างได้หลายคนในฟอร์มนี้
+    // (ช่องด้านบน) แต่ละคนมีงานมอบหมายของตัวเอง ไม่ใส่ชื่อไว้จะแยกไม่ออกว่า
+    // งานในลิสต์นี้เป็นของช่างคนไหนบ้าง
+    const techLabel = a.assignedToName ? `${a.assignedToName} — ` : '';
+    o.textContent = `${techLabel}${custLabel} · ${a.vehicle || '(ไม่ระบุทะเบียน)'}`;
     sel.appendChild(o);
   });
 }
