@@ -7,7 +7,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>Dashboard · SONGDEE GPS</title>
-<meta name="app-version" content="1.32.0">
+<meta name="app-version" content="1.33.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -629,20 +629,37 @@
   </div>
 
   <div class="card app-hidden" id="adminNameMapCard">
-    <div class="card-title"><span class="dot">🔧</span>จัดการชื่อช่าง (ชื่อที่เขียนลง Track + Admin web)</div>
+    <div class="card-title"><span class="dot">🔧</span>จัดการชื่อช่าง (เชื่อมกับ Admin web)</div>
     <div class="admin-hint">
-      <b>ชื่อขวา = ชื่อที่จะเขียนลง Track (MDVR/AI Box/ADAS/DMS Tracking) ตอนช่างคนนี้แก้ไขงาน</b> — เลือกชื่อช่าง
-      จากลิสต์ฝั่งซ้าย (ชื่อเดียวกับที่เลือกได้ในช่อง "ช่างที่กำลังทำรายงานนี้" ตอนกรอกฟอร์ม) แล้วพิมพ์ชื่อขวาที่
-      ต้องการ ชื่อขวานี้ใช้จับคู่กับ Admin web ด้วย (ถ้าไม่ตรงกัน หน้าฟอร์มจะดึงงานที่มอบหมาย/ของ Spare ของ
-      ช่างคนนั้นไม่เจอ) — แก้ตรงนี้ได้เลยโดยไม่ต้องรอแก้โค้ด
+      ชื่อในระบบนี้ (เลือกจากลิสต์ — ชื่อเดียวกับที่เลือกได้ในช่อง "ช่างที่กำลังทำรายงานนี้" ตอนกรอกฟอร์ม)
+      → ชื่อที่ใช้ใน Admin web (ตอนมอบหมายงาน) ถ้าสองชื่อนี้ไม่ตรงกัน หน้าฟอร์มจะดึงงานที่มอบหมาย/ของ Spare
+      ของช่างคนนั้นไม่เจอ — แก้ตรงนี้ได้เลยโดยไม่ต้องรอแก้โค้ด (ไม่เกี่ยวกับชื่อที่เขียนลง Track — ดูการ์ด
+      "ชื่อที่เขียนลง Track" ด้านล่างแยกต่างหาก)
     </div>
     <div id="nameMapRows"></div>
     <div class="name-map-add">
       <select id="nameMapNewTech"><option value="">-- เลือกชื่อช่าง --</option></select>
-      <input type="text" id="nameMapNewAdmin" placeholder="ชื่อที่จะเขียนลง Track">
+      <input type="text" id="nameMapNewAdmin" placeholder="ชื่อใน Admin web">
       <button type="button" onclick="addNameMapRow()">+ เพิ่ม</button>
     </div>
-    <div class="name-map-status" id="nameMapStatus"></div>
+  </div>
+
+  <div class="card app-hidden" id="trackNameMapCard">
+    <div class="card-title"><span class="dot">📝</span>ชื่อที่เขียนลง Track</div>
+    <div class="admin-hint">
+      เลือกชื่อช่างจากลิสต์ (ชื่อเดียวกับที่เลือกได้ในช่อง "ช่างที่กำลังทำรายงานนี้") แล้วตั้งว่าตอนช่างคนนี้แก้ไขงาน
+      จะเขียนชื่ออะไรลง Track (MDVR/AI Box/ADAS/DMS Tracking) — แยกจากการ์ด "จัดการชื่อช่าง" ด้านบนโดยเจตนา
+      (อันนั้นผูกกับ Admin web อย่างเดียว ไม่เกี่ยวกัน) ชื่อที่ยังไม่ตั้งไว้ที่นี่จะเขียนลง Track ด้วยชื่อดิบตามที่
+      เลือกไว้ในฟอร์มเลย
+    </div>
+    <div id="trackNameMapRows"></div>
+    <div class="name-map-add">
+      <select id="trackNameMapNewTech" onchange="updateTrackNameMapPreview()"><option value="">-- เลือกชื่อช่าง --</option></select>
+      <input type="text" id="trackNameMapNewTrack" placeholder="ชื่อที่จะเขียนลง Track" oninput="updateTrackNameMapPreview()">
+      <button type="button" onclick="addTrackNameMapRow()">+ เพิ่ม</button>
+    </div>
+    <div class="hint" id="trackNameMapPreview" style="margin-top:6px;"></div>
+    <div class="name-map-status" id="trackNameMapStatus"></div>
   </div>
 
   <div class="card app-hidden" id="lineGroupMapCard">
@@ -902,14 +919,16 @@ _auth.onAuthStateChanged(async user=>{
     // loadKnownTechNames() ก่อนถึงเรียกได้ — รายชื่อตรงนี้คือชื่อที่เลือกได้ใน
     // ฟอร์ม "ช่างที่กำลังทำรายงานนี้" ไม่ใช่ roles.techName ตอนล็อกอิน)
     document.getElementById('adminNameMapCard').classList.toggle('app-hidden', !role.superAdmin);
+    document.getElementById('trackNameMapCard').classList.toggle('app-hidden', !role.superAdmin);
     document.getElementById('testerRosterCard').classList.toggle('app-hidden', !role.superAdmin);
     document.getElementById('customerFleetListCard').classList.toggle('app-hidden', !role.superAdmin);
     document.getElementById('lineGroupMapCard').classList.toggle('app-hidden', !role.superAdmin);
     document.getElementById('dropdownOptionsCard').classList.toggle('app-hidden', !role.superAdmin);
     await loadDashboard();
     if(role.superAdmin){
-      await loadKnownTechNames(); // ก่อน loadNameMap()/loadLineGroupMap() — ทั้งคู่ต้องมี knownTechNames พร้อมก่อนถึง render dropdown ได้ถูกต้องตั้งแต่ครั้งแรก
+      await loadKnownTechNames(); // ก่อน loadNameMap()/loadTrackNameMap()/loadLineGroupMap() — ทั้งหมดต้องมี knownTechNames พร้อมก่อนถึง render dropdown ได้ถูกต้องตั้งแต่ครั้งแรก
       await loadNameMap();
+      await loadTrackNameMap();
       await loadTesterRoster();
       await loadCustomerFleetLists();
       await loadLineGroupMap();
@@ -1017,6 +1036,108 @@ function addNameMapRow(){
 }
 
 // ---------------------------------------------------------------
+// Admin-editable "ช่างที่กำลังทำรายงานนี้" name -> ชื่อที่เขียนลง Track bridge.
+// แยกเอกสาร/การ์ดต่างหากจาก sd:nameMap ข้างบนโดยเจตนา (ตามที่ขอ "ให้มันมีการ
+// ผูกแค่ชื่อที่จะแก้ใน track เท่านั้น") — เดิม onSiteTechName() (ดู form.html)
+// เคยอ่านจาก nameMap ตัวเดียวกับที่ loadAssignments() ใช้จับคู่ Admin web,
+// ทำให้แก้ชื่อฝั่งหนึ่งกระทบอีกฝั่งโดยไม่ตั้งใจถ้าสองชื่อนี้ไม่เหมือนกัน ตอนนี้
+// แยกกันเด็ดขาด: sd_nameMap = Admin web เท่านั้น, sd_trackNameMap = Track
+// เท่านั้น — ชื่อที่ยังไม่ตั้งคู่ไว้ที่นี่ onSiteTechName() จะใช้ชื่อดิบที่เลือกไว้
+// ในฟอร์มไปเขียนลง Track เลย (ไม่เปลี่ยนพฤติกรรมเดิม)
+// ---------------------------------------------------------------
+let trackNameMap = {};
+
+async function loadTrackNameMap(){
+  try{
+    const snap = await _db.collection('sd').doc('sd_trackNameMap').get();
+    trackNameMap = snap.exists ? JSON.parse(snap.data().v || '{}') : {};
+  }catch(e){
+    console.error('[Track name map] load failed', e);
+    trackNameMap = {};
+  }
+  renderTrackNameMapEditor();
+}
+
+async function saveTrackNameMap(){
+  await _db.collection('sd').doc('sd_trackNameMap').set({ k:'sd:trackNameMap', v: JSON.stringify(trackNameMap) });
+}
+
+async function persistTrackNameMap(){
+  const statusEl = document.getElementById('trackNameMapStatus');
+  if(statusEl){ statusEl.textContent = 'กำลังบันทึก...'; statusEl.className = 'name-map-status'; }
+  try{
+    await saveTrackNameMap();
+    if(statusEl){ statusEl.textContent = 'บันทึกแล้ว ✓'; statusEl.className = 'name-map-status ok'; }
+  }catch(e){
+    if(statusEl){ statusEl.textContent = 'บันทึกไม่สำเร็จ: ' + e.message; statusEl.className = 'name-map-status err'; }
+  }
+}
+
+function renderTrackNameMapTechOptions(){
+  const sel = document.getElementById('trackNameMapNewTech');
+  if(!sel) return;
+  const current = sel.value;
+  sel.innerHTML = '<option value="">-- เลือกชื่อช่าง --</option>';
+  knownTechNames.filter(n=> !(n in trackNameMap)).forEach(n=>{
+    const o = document.createElement('option');
+    o.value = n; o.textContent = n;
+    sel.appendChild(o);
+  });
+  if([...sel.options].some(o=> o.value === current)) sel.value = current;
+}
+
+function renderTrackNameMapEditor(){
+  const wrap = document.getElementById('trackNameMapRows');
+  if(!wrap) return;
+  wrap.innerHTML = '';
+  renderTrackNameMapTechOptions();
+  Object.entries(trackNameMap).sort(([a],[b])=>a.localeCompare(b)).forEach(([techName, trackName])=>{
+    const row = document.createElement('div');
+    row.className = 'name-map-row';
+
+    const techInput = document.createElement('input');
+    techInput.type = 'text'; techInput.value = techName; techInput.disabled = true;
+    techInput.title = 'เปลี่ยนชื่อฝั่งนี้ไม่ได้ — ลบแล้วเพิ่มใหม่แทน';
+
+    const trackInput = document.createElement('input');
+    trackInput.type = 'text'; trackInput.value = trackName;
+    trackInput.oninput = ()=>{ trackNameMap[techName] = trackInput.value; };
+    trackInput.onblur = persistTrackNameMap;
+
+    const rm = document.createElement('button');
+    rm.type = 'button'; rm.textContent = 'ลบ';
+    rm.onclick = ()=>{ delete trackNameMap[techName]; renderTrackNameMapEditor(); persistTrackNameMap(); };
+
+    row.appendChild(techInput); row.appendChild(trackInput); row.appendChild(rm);
+    wrap.appendChild(row);
+  });
+}
+
+// พรีวิวสดระหว่างกรอกแถวเพิ่มใหม่ — ตามที่ขอ "เมื่อมีการใส่แล้วให้เห็นด้วยว่า
+// เวลาใน track จะเป็นยังไง" อัปเดตทุกครั้งที่พิมพ์/เลือกชื่อ ไม่ต้องกดบันทึกก่อน
+function updateTrackNameMapPreview(){
+  const previewEl = document.getElementById('trackNameMapPreview');
+  if(!previewEl) return;
+  const techName = document.getElementById('trackNameMapNewTech').value;
+  const trackName = document.getElementById('trackNameMapNewTrack').value.trim();
+  if(!techName){ previewEl.textContent = ''; return; }
+  previewEl.textContent = `ตัวอย่าง: ช่าง "${techName}" จะถูกเขียนลง Track เป็นชื่อ "${trackName || techName}"`;
+}
+
+function addTrackNameMapRow(){
+  const techInput = document.getElementById('trackNameMapNewTech');
+  const trackInput = document.getElementById('trackNameMapNewTrack');
+  const techName = techInput.value.trim();
+  const trackName = trackInput.value.trim();
+  if(!techName || !trackName) return;
+  trackNameMap[techName] = trackName;
+  techInput.value = ''; trackInput.value = '';
+  renderTrackNameMapEditor();
+  persistTrackNameMap();
+  updateTrackNameMapPreview();
+}
+
+// ---------------------------------------------------------------
 // Admin-editable "ช่างที่กำลังทำรายงานนี้" name -> LINE group ID bridge. Same
 // generic "sd" blob store/doc-id convention as sd:nameMap (key
 // "sd:lineGroupMap" -> doc id "sd_lineGroupMap"). form.html reads the same
@@ -1054,6 +1175,7 @@ async function loadKnownTechNames(){
   }
   renderLineGroupMapTechOptions();
   renderNameMapTechOptions();
+  renderTrackNameMapTechOptions();
 }
 
 async function loadLineGroupMap(){

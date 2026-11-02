@@ -10,7 +10,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.90.0">
+<meta name="app-version" content="1.91.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -913,6 +913,7 @@ _auth.onAuthStateChanged(async user=>{
     loadMdvrAvailable(); // not awaited — same reasoning as loadLineGroupMap() below
     loadScannedDeviceEmeis(); // not awaited, same reasoning
     await loadNameMap(); // resolved before any assignments fetch uses the real mapping
+    loadTrackNameMap(); // not awaited — only read by onSiteTechName() at send time, same reasoning as loadLineGroupMap() below
     loadLineGroupMap(); // not awaited — sendToLine() can't run before the user finishes the form anyway
     loadStickerOptions(); // not awaited, same reasoning — re-renders once resolved
     loadNetworkOptions(); // not awaited, same reasoning
@@ -1097,12 +1098,13 @@ function removeTechStockName(name){
 // ชื่อที่เขียนลง Track (MDVR Tracking/AI Box-ADAS-DMS Tracking/ISSUES-All)
 // ต้องเป็นภาษาอังกฤษตามที่ใช้จริงในชีต (เช่น "Pornthep"/"Shell"/"Team
 // mecnoi") — ไม่ใช่ชื่อที่ตั้งไว้ตอน login (roles.techName อาจเป็นภาษาไทย/
-// ชื่อเล่นคนละแบบ) ใช้สะพาน nameMap เดียวกับที่ loadAssignments() ใช้แปลง
-// ชื่อ login -> ชื่อฝั่ง Admin web อยู่แล้ว (ดู "จัดการชื่อช่าง" ใน index.html)
-// ไม่มี mapping ไว้ก็ใช้ชื่อดิบตามเดิม
+// ชื่อเล่นคนละแบบ) ใช้สะพาน trackNameMap ("ชื่อที่เขียนลง Track" ใน
+// index.html) — ตั้งใจแยกจาก nameMap (ซึ่งใช้เฉพาะจับคู่กับ Admin web ใน
+// loadAssignments() ด้านล่าง) เพราะสองชื่อนี้ไม่จำเป็นต้องเหมือนกัน แก้ฝั่ง
+// หนึ่งไม่ควรกระทบอีกฝั่งโดยไม่ตั้งใจ — ไม่มี mapping ไว้ก็ใช้ชื่อดิบตามเดิม
 function onSiteTechName(){
   const names = techStockOwnerNames.length ? techStockOwnerNames : (tester.techName ? [tester.techName] : []);
-  return names.map(n=> nameMap[n] || n).join(', ');
+  return names.map(n=> trackNameMap[n] || n).join(', ');
 }
 
 function wireTechStockSearch(){
@@ -1959,6 +1961,22 @@ async function loadNameMap(){
     if(Object.keys(map).length) nameMap = map;
   }catch(e){
     console.error('[Name map] load failed — using bundled fallback', e);
+  }
+}
+
+// ชื่อที่เขียนลง Track เท่านั้น — แยกจาก nameMap ด้านบนโดยเจตนา (ดู
+// onSiteTechName() ที่อ่านจากตัวนี้) ตั้งค่าได้จากการ์ด "ชื่อที่เขียนลง Track"
+// ใน index.html ไม่มี fallback แบบ FALLBACK_NAME_MAP เพราะยังไม่มีชื่อเริ่มต้น
+// ที่ควรเดาไว้ล่วงหน้า
+let trackNameMap = {};
+
+async function loadTrackNameMap(){
+  try{
+    const snap = await _db.collection('sd').doc('sd_trackNameMap').get();
+    trackNameMap = snap.exists ? JSON.parse(snap.data().v || '{}') : {};
+  }catch(e){
+    console.error('[Track name map] load failed', e);
+    trackNameMap = {};
   }
 }
 
@@ -4664,12 +4682,22 @@ async function sendToLine(){
       const namesForGroups = techStockOwnerNames.length ? techStockOwnerNames : (tester.techName ? [tester.techName] : []);
       const groupIds = [...new Set(namesForGroups.map(n=> lineGroupMap[n]).filter(Boolean))];
       const destinations = groupIds.length ? groupIds : [null]; // null = กลุ่มกลาง
-      const card = buildLineCard();
+      // ส่งเป็นข้อความธรรมดา (string, ตัวแปร text ที่คำนวณไว้แล้วด้านบน) แทน
+      // Flex Message card — songdee-line-proxy เช็ค typeof message: string =
+      // ส่งเป็น {type:"text"} ธรรมดา (เลือก/copy/แก้ไข/ส่งต่อได้ในแชท LINE
+      // ปกติ), object = render เป็นการ์ด (กดคัดลอกไม่ได้) — ตามที่ขอ กลับไปใช้
+      // ข้อความธรรมดาแบบเดิม (ไม่ใช้ buildLineCard() อีกต่อไป)
+      // รูปแนบ — ส่งเป็น imageUrls ระดับบนสุด (แยกจาก message ซึ่งตอนนี้เป็น
+      // string ล้วน ไม่มีที่ฝัง imageUrls ไว้ในตัวเองแล้ว) songdee-line-proxy
+      // รวมข้อความ+รูปเป็น messages array เดียว ยิงพร้อมกันใน push call
+      // เดียว (สูงสุด 5 ข้อความ/ครั้งตาม LINE API: ข้อความ 1 + รูปสูงสุด 4) —
+      // ทำให้ขึ้นเป็นชุดเดียวกันในแชท ไม่ใช่ทยอยส่งทีละรูป
+      const imageUrls = state.photos.filter(p=> p.driveUrl).map(p=> p.driveUrl).slice(0, 4);
       const pushResults = await Promise.all(destinations.map(groupId=>
         fetch(endpoint, {
           method:'POST',
           headers:{'Content-Type':'application/json', 'X-Api-Key': LINE_API_KEY},
-          body: JSON.stringify({ message: card, ...(groupId ? { groupId } : {}) })
+          body: JSON.stringify({ message: text, ...(groupId ? { groupId } : {}), ...(imageUrls.length ? { imageUrls } : {}) })
         }).then(res=> ({ ok: res.ok, status: res.status })).catch(()=> ({ ok:false, status:0 }))
       ));
       const okCount = pushResults.filter(r=> r.ok).length;
