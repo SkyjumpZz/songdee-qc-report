@@ -1286,10 +1286,7 @@ async function checkStockLock(){
   banner.textContent = 'กำลังตรวจสอบใบเบิก...';
   banner.className = 'stock-lock-banner';
   try{
-    const snap = await _db.collection('sd')
-      .where('k', '>=', 'sd:doc:')
-      .where('k', '<', 'sd:doc:' + String.fromCharCode(0xf8ff))
-      .get();
+    const snap = await stockDocsSnapshot();
     const docs = snap.docs
       .map(d=>{ try{ return JSON.parse(d.data().v); }catch{ return null; } })
       .filter(d=> d && d.plate && !d.cancelled && normPlate(d.plate) === normPlate(plate))
@@ -1506,13 +1503,71 @@ async function loadMdvrAllDevices(){
 // ก่อนถึงเติมให้อัตโนมัติ เคสที่ยังไม่มีทะเบียน (รถใหม่ยังไม่จดทะเบียน) หรือ
 // ทะเบียนไม่ตรงกับใบเบิกพอดี ช่างยังเลือก EMEI เองจากรายการนี้ได้ผ่าน
 // <datalist> ที่ต่อกับช่อง SN ของแถว DMS/ADAS (ดู buildProductHalf())
+// ===== ประหยัดโควตาอ่าน Firestore (โปรเจกต์เดียวกับ Stock/Admin — ฟรี 50,000 reads/วันรวมทุกแอป) =====
+// รายการที่เปลี่ยนไม่บ่อย (ชื่อช่าง/คำแนะนำ) เก็บใน localStorage ตามเวลาที่กำหนด แทนอ่านใหม่ทุกครั้งที่เปิดหน้า
+async function lsCached(key, ttlMs, loader){
+  try{ const c = JSON.parse(localStorage.getItem(key)||'null'); if(c && Date.now()-c.t < ttlMs) return c.v; }catch(e){}
+  const v = await loader();
+  try{ localStorage.setItem(key, JSON.stringify({t:Date.now(), v})); }catch(e){}
+  return v;
+}
+// ใบเบิก (sd:doc:*) — เดิมอ่านทุกใบจาก server ทุกครั้งที่เปิดฟอร์ม และทุกครั้งที่แก้ทะเบียน (2 จุด)
+// ตอนนี้: เก็บใน IndexedDB · ถามเฉพาะใบที่เปลี่ยนหลังรอบก่อน (Stock v5.137+ ประทับ u = เวลา server ทุกการเขียน,
+// ลบแล้วทิ้ง sd:tomb:<key>) · อ่านทั้งก้อนใหม่วันละครั้ง · ในหน้าเดียวกันใช้ผลเดิมได้ 60 วินาที
+// IndexedDB ใช้ไม่ได้ → อ่านทั้งก้อนแบบเดิม
+const QC_DOC_FULL_MS = 24*60*60*1000, QC_DOC_OVERLAP_MS = 10*60*1000, QC_DOC_FRESH_MS = 60*1000;
+let _qcDocMem = null, _qcDocMeta = null, _qcDocAt = 0, _qcDocSync = null;
+function _qcIdb(){
+  return new Promise((res,rej)=>{ const r = indexedDB.open('songdee-qc-cache', 1);
+    r.onupgradeneeded = ()=>{ r.result.createObjectStore('docs'); r.result.createObjectStore('meta'); };
+    r.onsuccess = ()=>res(r.result); r.onerror = ()=>rej(r.error); });
+}
+function _qcTx(tx){ return new Promise((res,rej)=>{ tx.oncomplete=()=>res(); tx.onerror=()=>rej(tx.error); tx.onabort=()=>rej(tx.error); }); }
+async function _qcFullStockDocs(){
+  const snap = await _db.collection('sd').where('k', '>=', 'sd:doc:').where('k', '<', 'sd:doc:' + String.fromCharCode(0xf8ff)).get();
+  return snap.docs.map(d=>d.data()).filter(x=>x && x.k);
+}
+async function stockDocsSnapshot(){
+  const wrap = list => ({docs: list.map(x=>({data:()=>x}))});
+  if(typeof indexedDB === 'undefined') return wrap(await _qcFullStockDocs());
+  if(_qcDocMem && Date.now()-_qcDocAt < QC_DOC_FRESH_MS) return wrap([..._qcDocMem.entries()].map(([k,v])=>({k,v})));
+  if(!_qcDocSync) _qcDocSync = (async()=>{
+    const db = await _qcIdb();
+    if(!_qcDocMem){
+      const tx = db.transaction(['docs','meta']); const m = new Map(); let meta = null;
+      await new Promise((res,rej)=>{ const rq = tx.objectStore('docs').openCursor(); rq.onsuccess=()=>{ const c=rq.result; if(c){ m.set(c.key, c.value); c.continue(); } else res(); }; rq.onerror=()=>rej(rq.error); });
+      await new Promise((res,rej)=>{ const rq = tx.objectStore('meta').get('m'); rq.onsuccess=()=>{ meta = rq.result||null; res(); }; rq.onerror=()=>rej(rq.error); });
+      _qcDocMem = m; _qcDocMeta = meta || {};
+    }
+    const now = Date.now();
+    if(!_qcDocMeta.fullAt || now - _qcDocMeta.fullAt > QC_DOC_FULL_MS){
+      const list = await _qcFullStockDocs();
+      _qcDocMem = new Map(list.map(x=>[x.k, x.v]));
+      _qcDocMeta = {fullAt: now, since: now - QC_DOC_OVERLAP_MS};
+      const tx = db.transaction(['docs','meta'], 'readwrite'); const st = tx.objectStore('docs'); st.clear();
+      _qcDocMem.forEach((v,k)=>st.put(v,k)); tx.objectStore('meta').put(_qcDocMeta, 'm'); await _qcTx(tx);
+    } else {
+      const since = _qcDocMeta.since || (_qcDocMeta.fullAt - QC_DOC_OVERLAP_MS);
+      const snap = await _db.collection('sd').where('u', '>', firebase.firestore.Timestamp.fromMillis(since)).get();
+      const tx = db.transaction(['docs','meta'], 'readwrite'); const st = tx.objectStore('docs'); let maxU = 0;
+      snap.docs.forEach(d=>{ const x = d.data(); if(!x || !x.k) return;
+        const u = x.u && typeof x.u.toMillis === 'function' ? x.u.toMillis() : 0; if(u > maxU) maxU = u;
+        if(x.k.startsWith('sd:doc:')){ _qcDocMem.set(x.k, x.v); st.put(x.v, x.k); }
+        else if(x.k.startsWith('sd:tomb:') && x.del){ _qcDocMem.delete(x.del); st.delete(x.del); } });
+      _qcDocMeta = {..._qcDocMeta, since: Math.max(since, maxU - QC_DOC_OVERLAP_MS)};
+      tx.objectStore('meta').put(_qcDocMeta, 'm'); await _qcTx(tx);
+    }
+    _qcDocAt = Date.now();
+  })();
+  try{ await _qcDocSync; }
+  catch(e){ console.warn('[ใบเบิก cache] อ่านทั้งก้อนแทน', e); _qcDocMem = null; _qcDocSync = null; return wrap(await _qcFullStockDocs()); }
+  _qcDocSync = null;
+  return wrap([..._qcDocMem.entries()].map(([k,v])=>({k,v})));
+}
 let scannedDeviceEmeis = []; // [{name, type, imei, sn, noStock, plate}]
 async function loadScannedDeviceEmeis(){
   try{
-    const snap = await _db.collection('sd')
-      .where('k', '>=', 'sd:doc:')
-      .where('k', '<', 'sd:doc:' + String.fromCharCode(0xf8ff))
-      .get();
+    const snap = await stockDocsSnapshot();
     const list = [];
     snap.docs.forEach(d=>{
       let doc; try{ doc = JSON.parse(d.data().v); }catch{ return; }
@@ -1956,24 +2011,32 @@ async function loadCustomerFleetSuggestions(){
   // มาปนในรายการ (พิมพ์ผิดช่องตอนกรอกรายงาน/มอบหมายงานแล้วมันเก็บ log ไว้
   // เป็น "เคยมีค่านี้" ตลอดไป) — Stock เป็นแหล่งข้อมูลที่คุมคุณภาพได้ตรงจุดกว่า
   try{
-    const snap = await _db.collection('qc_reports').orderBy('createdAt', 'desc').limit(500).get();
-    snap.docs.forEach(d=>{
-      const v = d.data();
-      if(v.installMdvrPlacement && v.installMdvrPlacement.trim()) installMdvrPlacements.add(v.installMdvrPlacement.trim());
-      if(v.installPowerSource && v.installPowerSource.trim()) installPowerSources.add(v.installPowerSource.trim());
-      if(v.installSpeakerPlacement && v.installSpeakerPlacement.trim()) installSpeakerPlacements.add(v.installSpeakerPlacement.trim());
-      if(v.installMicPlacement && v.installMicPlacement.trim()) installMicPlacements.add(v.installMicPlacement.trim());
+    // คำแนะนำจาก QC 500 ใบล่าสุด — เก็บไว้ 12 ชม. (เดิมอ่าน 500 reads ทุกครั้งที่เปิดฟอร์ม)
+    const sug = await lsCached('qc_sug_install_v1', 12*60*60*1000, async ()=>{
+      const snap = await _db.collection('qc_reports').orderBy('createdAt', 'desc').limit(500).get();
+      const o = {m:new Set(), p:new Set(), s:new Set(), mic:new Set()};
+      snap.docs.forEach(d=>{
+        const v = d.data();
+        if(v.installMdvrPlacement && v.installMdvrPlacement.trim()) o.m.add(v.installMdvrPlacement.trim());
+        if(v.installPowerSource && v.installPowerSource.trim()) o.p.add(v.installPowerSource.trim());
+        if(v.installSpeakerPlacement && v.installSpeakerPlacement.trim()) o.s.add(v.installSpeakerPlacement.trim());
+        if(v.installMicPlacement && v.installMicPlacement.trim()) o.mic.add(v.installMicPlacement.trim());
+      });
+      return {m:[...o.m], p:[...o.p], s:[...o.s], mic:[...o.mic]};
     });
+    sug.m.forEach(x=>installMdvrPlacements.add(x)); sug.p.forEach(x=>installPowerSources.add(x));
+    sug.s.forEach(x=>installSpeakerPlacements.add(x)); sug.mic.forEach(x=>installMicPlacements.add(x));
   }catch(e){
     console.error('[Customer/Fleet suggestions] qc_reports', e);
   }
   const techNames = new Set();
   try{
-    const snap = await _db.collection('assignments').get();
-    snap.docs.forEach(d=>{
-      const v = d.data();
-      if(v.assignedToName && v.assignedToName.trim()) techNames.add(v.assignedToName.trim());
+    // ชื่อช่างจากงานทั้งหมด — เก็บไว้ 24 ชม. (เดิมอ่านงานทุกใบทุกครั้งที่เปิดฟอร์ม)
+    const names = await lsCached('qc_assign_names_v1', 24*60*60*1000, async ()=>{
+      const snap = await _db.collection('assignments').get();
+      return [...new Set(snap.docs.map(d=>(d.data().assignedToName||'').trim()).filter(Boolean))];
     });
+    names.forEach(n=>techNames.add(n));
   }catch(e){
     console.error('[Customer/Fleet suggestions] assignments', e);
   }
