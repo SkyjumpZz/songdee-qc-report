@@ -10,7 +10,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.99.0">
+<meta name="app-version" content="1.100.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -4405,18 +4405,16 @@ function buildMessage(){
   else if(isQuickResend) lines.push('🔁 ส่งซ้ำ (ไม่มีการแก้ไข)');
   lines.push(`${dateStr} ${TEMPLATES[state.tpl].label}${state.customer ? ' ' + state.customer : ''}`);
   if(state.fleet) lines.push(`Fleet: ${state.fleet}`);
+  // ติดตั้งใหม่ — Device ID ของตัวเครื่อง MDVR เป็นข้อมูลระดับรายงาน ไม่ใช่ของ
+  // แถว fixes แถวไหนแถวหนึ่ง (state.mdvrDeviceId, กรอกที่การ์ด "ข้อมูลเครื่อง
+  // MDVR") — ต่อท้ายในวงเล็บติดกับทะเบียนบรรทัดเดียวกันเลย ไม่เว้นวรรค (ตามที่
+  // ขอ พร้อมตัวอย่างจริงจาก LINE: "ทะเบียน: 00-8887(678908)") ไม่ใช่คนละบรรทัด
+  const deviceIdSuffix = (state.tpl === 'new_install' && (state.mdvrDeviceId||'').trim()) ? `(${state.mdvrDeviceId.trim()})` : '';
   if(state.tpl === 'remove'){
     lines.push(`ทะเบียนเก่า: ${state.plate || '(ยังไม่ระบุ)'}`);
     if(state.newPlate) lines.push(`ทะเบียนใหม่: ${state.newPlate}`);
   } else {
-    lines.push(`ทะเบียน: ${state.plate || '(ยังไม่ระบุ)'}`);
-  }
-  // ติดตั้งใหม่ — Device ID ของตัวเครื่อง MDVR เป็นข้อมูลระดับรายงาน ไม่ใช่ของ
-  // แถว fixes แถวไหนแถวหนึ่ง (state.mdvrDeviceId, กรอกที่การ์ด "ข้อมูลเครื่อง
-  // MDVR") — ต่อท้ายบรรทัดทะเบียนตรงๆ (ตามที่ขอ "ให้ Device ID อยู่ด้านหลัง
-  // ทะเบียน") ไม่ใช่ปนอยู่ในลิสต์อุปกรณ์แบบเดิม
-  if(state.tpl === 'new_install' && (state.mdvrDeviceId||'').trim()){
-    lines.push(`Device ID: ${state.mdvrDeviceId.trim()}`);
+    lines.push(`ทะเบียน: ${state.plate || '(ยังไม่ระบุ)'}${deviceIdSuffix}`);
   }
   if(state.trailerPlate) lines.push(`ทะเบียนหาง: ${state.trailerPlate}`);
   lines.push('');
