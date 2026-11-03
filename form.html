@@ -10,7 +10,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.98.0">
+<meta name="app-version" content="1.99.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -4411,6 +4411,13 @@ function buildMessage(){
   } else {
     lines.push(`ทะเบียน: ${state.plate || '(ยังไม่ระบุ)'}`);
   }
+  // ติดตั้งใหม่ — Device ID ของตัวเครื่อง MDVR เป็นข้อมูลระดับรายงาน ไม่ใช่ของ
+  // แถว fixes แถวไหนแถวหนึ่ง (state.mdvrDeviceId, กรอกที่การ์ด "ข้อมูลเครื่อง
+  // MDVR") — ต่อท้ายบรรทัดทะเบียนตรงๆ (ตามที่ขอ "ให้ Device ID อยู่ด้านหลัง
+  // ทะเบียน") ไม่ใช่ปนอยู่ในลิสต์อุปกรณ์แบบเดิม
+  if(state.tpl === 'new_install' && (state.mdvrDeviceId||'').trim()){
+    lines.push(`Device ID: ${state.mdvrDeviceId.trim()}`);
+  }
   if(state.trailerPlate) lines.push(`ทะเบียนหาง: ${state.trailerPlate}`);
   lines.push('');
 
@@ -4421,12 +4428,6 @@ function buildMessage(){
     lines.push('');
   }
   const fixLines = state.fixes.map(fixLine).filter(Boolean);
-  // ติดตั้งใหม่ — Device ID ของตัวเครื่อง MDVR เป็นข้อมูลระดับรายงาน ไม่ใช่
-  // ของแถว fixes แถวไหนแถวหนึ่ง (state.mdvrDeviceId, กรอกที่การ์ด "ข้อมูลการ
-  // ติดตั้ง MDVR") — ต่อท้ายลิสต์อุปกรณ์ด้วยเพื่อให้โชว์ในรายงานจริง (ตามที่ขอ)
-  if(state.tpl === 'new_install' && (state.mdvrDeviceId||'').trim()){
-    fixLines.push(`- Device ID: ${state.mdvrDeviceId.trim()}`);
-  }
   // คำว่า "ทำการติดตั้ง" ซ้ำทุกบรรทัดตอนติดตั้งหลายชิ้นอ่านแล้วรกไป — คงไว้
   // แค่บรรทัดแรกที่เจอ บรรทัดถัดมาตัดคำนี้ออก เหลือแค่ "- ชื่ออุปกรณ์..."
   // (ตามที่ขอ) ไม่แตะ "ทำการเปลี่ยน"/"ทำการถอด" เพราะไม่ได้ซ้ำแบบเดียวกัน
