@@ -1178,16 +1178,25 @@ function addTrackNameMapRow(){
 let lineGroupMap = {};
 let knownTechNames = [];
 
+// ===== ประหยัดโควตาอ่าน Firestore (โปรเจกต์เดียวกับ Stock/Admin — ฟรี 50,000 reads/วันรวมทุกแอป) =====
+// รายการที่เปลี่ยนไม่บ่อย (ชื่อช่าง/คำแนะนำ) เก็บใน localStorage ตามเวลาที่กำหนด แทนอ่านใหม่ทุกครั้งที่เปิดหน้า
+async function lsCached(key, ttlMs, loader){
+  try{ const c = JSON.parse(localStorage.getItem(key)||'null'); if(c && Date.now()-c.t < ttlMs) return c.v; }catch(e){}
+  const v = await loader();
+  try{ localStorage.setItem(key, JSON.stringify({t:Date.now(), v})); }catch(e){}
+  return v;
+}
 async function loadKnownTechNames(){
   try{
-    const [techSnap, assignSnap] = await Promise.all([
+    const [techSnap, assignedNames] = await Promise.all([
       _db.collection('sd').doc('sd_tech').get(),
-      _db.collection('assignments').get(),
+      // ชื่อช่างจากงานทั้งหมด — เก็บไว้ 24 ชม. (เดิมอ่านงานทุกใบทุกครั้ง)
+      lsCached('qc_assign_names_v1', 24*60*60*1000, async ()=>{
+        const snap = await _db.collection('assignments').get();
+        return [...new Set(snap.docs.map(d=>(d.data().assignedToName||'').trim()).filter(Boolean))];
+      }),
     ]);
     const allTechStock = techSnap.exists ? JSON.parse(techSnap.data().v || '{}') : {};
-    const assignedNames = assignSnap.docs
-      .map(d=> (d.data().assignedToName || '').trim())
-      .filter(Boolean);
     knownTechNames = [...new Set([...Object.keys(allTechStock), ...assignedNames])].sort((a,b)=>a.localeCompare(b));
   }catch(e){
     console.error('[Known tech names] load failed', e);
@@ -1658,11 +1667,30 @@ async function loadDashboard(){
     // and where()+orderBy() on different fields needs a composite index we
     // don't have — fetch one ordered page (no where clause) and derive both
     // stats from it client-side instead.
-    const snap = await _db.collection('qc_reports').orderBy('createdAt', 'desc').limit(1000).get();
-    const all = snap.docs.map(d=>({id:d.id, ...d.data()}));
-    animateCount(document.getElementById('statTotal'), all.length);
-    animateCount(document.getElementById('statToday'), all.filter(d=>d.date===todayStr).length);
-    renderList(all.slice(0, 20));
+    // เดิมอ่าน 1000 ใบทุกครั้งที่เปิด Dashboard เพื่อนับ 2 ตัวเลข → อ่าน 20 ใบล่าสุด + ใบของวันนี้
+    // ส่วน "ทั้งหมด" นับเต็มวันละครั้งแล้วเก็บไว้ ระหว่างวันบวกเฉพาะใบที่ใหม่กว่า
+    const [latestSnap, todaySnap] = await Promise.all([
+      _db.collection('qc_reports').orderBy('createdAt', 'desc').limit(20).get(),
+      _db.collection('qc_reports').where('date', '==', todayStr).get(),
+    ]);
+    const latest = latestSnap.docs.map(d=>({id:d.id, ...d.data()}));
+    let tot = null;
+    try{ tot = JSON.parse(localStorage.getItem('qc_dash_total_v1')||'null'); }catch(e){}
+    if(!tot || Date.now()-tot.t > 24*60*60*1000){
+      const snap = await _db.collection('qc_reports').orderBy('createdAt', 'desc').limit(1000).get();
+      const docs = snap.docs.map(d=>d.data());
+      tot = {t:Date.now(), n:docs.length, max: docs.reduce((m,d)=>Math.max(m, d.createdAt||0), 0)};
+    } else {
+      const newer = latest.filter(d=>(d.createdAt||0) > tot.max);
+      if(newer.length >= 20){ // ใหม่เกิน 20 ใบตั้งแต่นับครั้งก่อน — ถามเพิ่มเฉพาะส่วนที่ใหม่
+        const snap = await _db.collection('qc_reports').where('createdAt', '>', tot.max).get();
+        tot.n = Math.min(1000, tot.n + snap.size); tot.max = snap.docs.reduce((m,d)=>Math.max(m, d.data().createdAt||0), tot.max);
+      } else if(newer.length){ tot.n = Math.min(1000, tot.n + newer.length); tot.max = Math.max(tot.max, ...newer.map(d=>d.createdAt||0)); }
+    }
+    try{ localStorage.setItem('qc_dash_total_v1', JSON.stringify(tot)); }catch(e){}
+    animateCount(document.getElementById('statTotal'), tot.n);
+    animateCount(document.getElementById('statToday'), todaySnap.size);
+    renderList(latest);
   }catch(e){
     listEl.className = 'err';
     listEl.textContent = 'โหลด Dashboard ไม่สำเร็จ: ' + e.message;
