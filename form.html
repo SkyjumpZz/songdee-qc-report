@@ -10,7 +10,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.97.0">
+<meta name="app-version" content="1.98.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -686,6 +686,34 @@
       <div class="suggest-field">
         <label>ทะเบียนใหม่<span class="req">*</span></label>
         <input type="text" id="jobNewPlate" placeholder="เช่น 2กข-5678" autocomplete="off">
+      </div>
+    </div>
+  </div>
+
+  <!-- MDVR position/จุดจั๊มไฟ/Province/Status DLT — ข้อมูลของทะเบียนนี้ใน
+       MDVR Tracking เอง ไม่ใช่อุปกรณ์ที่ "เปลี่ยน" ได้ เลยไม่ผ่านระบบรุ่นเก่าที่
+       เปลี่ยน เป็นช่องกรอกแยกต่างหาก ใช้ได้ทุกประเภทงาน (ไม่ใช่แค่ติดตั้งใหม่)
+       ไม่บังคับกรอก — ว่างไว้ก็ไม่เขียนทับของเดิมในชีต (ดู pushMdvrChecklist()) -->
+  <div class="card" id="mdvrAdminCard">
+    <div class="card-title"><span class="dot">🗂️</span>ข้อมูล MDVR Tracking เพิ่มเติม (ถ้ามี)</div>
+    <div class="row2">
+      <div>
+        <label>MDVR position</label>
+        <input type="text" id="mdvrPositionInput" placeholder="เช่น ใต้เบาะคนขับ" autocomplete="off">
+      </div>
+      <div>
+        <label>จุดจั๊มไฟ</label>
+        <input type="text" id="groundPointInput" placeholder="จุดจั๊มไฟ" autocomplete="off">
+      </div>
+    </div>
+    <div class="row2">
+      <div>
+        <label>Province</label>
+        <input type="text" id="provinceInput" placeholder="จังหวัดที่จดทะเบียน" autocomplete="off">
+      </div>
+      <div>
+        <label>Status DLT</label>
+        <input type="text" id="statusDltInput" placeholder="สถานะ DLT" autocomplete="off">
       </div>
     </div>
   </div>
@@ -1565,7 +1593,7 @@ async function pushMdvrInstall(){
     headers:{'Content-Type':'application/json'},
     body: JSON.stringify({
       imei: state.mdvrImei, deviceId: state.mdvrDeviceId, server: state.mdvrServer,
-      plate: state.plate, customer: state.customer, date: state.date, technician: onSiteTechName(),
+      plate: state.plate, customer: state.customer, fleet: state.fleet, date: state.date, technician: onSiteTechName(),
     })
   });
   const data = await res.json();
@@ -1587,7 +1615,7 @@ function buildMdvrUnitSwaps(){
     if(!src || src.column !== 'Device type') return;
     const newImei = (row.newMdvrImei || '').trim();
     if(!newImei) return;
-    swaps.push({ newImei, deviceId: (row.mdvrDeviceId || '').trim() });
+    swaps.push({ newImei, deviceId: (row.mdvrDeviceId || '').trim(), server: (row.mdvrServer || '').trim() });
   });
   return swaps;
 }
@@ -1602,7 +1630,7 @@ async function pushMdvrUnitSwaps(){
     const res = await fetch(MDVR_UNIT_SWAP_ENDPOINT, {
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ plate, newImei: s.newImei, deviceId: s.deviceId, customer: state.customer, date: state.date, technician: onSiteTechName(), technicianRaw: onSiteTechNameRaw() })
+      body: JSON.stringify({ plate, newImei: s.newImei, deviceId: s.deviceId, server: s.server, customer: state.customer, fleet: state.fleet, date: state.date, technician: onSiteTechName(), technicianRaw: onSiteTechNameRaw() })
     });
     const data = await res.json();
     if(!res.ok || !data.ok) throw new Error(data.error || ('HTTP ' + res.status));
@@ -1622,10 +1650,14 @@ async function pushMdvrChecklist(){
   if(!plate) return null;
   const steelbox = state.checklist && state.checklist.steelbox;
   const db9 = state.checklist && state.checklist.db9;
-  const body = { plate };
+  const body = {
+    plate,
+    customer: state.customer || '', fleet: state.fleet || '', technician: onSiteTechName(),
+    mdvrPosition: state.mdvrPosition || '', groundPoint: state.groundPoint || '',
+    province: state.province || '', statusDlt: state.statusDlt || '',
+  };
   if(steelbox && typeof steelbox.has === 'boolean') body.steelbox = steelbox.has;
   if(db9 && typeof db9.has === 'boolean') body.db9 = db9.has;
-  if(!('steelbox' in body) && !('db9' in body)) return null; // ยังไม่ได้ตรวจสักอย่าง ไม่ต้องยิง
   const res = await fetch('https://songdee-vehicle-lookup.songdeegps.workers.dev/mdvr-checklist', {
     method:'POST',
     headers:{'Content-Type':'application/json'},
@@ -2248,6 +2280,7 @@ const REPORT_FIELD_LABELS = {
   installMdvrPlacement: 'จุดวาง MDVR', installPowerSource: 'จุดจ่ายไฟ',
   installSpeakerPlacement: 'จุดติดตั้งลำโพง', installMicPlacement: 'จุดติดตั้งไมค์',
   stickerRemark: 'Remark สติ๊กเกอร์', onSiteTechNames: 'ช่างที่กำลังทำรายงานนี้',
+  mdvrPosition: 'MDVR position', groundPoint: 'จุดจั๊มไฟ', province: 'Province', statusDlt: 'Status DLT',
 };
 function diffReportFields(oldDoc, payload){
   const changes = [];
@@ -2339,6 +2372,8 @@ async function saveReport(){
     installSpeakerPlacement: state.installSpeakerPlacement || '',
     installMicPlacement: state.installMicPlacement || '',
     network: state.network || '',
+    mdvrPosition: state.mdvrPosition || '', groundPoint: state.groundPoint || '',
+    province: state.province || '', statusDlt: state.statusDlt || '',
     techUid: tester.uid, techName: tester.techName,
     // ช่างที่กำลังทำรายงานนี้ (ของ Spare/มอบหมายงานที่ใช้ตอนกรอก) — เดิมไม่เคย
     // บันทึกไว้เลย เป็นแค่ state ในหน่วยความจำของเบราว์เซอร์ ทำให้เปิดรายงาน
@@ -2399,6 +2434,8 @@ function loadReportIntoForm(doc){
     installSpeakerPlacement: doc.installSpeakerPlacement || '',
     installMicPlacement: doc.installMicPlacement || '',
     network: doc.network || '',
+    mdvrPosition: doc.mdvrPosition || '', groundPoint: doc.groundPoint || '',
+    province: doc.province || '', statusDlt: doc.statusDlt || '',
   };
   syncFormInputsFromState();
   resetSendButton();
@@ -2881,7 +2918,7 @@ function defaultState(){
     // starting row shows up under "① ถอด" only if that template ends up
     // picked, not paired with an empty "② ติดตั้ง" slot (ตามที่ขอ แยกอิสระ
     // จากกัน) — "+ เพิ่มอุปกรณ์ที่ติดตั้ง" adds that side separately now.
-    fixes: [{product:"", qty:1, custom:"", oldModel:"", oldModelCustom:"", newSN:"", oldSN:"", ch:"", phoneNo:"", remark:"", newMdvrImei:"", mdvrDeviceId:"", section:"remove"}],
+    fixes: [{product:"", qty:1, custom:"", oldModel:"", oldModelCustom:"", newSN:"", oldSN:"", ch:"", phoneNo:"", remark:"", newMdvrImei:"", mdvrDeviceId:"", mdvrServer:"", section:"remove"}],
     stickers: {},
     stickerRemark: "", // optional free-text note shown above the sticker checklist — never required
     checklist: {},
@@ -2898,6 +2935,15 @@ function defaultState(){
     // เครือข่ายของอุปกรณ์ที่ติดตั้ง/ตรวจสอบ — เป็นค่าเดียวต่อทั้งรายงาน ไม่ใช่
     // ต่อแถวอุปกรณ์ (ย้ายมาจากการ์ด "รายการตรวจสอบ" ตามที่ขอ) ดู renderChecklist().
     network: "",
+    // MDVR Tracking's own "MDVR position"/"จุดจั๊มไฟ"/"Province"/"Status DLT"
+    // columns — ข้อมูลเชิงบริหาร/คำอธิบาย ไม่ใช่อุปกรณ์ที่ "เปลี่ยน" ได้แบบรุ่น
+    // เก่า/ใหม่ เลยเป็นช่องกรอกแยกต่างหาก ไม่ผ่านระบบรุ่นเก่าที่เปลี่ยน — ทุก
+    // ประเภทงาน (ไม่ใช่แค่ติดตั้งใหม่) แก้ไขได้ ส่งไปซิงก์ทุกครั้งที่บันทึกผ่าน
+    // pushMdvrChecklist() (ดูคอมเมนต์ที่นั่น)
+    mdvrPosition: "",
+    groundPoint: "",
+    province: "",
+    statusDlt: "",
   };
 }
 let state = defaultState();
@@ -2974,6 +3020,10 @@ function syncFormInputsFromState(){
   document.getElementById('installSpeakerPlacementInput').value = state.installSpeakerPlacement || '';
   document.getElementById('installMicPlacementInput').value = state.installMicPlacement || '';
   document.getElementById('stickerRemarkInput').value = state.stickerRemark || '';
+  document.getElementById('mdvrPositionInput').value = state.mdvrPosition || '';
+  document.getElementById('groundPointInput').value = state.groundPoint || '';
+  document.getElementById('provinceInput').value = state.province || '';
+  document.getElementById('statusDltInput').value = state.statusDlt || '';
 }
 
 const TPL_ICON = { upgrade: '⬆️', new_install: '✨', repair: '🛠️', remove: '📤' };
@@ -3045,7 +3095,7 @@ function renderProblemRows(){
 // buildProductHalf() regardless of whether the rest of the form is locked
 // to a ใบเบิก/Spare list, and doesn't count against lockedOptionsCount.
 function addFixRow(extra){
-  state.fixes.push({product:"", qty:1, custom:"", oldModel:"", oldModelCustom:"", newSN:"", oldSN:"", ch:"", phoneNo:"", remark:"", newMdvrImei:"", mdvrDeviceId:"", section:"pair", extra: !!extra});
+  state.fixes.push({product:"", qty:1, custom:"", oldModel:"", oldModelCustom:"", newSN:"", oldSN:"", ch:"", phoneNo:"", remark:"", newMdvrImei:"", mdvrDeviceId:"", mdvrServer:"", section:"pair", extra: !!extra});
   renderFixRows();
   updatePreview();
 }
@@ -3058,17 +3108,17 @@ function addFixRow(extra){
 // in both columns for backward compatibility, see renderRemoveSections();
 // never created new.
 function addRemoveOldRow(extra){
-  state.fixes.push({product:"", qty:1, custom:"", oldModel:"", oldModelCustom:"", newSN:"", oldSN:"", ch:"", phoneNo:"", remark:"", newMdvrImei:"", mdvrDeviceId:"", section:"remove", extra: !!extra});
+  state.fixes.push({product:"", qty:1, custom:"", oldModel:"", oldModelCustom:"", newSN:"", oldSN:"", ch:"", phoneNo:"", remark:"", newMdvrImei:"", mdvrDeviceId:"", mdvrServer:"", section:"remove", extra: !!extra});
   renderFixRows();
   updatePreview();
 }
 function addRemoveNewRow(extra){
-  state.fixes.push({product:"", qty:1, custom:"", oldModel:"", oldModelCustom:"", newSN:"", oldSN:"", ch:"", phoneNo:"", remark:"", newMdvrImei:"", mdvrDeviceId:"", section:"install", extra: !!extra});
+  state.fixes.push({product:"", qty:1, custom:"", oldModel:"", oldModelCustom:"", newSN:"", oldSN:"", ch:"", phoneNo:"", remark:"", newMdvrImei:"", mdvrDeviceId:"", mdvrServer:"", section:"install", extra: !!extra});
   renderFixRows();
   updatePreview();
 }
 function addRemoveEditRow(extra){
-  state.fixes.push({product:"", qty:1, custom:"", oldModel:"", oldModelCustom:"", newSN:"", oldSN:"", ch:"", phoneNo:"", remark:"", newMdvrImei:"", mdvrDeviceId:"", section:"edit", extra: !!extra});
+  state.fixes.push({product:"", qty:1, custom:"", oldModel:"", oldModelCustom:"", newSN:"", oldSN:"", ch:"", phoneNo:"", remark:"", newMdvrImei:"", mdvrDeviceId:"", mdvrServer:"", section:"edit", extra: !!extra});
   renderFixRows();
   updatePreview();
 }
@@ -3293,6 +3343,23 @@ function buildMdvrUnitSwapHalf(row, idx){
   deviceIdInput.oninput = ()=>{ row.mdvrDeviceId = deviceIdInput.value; updatePreview(); };
   wrap.appendChild(deviceIdInput);
 
+  // Server — เดิมช่องนี้มีแค่ตอนติดตั้งใหม่ (mdvrServerSelect) เปลี่ยน MDVR
+  // ทั้งเครื่องไม่เคยมีให้เลือกเลย ค่า Server เลยไม่ถูกเขียนลง Track ตอนสลับ
+  // เครื่อง (ดู swapMdvrUnit() ฝั่ง backend ที่เพิ่งเพิ่มการเขียนคอลัมน์นี้)
+  const serverSel = document.createElement('select');
+  serverSel.style.marginTop = '6px';
+  const serverBlank = document.createElement('option');
+  serverBlank.value = ''; serverBlank.textContent = '-- เลือก Server --';
+  serverSel.appendChild(serverBlank);
+  ['60','63','73','75','90'].forEach(s=>{
+    const o = document.createElement('option');
+    o.value = s; o.textContent = s;
+    if(s === row.mdvrServer) o.selected = true;
+    serverSel.appendChild(o);
+  });
+  serverSel.onchange = ()=>{ row.mdvrServer = serverSel.value; updatePreview(); };
+  wrap.appendChild(serverSel);
+
   const remark = document.createElement('textarea');
   remark.rows = 2; remark.style.marginTop = '6px';
   remark.placeholder = 'หมายเหตุ (ถ้ามี)';
@@ -3396,7 +3463,13 @@ function buildProductHalf(row, idx, ctx){
   // ระบุทะเบียนใหม่ก็ต้องมี CH ด้วยเหมือนกัน (ฝั่งติดตั้งไปอยู่รถคนละคัน ไม่มี
   // คอลัมน์เดิมจากประวัติทะเบียนเก่าให้อ้างอิงแล้ว ต้องเลือกช่องใหม่เอง)
   const needsChForRemove = state.tpl === 'remove' && row.section !== 'edit' && (state.newPlate||'').trim();
-  if((state.tpl === 'new_install' || needsChForRemove) && rowNeedsChannel(row.product)){
+  // อัปเกรด/ซ่อม — เดิมไม่มีช่องให้เลือก CH เลย ได้แค่ตอนไปเลือก "รุ่นเก่าที่
+  // เปลี่ยน" ตรงกับช่อง Ch ว่างพอดี (บังเอิญรู้คอลัมน์จาก src) แต่ถ้าเพิ่มกล้อง
+  // ใหม่แบบไม่ได้เลือกรุ่นเก่า/ช่องว่างจากประวัติเลย (เช่น "+ เพิ่มอุปกรณ์ที่
+  // ติดตั้ง" เฉยๆ) ไม่มีทางระบุ CH ได้เลย เขียนลง Track ไม่ได้ตามที่แจ้ง —
+  // เปิดให้เลือก CH ตรงๆ ได้เหมือนติดตั้งใหม่ (buildSheetUpdates() ใช้ค่านี้
+  // เป็น fallback เมื่อหา src จากรุ่นเก่าไม่เจอ)
+  if((state.tpl === 'new_install' || needsChForRemove || state.tpl === 'upgrade' || state.tpl === 'repair') && rowNeedsChannel(row.product)){
     const chSel = document.createElement('select');
     chSel.style.marginTop = '6px';
     const chBlank = document.createElement('option');
@@ -4025,7 +4098,7 @@ function fixLine(row){
   // Device ID ของเครื่อง MDVR ที่เปลี่ยน — row.newMdvrImei มีแค่แถวที่มาจาก
   // buildMdvrUnitSwapHalf() (เปลี่ยน MDVR ทั้งเครื่อง) เท่านั้น ดู pushMdvrUnitSwaps()
   const deviceIdTag = (row.newMdvrImei && (row.mdvrDeviceId || '').trim()) ? ` (Device ID: ${row.mdvrDeviceId.trim()})` : '';
-  const chTag = (state.tpl === 'new_install' && row.ch) ? ` (${row.ch})` : '';
+  const chTag = row.ch ? ` (${row.ch})` : '';
   const phoneTag = (isSimProduct(row.product) && row.phoneNo) ? ` (เบอร์: ${row.phoneNo})` : '';
   const extraTag = row.extra ? ' [ของนอกเหนือรายการ]' : '';
   // ไม่ได้เปลี่ยนอุปกรณ์เลย (เช่น สายหลวม หมุนให้แน่น) — ใช้ remark ตรงๆ เป็น
@@ -4121,7 +4194,19 @@ function buildSheetUpdates(){
       // this one"), not just existing equipment to replace.
       const src = vehicleOldModels.find(m=> m.label === row.oldModel)
         || vehicleEmptySlots.find(m=> m.label === row.oldModel);
-      if(!src) return;
+      // ไม่มีรุ่นเก่า/ช่องว่างจากประวัติให้ src — เช่น เพิ่มกล้องใหม่ตรงๆ ใน
+      // อัปเกรด/ซ่อม ไม่ได้เปลี่ยนจากของเดิม — ใช้ CH ที่เลือกไว้ตรงๆ แทน
+      // (buildProductHalf() เปิดให้เลือกได้แล้วสำหรับ upgrade/repair ด้วย)
+      if(!src){
+        if(row.ch && rowNeedsChannel(row.product)){
+          const newName = row.product === "อื่นๆ (พิมพ์เอง)" ? (row.custom || "") : row.product;
+          if(newName){
+            const value = sheetValueForColumn(row.ch, row.product) || newName;
+            updates.push({ plate: state.plate, column: row.ch, value });
+          }
+        }
+        return;
+      }
       // เปลี่ยน MDVR ทั้งเครื่อง (คอลัมน์ "Device type") — เขียนผ่าน
       // pushMdvrUnitSwaps()/buildMdvrUnitSwaps() แยกต่างหากเท่านั้น (ย้าย
       // IMEI ของแถวใน MDVR Tracking ให้ตรงกับเครื่องจริงที่ติดตั้ง ไม่ใช่แค่
@@ -4382,6 +4467,10 @@ function buildMessage(){
     state.installPowerSource ? `จุดจ่ายไฟ : ${state.installPowerSource}` : null,
     state.installSpeakerPlacement ? `จุดติดตั้งลำโพง : ${state.installSpeakerPlacement}` : null,
     state.installMicPlacement ? `จุดติดตั้งไมค์ : ${state.installMicPlacement}` : null,
+    state.mdvrPosition ? `MDVR position : ${state.mdvrPosition}` : null,
+    state.groundPoint ? `จุดจั๊มไฟ : ${state.groundPoint}` : null,
+    state.province ? `Province : ${state.province}` : null,
+    state.statusDlt ? `Status DLT : ${state.statusDlt}` : null,
   ].filter(Boolean);
   if(installDetailLines.length){
     lines.push('');
@@ -4570,6 +4659,10 @@ document.getElementById('jobAssignSelect').addEventListener('change', e=>{ onAss
 document.getElementById('mdvrImeiInput').addEventListener('input', e=>{ state.mdvrImei = e.target.value; updatePreview(); updateMdvrImeiWarning(e.target.value); });
 document.getElementById('mdvrImeiInput').addEventListener('blur', e=>{ autofillMdvrModel(e.target.value); });
 document.getElementById('mdvrDeviceId').addEventListener('input', e=>{ state.mdvrDeviceId = e.target.value; updatePreview(); });
+document.getElementById('mdvrPositionInput').addEventListener('input', e=>{ state.mdvrPosition = e.target.value; updatePreview(); });
+document.getElementById('groundPointInput').addEventListener('input', e=>{ state.groundPoint = e.target.value; updatePreview(); });
+document.getElementById('provinceInput').addEventListener('input', e=>{ state.province = e.target.value; updatePreview(); });
+document.getElementById('statusDltInput').addEventListener('input', e=>{ state.statusDlt = e.target.value; updatePreview(); });
 document.getElementById('mdvrServerSelect').addEventListener('change', e=>{ state.mdvrServer = e.target.value; updatePreview(); });
 document.getElementById('installMdvrPlacementInput').addEventListener('input', e=>{ state.installMdvrPlacement = e.target.value; updatePreview(); });
 document.getElementById('installPowerSourceInput').addEventListener('input', e=>{ state.installPowerSource = e.target.value; updatePreview(); });
