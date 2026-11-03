@@ -10,7 +10,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.96.0">
+<meta name="app-version" content="1.97.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -2429,11 +2429,23 @@ async function loadReportFromUrlIfAny(){
   const params = new URLSearchParams(location.search);
   const id = params.get('report');
   const autosend = params.get('autosend') === '1';
+  const retrack = params.get('retrack') === '1';
   if(!id) return;
   try{
     const snap = await _db.collection('qc_reports').doc(id).get();
     if(snap.exists){
-      loadReportIntoForm({id: snap.id, ...snap.data()});
+      const doc = {id: snap.id, ...snap.data()};
+      if(retrack){
+        history.replaceState(null, '', location.pathname);
+        if(confirm('ยืนยันสั่งให้ระบบ track รายงานนี้ซ้ำอีกครั้งหรือไม่?\n\n(จะเขียน/อัปเดตข้อมูลใน Google Sheet Tracking ตามข้อมูลในรายงานนี้อีกครั้ง — ไม่ส่งเข้า LINE ซ้ำ ไม่แก้ไขเนื้อหารายงาน)')){
+          await retrackReport(doc);
+        } else {
+          loadReportIntoForm(doc);
+          showToast('ยกเลิกการ track ซ้ำ');
+        }
+        return;
+      }
+      loadReportIntoForm(doc);
       if(autosend){
         isQuickResend = true;
         history.replaceState(null, '', location.pathname);
@@ -4666,6 +4678,128 @@ async function findRecentDuplicateReport(){
   }
 }
 
+// ทุก write-back ที่เขียนลง Tracking/Issue จริง (ไม่รวม saveReport()/
+// pushQcReportLog()/ส่งเข้า LINE) — แยกออกมาจาก sendToLine() เดิมให้เรียกซ้ำได้
+// จาก retrackReport() ด้านล่าง (ปุ่ม "Track ให้ใหม่อีกครั้ง" ใน Dashboard) โดย
+// ไม่ต้องลงรายงานใหม่/ส่งเข้า LINE ซ้ำ ใช้ state ตรงๆ เหมือน sendToLine() เดิม
+// ทุกจุด (เรียงลำดับเดิมเป๊ะ ห้ามสลับ — ดูคอมเมนต์เดิมที่ sendToLine() เรื่อง
+// pushMdvrInstall()/pushMdvrUnitSwaps() ต้องรันก่อน pushSheetUpdates()) แค่คืน
+// ผลแบบมีโครงสร้าง (ok/error ต่อประเภท) แทนการต่อ string เข้า saveSuffix ตรงๆ
+// ให้ index.html เอาไปโชว์สถานะ "track แล้วหรือยัง" ต่อรายงานได้ ไม่ใช่แค่
+// toast ข้อความเดียวที่หายไปหลังส่ง
+//
+// ข้อจำกัดที่รู้อยู่: issueClose ใช้ openIssues[].closeChecked ซึ่งเป็นแค่
+// UI state สดๆ ตอนกรอกฟอร์ม ไม่เคยถูกบันทึกลง Firestore เลย — retrack จึงไม่มี
+// ทางรู้ว่าตอนส่งรายงานจริงช่างติ๊กปิด ticket ไหนไว้บ้าง ถ้า issue ปิดสำเร็จไป
+// แล้วตั้งแต่รอบแรกก็ไม่เป็นไร (loadOpenIssue() จะไม่เจอมันอีกเลย ไม่มีอะไรให้
+// ปิดซ้ำ) แต่ถ้ารอบแรก "ปิด Issue ไม่สำเร็จ" retrack จะไม่ลองปิดให้อัตโนมัติ
+// (ต้องไปปิดเองผ่านฟอร์มตามปกติ) — ยอมรับข้อจำกัดนี้ไว้ก่อน ไม่ได้ขยายสโคป
+async function runTrackWriteBacks(){
+  const results = {};
+  let suffix = '';
+
+  try{
+    const mdvrRes = await pushMdvrInstall();
+    if(mdvrRes){ results.mdvrInstall = {ok:true}; suffix += ` · อัปเดตเครื่อง MDVR ✓`; }
+  }catch(e){
+    console.error('[MDVR install]', e);
+    results.mdvrInstall = {ok:false, error: e.message};
+    suffix += ` (อัปเดตเครื่อง MDVR ไม่สำเร็จ: ${e.message})`;
+  }
+
+  try{
+    const unitSwapRes = await pushMdvrUnitSwaps();
+    if(unitSwapRes){ results.mdvrUnitSwap = {ok:true, count: unitSwapRes.length}; suffix += ` · เปลี่ยน MDVR ${unitSwapRes.length} เครื่อง ✓`; }
+  }catch(e){
+    console.error('[MDVR unit swap]', e);
+    results.mdvrUnitSwap = {ok:false, error: e.message};
+    suffix += ` (เปลี่ยน MDVR ไม่สำเร็จ: ${e.message})`;
+  }
+
+  try{
+    const checklistRes = await pushMdvrChecklist();
+    if(checklistRes && checklistRes.written && checklistRes.written.length){
+      results.mdvrChecklist = {ok:true}; suffix += ` · บันทึกเช็คลิสต์ลง Track ✓`;
+    }
+  }catch(e){
+    console.error('[MDVR checklist]', e);
+    results.mdvrChecklist = {ok:false, error: e.message};
+    suffix += ` (บันทึกเช็คลิสต์ลง Track ไม่สำเร็จ: ${e.message})`;
+  }
+
+  try{
+    const sheetRes = await pushSheetUpdates();
+    if(sheetRes && sheetRes.updated && sheetRes.updated.length){
+      results.sheetUpdates = {ok:true, count: sheetRes.updated.length}; suffix += ` · อัปเดตชีต ${sheetRes.updated.length} รายการ ✓`;
+    }
+  }catch(e){
+    console.error('[Sheet update]', e);
+    results.sheetUpdates = {ok:false, error: e.message};
+    suffix += ` (อัปเดตชีตไม่สำเร็จ: ${e.message})`;
+  }
+
+  try{
+    const clearRes = await pushMdvrClears();
+    if(clearRes && clearRes.length){
+      results.mdvrClears = {ok:true, count: clearRes.length}; suffix += ` · ถอด+บันทึก ${clearRes.length} รายการ ✓`;
+    }
+  }catch(e){
+    console.error('[MDVR clear]', e);
+    results.mdvrClears = {ok:false, error: e.message};
+    suffix += ` (ถอด/บันทึกไม่สำเร็จ: ${e.message})`;
+  }
+
+  try{
+    const swapRes = await pushDeviceSwaps();
+    if(swapRes && swapRes.length){
+      const missingSNs = swapRes.flatMap(r => r.notFound || []);
+      results.deviceSwaps = {ok: !missingSNs.length, count: swapRes.length, missingSNs};
+      suffix += ` · อัปเดต Ai Box/ADAS/DMS ${swapRes.length} รายการ ✓`;
+      if(missingSNs.length){
+        suffix += ` (หา SN ไม่เจอในชีต ไม่ได้อัปเดต: ${missingSNs.join(', ')})`;
+      }
+    }
+  }catch(e){
+    console.error('[Device swap]', e);
+    results.deviceSwaps = {ok:false, error: e.message};
+    suffix += ` (อัปเดต Ai Box/ADAS/DMS ไม่สำเร็จ: ${e.message})`;
+  }
+
+  try{
+    const issueRes = await pushIssueClose();
+    if(issueRes && issueRes.length){
+      results.issueClose = {ok:true, tickets: issueRes.map(r=> r.ticketNo).filter(Boolean)};
+      suffix += ` · ปิด Issue ${issueRes.map(r=> r.ticketNo).filter(Boolean).join(', ')} ✓`;
+    }
+  }catch(e){
+    console.error('[Issue close]', e);
+    results.issueClose = {ok:false, error: e.message};
+    suffix += ` (ปิด Issue ไม่สำเร็จ: ${e.message})`;
+  }
+
+  return { results, suffix };
+}
+
+// ปุ่ม "Track ให้ใหม่อีกครั้ง" จาก Dashboard (index.html) — ?report=<id>&retrack=1
+// โหลดรายงานเดิมเข้า state เหมือนแก้ไขปกติ (loadReportIntoForm()) แต่รันแค่
+// runTrackWriteBacks() เท่านั้น ไม่ส่งเข้า LINE ซ้ำ ไม่แก้ไข field ของรายงานเอง
+// (saveReport() ไม่ถูกเรียกเลย) — ต้อง await loadVehicleOldModels() เองตรงๆ
+// ก่อน ไม่พึ่ง scheduleStockLockCheck()'s debounce 500ms ของ loadReportIntoForm()
+// เพราะ buildSheetUpdates()/buildDeviceSwaps()/buildMdvrUnitSwaps() ทั้งหมด
+// หา src จาก vehicleOldModels/vehicleEmptySlots — ถ้ายังไม่โหลดเสร็จตอนเรียก
+// write-back จะหาไม่เจอเลยสักแถว เงียบๆ ไม่เขียนอะไรทั้งที่ควรจะเขียน
+async function retrackReport(doc){
+  loadReportIntoForm(doc);
+  await loadVehicleOldModels();
+  showToast('กำลัง track ซ้ำ...');
+  const { results: trackResults, suffix } = await runTrackWriteBacks();
+  if(currentReportId){
+    try{ await _db.collection('qc_reports').doc(currentReportId).set({ trackResults, trackResultsAt: Date.now() }, {merge:true}); }
+    catch(e){ console.error('[trackResults save]', e); }
+  }
+  showToast((suffix ? 'Track ซ้ำเสร็จแล้ว' + suffix : 'Track ซ้ำเสร็จแล้ว — ไม่มีรายการที่ต้องเขียนลง Tracking สำหรับรายงานนี้'));
+}
+
 async function sendToLine(){
   const endpoint = LINE_ENDPOINT.trim();
   const sendBtn = document.getElementById('sendBtn');
@@ -4746,112 +4880,17 @@ async function sendToLine(){
       catch(e){ console.error('[QC log save]', e); }
     }
 
-    // ติดตั้งใหม่: write the picked MDVR unit's plate/Device ID/Server (and
-    // customer/date/technician) into the MDVR Tracking sheet. No-ops for
-    // every other job type, or if no IMEI was picked.
-    //
-    // MUST run before pushSheetUpdates() below — this is what writes the
-    // plate into that MDVR row's "Vehicle No." cell for the very first
-    // time on a brand-new install. updateVehicle() (pushSheetUpdates'
-    // endpoint) finds its row BY PLATE, so on a true new install that
-    // plate cell is still empty until this runs; calling them in the
-    // other order made pushSheetUpdates() throw "plate not found" every
-    // time on new_install — silently dropping the Ch1-Ch9 channel writes,
-    // the one case this whole feature exists for. (Not an issue for
-    // upgrade/repair/remove: pushMdvrInstall() no-ops there, and the
-    // plate was already on the sheet from whenever it was first installed.)
-    try{
-      const mdvrRes = await pushMdvrInstall();
-      if(mdvrRes){
-        saveSuffix += ` · อัปเดตเครื่อง MDVR ✓`;
-      }
-    }catch(e){
-      console.error('[MDVR install]', e);
-      saveSuffix += ` (อัปเดตเครื่อง MDVR ไม่สำเร็จ: ${e.message})`;
-    }
-
-    // เปลี่ยน MDVR ทั้งเครื่อง (upgrade/repair) — ต้องรันก่อน pushSheetUpdates()
-    // ด้านล่างเหมือนกัน ด้วยเหตุผลเดียวกับ pushMdvrInstall(): ถ้ามีการสลับ
-    // อุปกรณ์อื่นในรายงานเดียวกันด้วย ต้องให้ plate ย้ายไปอยู่แถวเครื่องใหม่
-    // ก่อน การเขียนคอลัมน์อื่นๆ ถึงจะลงถูกแถว
-    try{
-      const unitSwapRes = await pushMdvrUnitSwaps();
-      if(unitSwapRes){
-        saveSuffix += ` · เปลี่ยน MDVR ${unitSwapRes.length} เครื่อง ✓`;
-      }
-    }catch(e){
-      console.error('[MDVR unit swap]', e);
-      saveSuffix += ` (เปลี่ยน MDVR ไม่สำเร็จ: ${e.message})`;
-    }
-
-    // กล่องเหล็ก/น็อต DB9 ของเช็คลิสต์ — เติมลง Track (คอลัมน์ "กล่องเก็บ
-    // MDVR"/"น๊อทเสริมเครื่องรูดบัตร") ด้วย ต้องรันหลัง pushMdvrInstall()/
-    // pushMdvrUnitSwaps() เสมอ (เผื่อทะเบียนเพิ่งย้ายไปอยู่แถวเครื่องใหม่)
-    try{
-      const checklistRes = await pushMdvrChecklist();
-      if(checklistRes && checklistRes.written && checklistRes.written.length){
-        saveSuffix += ` · บันทึกเช็คลิสต์ลง Track ✓`;
-      }
-    }catch(e){
-      console.error('[MDVR checklist]', e);
-      saveSuffix += ` (บันทึกเช็คลิสต์ลง Track ไม่สำเร็จ: ${e.message})`;
-    }
-
-    // Update the MDVR Tracking sheet for any equipment swapped from the
-    // vehicle-history picker, or (new_install) a channel picked per fix
-    // row. Failure here is non-fatal — the report still sends; we just
-    // note it in the toast.
-    try{
-      const sheetRes = await pushSheetUpdates();
-      if(sheetRes && sheetRes.updated && sheetRes.updated.length){
-        saveSuffix += ` · อัปเดตชีต ${sheetRes.updated.length} รายการ ✓`;
-      }
-    }catch(e){
-      console.error('[Sheet update]', e);
-      saveSuffix += ` (อัปเดตชีตไม่สำเร็จ: ${e.message})`;
-    }
-
-    // ถอดย้ายอุปกรณ์: clear + log any "ถอด" slot that wasn't paired with a
-    // replacement in "ติดตั้ง". No-ops for every other template.
-    try{
-      const clearRes = await pushMdvrClears();
-      if(clearRes && clearRes.length){
-        saveSuffix += ` · ถอด+บันทึก ${clearRes.length} รายการ ✓`;
-      }
-    }catch(e){
-      console.error('[MDVR clear]', e);
-      saveSuffix += ` (ถอด/บันทึกไม่สำเร็จ: ${e.message})`;
-    }
-
-    // Move any AI Box/ADAS/DMS unit swapped this visit in the Ai Box Tracking
-    // spreadsheet. Also non-fatal — the report still sends either way.
-    try{
-      const swapRes = await pushDeviceSwaps();
-      if(swapRes && swapRes.length){
-        saveSuffix += ` · อัปเดต Ai Box/ADAS/DMS ${swapRes.length} รายการ ✓`;
-        // swapDevice() on the Worker side returns ok:true even when a given
-        // SN has no matching row in the tracking sheet (it just skips that
-        // side of the swap) — surface it here instead of silently reporting
-        // success for a serial that was never actually written.
-        const missingSNs = swapRes.flatMap(r => r.notFound || []);
-        if(missingSNs.length){
-          saveSuffix += ` (หา SN ไม่เจอในชีต ไม่ได้อัปเดต: ${missingSNs.join(', ')})`;
-        }
-      }
-    }catch(e){
-      console.error('[Device swap]', e);
-      saveSuffix += ` (อัปเดต Ai Box/ADAS/DMS ไม่สำเร็จ: ${e.message})`;
-    }
-
-    // Close every ISSUE Tracking ticket the tech left checked.
-    try{
-      const issueRes = await pushIssueClose();
-      if(issueRes && issueRes.length){
-        saveSuffix += ` · ปิด Issue ${issueRes.map(r=> r.ticketNo).filter(Boolean).join(', ')} ✓`;
-      }
-    }catch(e){
-      console.error('[Issue close]', e);
-      saveSuffix += ` (ปิด Issue ไม่สำเร็จ: ${e.message})`;
+    // Tracking-sheet write-backs (MDVR install/swap/checklist, Ch1-Ch9/other
+    // column updates, ถอดย้าย clears, Ai Box/ADAS/DMS swaps, Issue close) —
+    // see runTrackWriteBacks() below. Also persisted onto the report doc as
+    // trackResults so Dashboard (index.html) can show per-report Track
+    // status and offer "Track ให้ใหม่อีกครั้ง" (retrackReport() below) without
+    // re-submitting the whole report.
+    const { results: trackResults, suffix: trackSuffix } = await runTrackWriteBacks();
+    saveSuffix += trackSuffix;
+    if(currentReportId){
+      try{ await _db.collection('qc_reports').doc(currentReportId).set({ trackResults, trackResultsAt: Date.now() }, {merge:true}); }
+      catch(e){ console.error('[trackResults save]', e); }
     }
 
     if(!endpoint){

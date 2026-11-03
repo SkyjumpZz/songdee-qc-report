@@ -7,7 +7,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>Dashboard · SONGDEE GPS</title>
-<meta name="app-version" content="1.33.0">
+<meta name="app-version" content="1.34.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -351,7 +351,7 @@
     transition:border-color .15s ease, transform .15s ease, box-shadow .15s ease;
   }
   .history-item:hover{border-color:var(--accent); transform:translateY(-1px); box-shadow:var(--shadow-md);}
-  .history-item .hi-link{display:block; text-decoration:none; color:inherit; cursor:pointer; padding-right:32px;}
+  .history-item .hi-link{display:block; text-decoration:none; color:inherit; cursor:pointer; padding-right:64px;}
   .history-item .hi-row{display:flex; align-items:flex-start; gap:11px;}
   .history-item .hi-icon{
     width:34px; height:34px; border-radius:11px; flex-shrink:0;
@@ -384,6 +384,26 @@
     text-decoration:none; cursor:pointer; background:none; border:none; text-align:left; font-family:inherit;
   }
   .hi-menu-item:hover{background:var(--bg-panel-2);}
+  .hi-expand-btn{
+    position:absolute; top:10px; right:42px; width:26px; height:26px; border-radius:8px;
+    border:1px solid var(--line-soft); background:var(--bg-panel-2); color:var(--text-dim);
+    display:flex; align-items:center; justify-content:center; font-size:12px; line-height:1; cursor:pointer;
+    transition:transform .15s ease;
+  }
+  .hi-expand-btn:hover{color:var(--text); border-color:var(--accent);}
+  .hi-expand-btn.open{transform:rotate(180deg);}
+  .hi-expand{
+    margin-top:10px; padding-top:10px; border-top:1px solid var(--line-soft);
+    font-size:12px; color:var(--text-dim); display:flex; flex-direction:column; gap:5px;
+  }
+  .hi-expand .warn{color:#ffb020;}
+  .hi-expand .ok{color:#3ddc97;}
+  .hi-retrack-btn{
+    align-self:flex-start; margin-top:3px; font-size:12px; font-weight:600;
+    padding:6px 11px; border-radius:var(--r-pill); border:1px solid var(--line-soft);
+    background:var(--bg-panel-2); color:var(--text); cursor:pointer; font-family:inherit;
+  }
+  .hi-retrack-btn:hover{border-color:var(--accent); color:var(--accent);}
   .empty, .err, .loading{color:var(--text-dim); font-size:13px; padding:40px 0; text-align:center;}
   .skeleton-wrap{display:flex; flex-direction:column; gap:10px;}
   .skeleton-row{
@@ -1661,6 +1681,41 @@ function relativeDateLabel(dateStr){
   return dateStr.split('-').reverse().join('/');
 }
 
+// สรุปสถานะ track/ปิด Issue จาก doc.trackResults (บันทึกจาก runTrackWriteBacks()
+// ใน form.html, ดูคอมเมนต์ที่นั่น) — รายงานเก่าก่อนฟีเจอร์นี้จะไม่มี trackResults
+// เลย แสดง "ไม่มีข้อมูล" แทนการเดา ให้กดปุ่ม "Track ให้ใหม่อีกครั้ง" เพื่อ
+// sync/เช็คสถานะจริงได้ — relevantKeys คือ write-back ที่นับเป็น "track"
+// (ไม่รวม issueClose ซึ่งแยกแสดงเป็นบรรทัดของตัวเอง)
+function trackStatusSummary(doc){
+  const tr = doc.trackResults;
+  if(!tr){
+    return { trackLine: 'ไม่มีข้อมูล (รายงานนี้ยังไม่เคยบันทึกสถานะ track)', trackClass: '', issueLine: null, issueClass: '' };
+  }
+  const relevantKeys = ['mdvrInstall', 'mdvrUnitSwap', 'mdvrChecklist', 'sheetUpdates', 'mdvrClears', 'deviceSwaps'];
+  let anyRan = false, anyFail = false;
+  relevantKeys.forEach(k=>{
+    if(tr[k]){ anyRan = true; if(!tr[k].ok) anyFail = true; }
+  });
+  const atStr = doc.trackResultsAt ? ` (${formatSentAt(doc.trackResultsAt)})` : '';
+  let trackLine, trackClass;
+  if(!anyRan){ trackLine = 'ไม่มีรายการที่ต้อง track สำหรับรายงานนี้' + atStr; trackClass = ''; }
+  else if(anyFail){ trackLine = '⚠️ Track ไม่สำเร็จบางรายการ' + atStr; trackClass = 'warn'; }
+  else { trackLine = '✅ Track สำเร็จ' + atStr; trackClass = 'ok'; }
+
+  let issueLine = null, issueClass = '';
+  if(tr.issueClose){
+    if(tr.issueClose.ok){
+      const tickets = (tr.issueClose.tickets||[]).join(', ');
+      issueLine = `✅ ปิด Issue แล้ว${tickets ? ' (' + escapeHtmlLite(tickets) + ')' : ''}`;
+      issueClass = 'ok';
+    } else {
+      issueLine = `⚠️ ปิด Issue ไม่สำเร็จ: ${escapeHtmlLite(tr.issueClose.error || '')}`;
+      issueClass = 'warn';
+    }
+  }
+  return { trackLine, trackClass, issueLine, issueClass };
+}
+
 function renderList(list){
   const listEl = document.getElementById('list');
   if(!list.length){
@@ -1690,6 +1745,8 @@ function renderList(list){
     const sentStatusText = doc.lineSentAt
       ? `ส่งเข้า LINE แล้ว — ${formatSentAt(doc.lineSentAt)}`
       : 'ยังไม่เคยส่งเข้า LINE';
+    const retrackHref = `form.html?report=${encodeURIComponent(doc.id)}&retrack=1`;
+    const { trackLine, trackClass, issueLine, issueClass } = trackStatusSummary(doc);
     const wrap = document.createElement('div');
     wrap.className = 'history-item' + (doc.tpl ? ' tpl-' + doc.tpl : '');
     wrap.innerHTML = `
@@ -1702,11 +1759,17 @@ function renderList(list){
           </div>
         </div>
       </a>
+      <button type="button" class="hi-expand-btn" title="ดูสถานะ Track/Issue">▾</button>
       <button type="button" class="hi-menu-btn" title="ตัวเลือกเพิ่มเติม">⋮</button>
       <div class="hi-menu app-hidden">
         <div class="hi-menu-status">${escapeHtmlLite(sentStatusText)}</div>
         <a class="hi-menu-item" href="${resendHref}">📤 ส่งเข้า LINE อีกครั้ง</a>
         <a class="hi-menu-item" href="${editHref}">✏️ แก้ไขรายงาน</a>
+      </div>
+      <div class="hi-expand app-hidden">
+        ${issueLine ? `<div class="${issueClass}">${issueLine}</div>` : ''}
+        <div class="${trackClass}">${trackLine}</div>
+        <a class="hi-retrack-btn" href="${retrackHref}">🔄 Track ให้ใหม่อีกครั้ง</a>
       </div>
     `;
     wrap.querySelector('.hi-menu-btn').addEventListener('click', e=>{
@@ -1716,6 +1779,15 @@ function renderList(list){
       closeAllHiMenus();
       menu.classList.toggle('app-hidden', !willShow);
     });
+    wrap.querySelector('.hi-expand-btn').addEventListener('click', e=>{
+      e.preventDefault(); e.stopPropagation();
+      const panel = wrap.querySelector('.hi-expand');
+      const btn = wrap.querySelector('.hi-expand-btn');
+      const willShow = panel.classList.contains('app-hidden');
+      panel.classList.toggle('app-hidden', !willShow);
+      btn.classList.toggle('open', willShow);
+    });
+    wrap.querySelector('.hi-retrack-btn').addEventListener('click', e=>{ e.stopPropagation(); });
     listEl.appendChild(wrap);
   });
 }
