@@ -10,7 +10,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.93.0">
+<meta name="app-version" content="1.94.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -1417,6 +1417,28 @@ async function loadMdvrAvailable(){
     mdvrAvailableDevices = [];
   }
   if(document.activeElement && document.activeElement.id === 'mdvrImeiInput') renderMdvrImeiSuggest();
+}
+// ทุกเครื่อง MDVR ที่มีแถวอยู่จริงใน Tracking ไม่ใช่แค่ที่ว่างอยู่ — ใช้เฉพาะ
+// ช่อง "เปลี่ยน MDVR ทั้งเครื่อง" (buildMdvrUnitSwapHalf()) เท่านั้น ต่างจาก
+// mdvrAvailableDevices (ติดตั้งใหม่ ต้องเป็นเครื่องว่างเท่านั้น ห้ามเลือกเครื่อง
+// ที่ติดอยู่ที่อื่นอยู่แล้ว) — การเปลี่ยน MDVR ทั้งเครื่องคือการ "ย้าย" เครื่อง
+// จากคันนึงไปอีกคันตรงๆ ช่างเลยต้องหา/เลือกเครื่องที่ติดอยู่ที่อื่นได้ด้วย
+// เหมือนที่ทำกับ SN กล้อง DMS/ADAS (loadDeviceTrackingSNs()) — กันพิมพ์/เลือก
+// IMEI ผิดแล้วบันทึกไม่ขึ้น เพราะ backend เขียนได้เฉพาะ IMEI ที่มีแถวอยู่จริง
+let mdvrAllDevices = [];
+let mdvrAllDevicesLoading = false;
+async function loadMdvrAllDevices(){
+  if(mdvrAllDevicesLoading) return;
+  mdvrAllDevicesLoading = true;
+  try{
+    const res = await fetch('https://songdee-vehicle-lookup.songdeegps.workers.dev/mdvr-list');
+    const data = await res.json();
+    mdvrAllDevices = Array.isArray(data.items) ? data.items : [];
+  }catch(e){
+    console.error('[MDVR list]', e);
+    mdvrAllDevices = [];
+  }
+  renderFixRows();
 }
 
 // EMEI/SN ที่สแกนไว้ตอน "จัดของ" (songdee-stock) ทั้งหมด ไม่กรองตามทะเบียน —
@@ -3175,13 +3197,26 @@ function buildMdvrUnitSwapHalf(row, idx){
   const line = document.createElement('div');
   line.className = 'item-row';
 
+  loadMdvrAllDevices(); // not awaited — merges into options list once it lands (lazy-loaded once, see loadMdvrAllDevices())
+  const seenImei = new Set();
+  const pickList = [];
+  mdvrAllDevices.forEach(d=>{
+    if(!d.imei || seenImei.has(d.imei)) return;
+    seenImei.add(d.imei);
+    pickList.push(d);
+  });
+  mdvrAvailableDevices.forEach(d=>{
+    if(!d.imei || seenImei.has(d.imei)) return;
+    seenImei.add(d.imei);
+    pickList.push(d);
+  });
   const groups = [{
     label: null,
-    options: mdvrAvailableDevices.map(d=> ({ value: d.imei, text: `${d.imei}${d.deviceType ? ' — ' + d.deviceType : ''}` })),
+    options: pickList.map(d=> ({ value: d.imei, text: `${d.imei}${d.deviceType ? ' — ' + d.deviceType : ''}${d.plate ? ' · ติดอยู่ ' + d.plate : ' · ว่าง'}` })),
   }];
   const sel = buildSearchableSelect(groups, row.newMdvrImei || '', '-- เลือก IMEI เครื่องใหม่ --', (newValue)=>{
     row.newMdvrImei = newValue;
-    const dev = mdvrAvailableDevices.find(d=> d.imei === newValue);
+    const dev = pickList.find(d=> d.imei === newValue);
     row.product = dev && dev.deviceType ? dev.deviceType : newValue;
     updatePreview(); renderFixRows();
   });
