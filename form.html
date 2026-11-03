@@ -10,7 +10,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.94.0">
+<meta name="app-version" content="1.95.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -1555,7 +1555,7 @@ function buildMdvrUnitSwaps(){
     if(!src || src.column !== 'Device type') return;
     const newImei = (row.newMdvrImei || '').trim();
     if(!newImei) return;
-    swaps.push({ newImei });
+    swaps.push({ newImei, deviceId: (row.mdvrDeviceId || '').trim() });
   });
   return swaps;
 }
@@ -1570,7 +1570,7 @@ async function pushMdvrUnitSwaps(){
     const res = await fetch(MDVR_UNIT_SWAP_ENDPOINT, {
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ plate, newImei: s.newImei, customer: state.customer, date: state.date, technician: onSiteTechName(), technicianRaw: onSiteTechNameRaw() })
+      body: JSON.stringify({ plate, newImei: s.newImei, deviceId: s.deviceId, customer: state.customer, date: state.date, technician: onSiteTechName(), technicianRaw: onSiteTechNameRaw() })
     });
     const data = await res.json();
     if(!res.ok || !data.ok) throw new Error(data.error || ('HTTP ' + res.status));
@@ -2837,7 +2837,7 @@ function defaultState(){
     // starting row shows up under "① ถอด" only if that template ends up
     // picked, not paired with an empty "② ติดตั้ง" slot (ตามที่ขอ แยกอิสระ
     // จากกัน) — "+ เพิ่มอุปกรณ์ที่ติดตั้ง" adds that side separately now.
-    fixes: [{product:"", qty:1, custom:"", oldModel:"", oldModelCustom:"", newSN:"", oldSN:"", ch:"", phoneNo:"", remark:"", newMdvrImei:"", section:"remove"}],
+    fixes: [{product:"", qty:1, custom:"", oldModel:"", oldModelCustom:"", newSN:"", oldSN:"", ch:"", phoneNo:"", remark:"", newMdvrImei:"", mdvrDeviceId:"", section:"remove"}],
     stickers: {},
     stickerRemark: "", // optional free-text note shown above the sticker checklist — never required
     checklist: {},
@@ -3001,7 +3001,7 @@ function renderProblemRows(){
 // buildProductHalf() regardless of whether the rest of the form is locked
 // to a ใบเบิก/Spare list, and doesn't count against lockedOptionsCount.
 function addFixRow(extra){
-  state.fixes.push({product:"", qty:1, custom:"", oldModel:"", oldModelCustom:"", newSN:"", oldSN:"", ch:"", phoneNo:"", remark:"", newMdvrImei:"", section:"pair", extra: !!extra});
+  state.fixes.push({product:"", qty:1, custom:"", oldModel:"", oldModelCustom:"", newSN:"", oldSN:"", ch:"", phoneNo:"", remark:"", newMdvrImei:"", mdvrDeviceId:"", section:"pair", extra: !!extra});
   renderFixRows();
   updatePreview();
 }
@@ -3014,17 +3014,17 @@ function addFixRow(extra){
 // in both columns for backward compatibility, see renderRemoveSections();
 // never created new.
 function addRemoveOldRow(extra){
-  state.fixes.push({product:"", qty:1, custom:"", oldModel:"", oldModelCustom:"", newSN:"", oldSN:"", ch:"", phoneNo:"", remark:"", newMdvrImei:"", section:"remove", extra: !!extra});
+  state.fixes.push({product:"", qty:1, custom:"", oldModel:"", oldModelCustom:"", newSN:"", oldSN:"", ch:"", phoneNo:"", remark:"", newMdvrImei:"", mdvrDeviceId:"", section:"remove", extra: !!extra});
   renderFixRows();
   updatePreview();
 }
 function addRemoveNewRow(extra){
-  state.fixes.push({product:"", qty:1, custom:"", oldModel:"", oldModelCustom:"", newSN:"", oldSN:"", ch:"", phoneNo:"", remark:"", newMdvrImei:"", section:"install", extra: !!extra});
+  state.fixes.push({product:"", qty:1, custom:"", oldModel:"", oldModelCustom:"", newSN:"", oldSN:"", ch:"", phoneNo:"", remark:"", newMdvrImei:"", mdvrDeviceId:"", section:"install", extra: !!extra});
   renderFixRows();
   updatePreview();
 }
 function addRemoveEditRow(extra){
-  state.fixes.push({product:"", qty:1, custom:"", oldModel:"", oldModelCustom:"", newSN:"", oldSN:"", ch:"", phoneNo:"", remark:"", newMdvrImei:"", section:"edit", extra: !!extra});
+  state.fixes.push({product:"", qty:1, custom:"", oldModel:"", oldModelCustom:"", newSN:"", oldSN:"", ch:"", phoneNo:"", remark:"", newMdvrImei:"", mdvrDeviceId:"", section:"edit", extra: !!extra});
   renderFixRows();
   updatePreview();
 }
@@ -3231,6 +3231,23 @@ function buildMdvrUnitSwapHalf(row, idx){
 
   line.appendChild(sel); line.appendChild(qty); line.appendChild(rm);
   wrap.appendChild(line);
+
+  // เลือกเครื่องที่มี Tracking อยู่แล้วที่ทะเบียนอื่น — ไม่ได้ห้ามเลือก (ตามที่
+  // ขอ "ไม่ต้องเลือกเฉพาะที่ว่างก็ได้") แค่เตือนชัดๆ ให้ช่างยืนยันว่าตั้งใจย้าย
+  // เครื่องจริง ไม่ใช่เลือกผิดตัว
+  const pickedDev = row.newMdvrImei ? pickList.find(d=> d.imei === row.newMdvrImei) : null;
+  if(pickedDev && pickedDev.plate){
+    const warn = document.createElement('div');
+    warn.className = 'hint'; warn.style.marginTop = '6px'; warn.style.color = 'var(--danger)';
+    warn.textContent = `⚠️ เครื่อง IMEI นี้มี Tracking อยู่แล้วที่ทะเบียน ${pickedDev.plate} — ถ้าเลือก ระบบจะย้ายออกจากทะเบียนนั้นมาที่นี่`;
+    wrap.appendChild(warn);
+  }
+
+  const deviceIdInput = document.createElement('input');
+  deviceIdInput.type = 'text'; deviceIdInput.placeholder = 'Device ID'; deviceIdInput.style.marginTop = '6px';
+  deviceIdInput.value = row.mdvrDeviceId || '';
+  deviceIdInput.oninput = ()=>{ row.mdvrDeviceId = deviceIdInput.value; updatePreview(); };
+  wrap.appendChild(deviceIdInput);
 
   const remark = document.createElement('textarea');
   remark.rows = 2; remark.style.marginTop = '6px';
@@ -3953,13 +3970,17 @@ function fixLine(row){
   const oldName = tplHasOldModel(state.tpl)
     ? (row.oldModel === "อื่นๆ (พิมพ์เอง)" ? (row.oldModelCustom || "") : row.oldModel)
     : "";
-  const newTag = (deviceTypeForProduct(row.product) && row.newSN) ? ` (SN: ${row.newSN})` : '';
+  // SN จริงไม่ต้องโชว์ในข้อความรายงานแล้ว (ตามที่ขอ "ไม่ต้องเอา EMEI ของกล้อง
+  // จริงๆ มาใส่ก็ได้ ให้ใส่แค่ในระบบพอ") — row.newSN/row.oldSN ยังถูกส่งเข้า
+  // swapDevice() write-back เหมือนเดิมทุกอย่าง จุดนี้แค่ไม่ปรินต์ลงข้อความ
   // รุ่นเดิม (จากชีต DMS/ADAS Tracking ตาม SN เดิม — ดู autofillOldDeviceVersion())
-  // ต่อท้ายในวงเล็บเดียวกับ SN เดิม ให้รายงานที่ส่งจริงบอกรุ่นด้วย ไม่ใช่แค่
-  // โชว์ในฟอร์มตอนกรอกเฉยๆ (ตามที่ขอ: "เวลาลงงานแล้วให้มันบอกชื่อรุ่นด้วย")
-  const oldTag = (tplHasOldModel(state.tpl) && deviceTypeForProduct(row.oldModel) && row.oldSN)
-    ? ` (SN เดิม: ${row.oldSN}${row.oldModelVersion ? `, รุ่น: ${row.oldModelVersion}` : ''})`
+  // ยังโชว์อยู่ (มีประโยชน์กว่าเลข SN เฉยๆ) แค่ตัดเลข SN ออก
+  const oldTag = (tplHasOldModel(state.tpl) && deviceTypeForProduct(row.oldModel) && row.oldModelVersion)
+    ? ` (รุ่นเดิม: ${row.oldModelVersion})`
     : '';
+  // Device ID ของเครื่อง MDVR ที่เปลี่ยน — row.newMdvrImei มีแค่แถวที่มาจาก
+  // buildMdvrUnitSwapHalf() (เปลี่ยน MDVR ทั้งเครื่อง) เท่านั้น ดู pushMdvrUnitSwaps()
+  const deviceIdTag = (row.newMdvrImei && (row.mdvrDeviceId || '').trim()) ? ` (Device ID: ${row.mdvrDeviceId.trim()})` : '';
   const chTag = (state.tpl === 'new_install' && row.ch) ? ` (${row.ch})` : '';
   const phoneTag = (isSimProduct(row.product) && row.phoneNo) ? ` (เบอร์: ${row.phoneNo})` : '';
   const extraTag = row.extra ? ' [ของนอกเหนือรายการ]' : '';
@@ -3968,10 +3989,10 @@ function fixLine(row){
   // หมายเหตุแทน ดู buildProductHalf()'s remark textarea.
   const remark = (row.remark || '').trim();
   const remarkTag = remark ? ` (${remark})` : '';
-  if(oldName && name) return `- ทำการเปลี่ยน ${oldName}${oldTag} เป็น ${name}${newTag}${chTag}${phoneTag}${extraTag}${remarkTag}`;
+  if(oldName && name) return `- ทำการเปลี่ยน ${oldName}${oldTag} เป็น ${name}${deviceIdTag}${chTag}${phoneTag}${extraTag}${remarkTag}`;
   if(name){
     const qty = row.qty ? ` x${row.qty}` : '';
-    return `- ทำการติดตั้ง ${name}${qty}${newTag}${chTag}${phoneTag}${extraTag}${remarkTag}`;
+    return `- ทำการติดตั้ง ${name}${qty}${deviceIdTag}${chTag}${phoneTag}${extraTag}${remarkTag}`;
   }
   if(oldName) return `- ทำการถอด ${oldName}${oldTag}${remarkTag}`;
   if(remark) return `- ${remark}`;
@@ -4271,6 +4292,22 @@ function buildMessage(){
     lines.push('');
   }
   const fixLines = state.fixes.map(fixLine).filter(Boolean);
+  // ติดตั้งใหม่ — Device ID ของตัวเครื่อง MDVR เป็นข้อมูลระดับรายงาน ไม่ใช่
+  // ของแถว fixes แถวไหนแถวหนึ่ง (state.mdvrDeviceId, กรอกที่การ์ด "ข้อมูลการ
+  // ติดตั้ง MDVR") — ต่อท้ายลิสต์อุปกรณ์ด้วยเพื่อให้โชว์ในรายงานจริง (ตามที่ขอ)
+  if(state.tpl === 'new_install' && (state.mdvrDeviceId||'').trim()){
+    fixLines.push(`- Device ID: ${state.mdvrDeviceId.trim()}`);
+  }
+  // คำว่า "ทำการติดตั้ง" ซ้ำทุกบรรทัดตอนติดตั้งหลายชิ้นอ่านแล้วรกไป — คงไว้
+  // แค่บรรทัดแรกที่เจอ บรรทัดถัดมาตัดคำนี้ออก เหลือแค่ "- ชื่ออุปกรณ์..."
+  // (ตามที่ขอ) ไม่แตะ "ทำการเปลี่ยน"/"ทำการถอด" เพราะไม่ได้ซ้ำแบบเดียวกัน
+  let sawInstallPrefix = false;
+  for(let i=0; i<fixLines.length; i++){
+    if(fixLines[i].startsWith('- ทำการติดตั้ง ')){
+      if(sawInstallPrefix) fixLines[i] = '- ' + fixLines[i].slice('- ทำการติดตั้ง '.length);
+      else sawInstallPrefix = true;
+    }
+  }
   if(fixLines.length){
     lines.push(FIXES_CARD_LABEL[state.tpl] || 'แก้ไข');
     lines.push(...fixLines);
