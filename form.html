@@ -10,7 +10,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.100.0">
+<meta name="app-version" content="1.101.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -4109,7 +4109,8 @@ function fixLine(row){
   if(oldName && name) return `- ทำการเปลี่ยน ${oldName}${oldTag} เป็น ${name}${deviceIdTag}${chTag}${phoneTag}${extraTag}${remarkTag}`;
   if(name){
     const qty = row.qty ? ` x${row.qty}` : '';
-    return `- ทำการติดตั้ง ${name}${qty}${deviceIdTag}${chTag}${phoneTag}${extraTag}${remarkTag}`;
+    // ตัดคำ "ทำการติดตั้ง" ออก (ตามที่ขอ "สั้นๆ") — เหลือแค่ "- ชื่ออุปกรณ์..."
+    return `- ${name}${qty}${deviceIdTag}${chTag}${phoneTag}${extraTag}${remarkTag}`;
   }
   if(oldName) return `- ทำการถอด ${oldName}${oldTag}${remarkTag}`;
   if(remark) return `- ${remark}`;
@@ -4426,16 +4427,6 @@ function buildMessage(){
     lines.push('');
   }
   const fixLines = state.fixes.map(fixLine).filter(Boolean);
-  // คำว่า "ทำการติดตั้ง" ซ้ำทุกบรรทัดตอนติดตั้งหลายชิ้นอ่านแล้วรกไป — คงไว้
-  // แค่บรรทัดแรกที่เจอ บรรทัดถัดมาตัดคำนี้ออก เหลือแค่ "- ชื่ออุปกรณ์..."
-  // (ตามที่ขอ) ไม่แตะ "ทำการเปลี่ยน"/"ทำการถอด" เพราะไม่ได้ซ้ำแบบเดียวกัน
-  let sawInstallPrefix = false;
-  for(let i=0; i<fixLines.length; i++){
-    if(fixLines[i].startsWith('- ทำการติดตั้ง ')){
-      if(sawInstallPrefix) fixLines[i] = '- ' + fixLines[i].slice('- ทำการติดตั้ง '.length);
-      else sawInstallPrefix = true;
-    }
-  }
   if(fixLines.length){
     lines.push(FIXES_CARD_LABEL[state.tpl] || 'แก้ไข');
     lines.push(...fixLines);
