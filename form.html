@@ -10,7 +10,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.95.0">
+<meta name="app-version" content="1.96.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -694,9 +694,10 @@
     <div class="card-title"><span class="dot">📡</span>ข้อมูลเครื่อง MDVR</div>
     <div class="row2">
       <div class="suggest-field">
-        <label>IMEI (เครื่องที่ยังไม่ผูกทะเบียน)</label>
+        <label>IMEI</label>
         <input type="text" id="mdvrImeiInput" placeholder="พิมพ์ หรือเลือกจากรายการ" autocomplete="off">
         <div class="suggest-dropdown app-hidden" id="mdvrImeiSuggestions"></div>
+        <div class="hint app-hidden" id="mdvrImeiWarning" style="color:var(--danger);"></div>
       </div>
       <div>
         <label>Device ID</label>
@@ -911,6 +912,7 @@ _auth.onAuthStateChanged(async user=>{
     loadLiveCatalog();
     loadTechStock();
     loadMdvrAvailable(); // not awaited — same reasoning as loadLineGroupMap() below
+    loadMdvrAllDevices(); // not awaited — same reasoning, powers the IMEI warning below
     loadScannedDeviceEmeis(); // not awaited, same reasoning
     await loadNameMap(); // resolved before any assignments fetch uses the real mapping
     loadTrackNameMap(); // not awaited — only read by onSiteTechName() at send time, same reasoning as loadLineGroupMap() below
@@ -1379,22 +1381,52 @@ const renderInstallMicPlacementSuggest = wireSuggestInput('installMicPlacementIn
 // left the tech with no way to enter it at all. Now a free-text field with
 // the same list as suggestions (wireSuggestInput — same ทะเบียน/ลูกค้า/Fleet
 // pattern elsewhere in this form): pick one, or just type any IMEI.
-const renderMdvrImeiSuggest = wireSuggestInput('mdvrImeiInput', 'mdvrImeiSuggestions', ()=>mdvrAvailableDevices.map(d=>d.imei), imei=>{
+// รายการ suggest รวมทั้ง mdvrAvailableDevices (ว่าง, จาก /mdvr-available) และ
+// mdvrAllDevices (ทุกเครื่อง รวมที่ติดอยู่ที่อื่น/ที่เป็นแค่ placeholder เช่น
+// "No.73" ในชีต, จาก /mdvr-list) — เครื่องที่มีแถวอยู่จริงแต่ plate ไม่ว่างเป๊ะๆ
+// (ของเก่าที่ค้างในสต็อกแบบไม่เป็นทางการ) เคยหายไปจากรายการเลย หาไม่เจอทั้งที่
+// มีจริง ตอนนี้หาเจอเสมอ แค่มี updateMdvrImeiWarning() เตือนแทนถ้า plate ไม่ว่าง
+function mdvrImeiPickList(){
+  const seen = new Set();
+  const list = [];
+  mdvrAllDevices.forEach(d=>{ if(d.imei && !seen.has(d.imei)){ seen.add(d.imei); list.push(d); } });
+  mdvrAvailableDevices.forEach(d=>{ if(d.imei && !seen.has(d.imei)){ seen.add(d.imei); list.push(d); } });
+  return list;
+}
+const renderMdvrImeiSuggest = wireSuggestInput('mdvrImeiInput', 'mdvrImeiSuggestions', ()=>mdvrImeiPickList().map(d=>d.imei), imei=>{
   state.mdvrImei = imei;
   updatePreview();
   autofillMdvrModel(imei);
+  updateMdvrImeiWarning(imei);
 });
 
+// เตือนถ้า IMEI ที่พิมพ์/เลือกมีแถวอยู่แล้วแต่ plate ไม่ว่าง (ติดอยู่ทะเบียนจริง
+// หรือแค่ placeholder ค้างในชีต เช่น "No.73") — ไม่ได้บล็อกการพิมพ์ แค่เตือน
+// ให้รู้ตัวก่อนบันทึก (backend เองก็มี safety check แยกอีกชั้นถ้า plate นั้น
+// เป็นทะเบียนจริงที่ต่างจากที่กำลังจะติดตั้ง — ดู installMdvrDevice())
+function updateMdvrImeiWarning(imei){
+  const warn = document.getElementById('mdvrImeiWarning');
+  if(!warn) return;
+  const target = (imei || '').trim();
+  const dev = target ? mdvrImeiPickList().find(d=> d.imei === target) : null;
+  if(dev && dev.plate){
+    warn.textContent = `⚠️ เครื่อง IMEI นี้มี Tracking อยู่แล้วที่ "${dev.plate}" — ถ้าทะเบียนนั้นไม่ใช่ทะเบียนจริง (เช่น ค้างในสต็อก) อาจต้องแจ้งแอดมินเคลียร์ก่อนบันทึก`;
+    warn.classList.remove('app-hidden');
+  } else {
+    warn.textContent = '';
+    warn.classList.add('app-hidden');
+  }
+}
+
 // เติมรุ่น MDVR ให้แถว "อุปกรณ์ที่ติดตั้ง" แถวแรกที่ยังว่างอัตโนมัติ เมื่อเลือก/
-// พิมพ์ IMEI ที่ตรงกับเครื่องในรายการที่ยังไม่ผูกทะเบียน (mdvrAvailableDevices
-// — มี Device type มาด้วยจาก /mdvr-available) เทียบกับ MDVR_DEVICE_TYPE_MATCH
-// เหมือน autofillDeviceSN() ของ DMS/ADAS เติมให้เฉพาะตอนแม่นยำ (ต้องมีอยู่จริง
-// ใน live catalog ด้วย) ไม่งั้นปล่อยให้ช่างเลือกเองตามปกติ ไม่เดา ไม่ทับแถวที่
-// เลือกอุปกรณ์ไว้แล้ว
+// พิมพ์ IMEI ที่ตรงกับเครื่องในรายการ (มี Device type มาด้วยจาก /mdvr-available,
+// /mdvr-list) เทียบกับ MDVR_DEVICE_TYPE_MATCH เหมือน autofillDeviceSN() ของ
+// DMS/ADAS เติมให้เฉพาะตอนแม่นยำ (ต้องมีอยู่จริงใน live catalog ด้วย) ไม่งั้น
+// ปล่อยให้ช่างเลือกเองตามปกติ ไม่เดา ไม่ทับแถวที่เลือกอุปกรณ์ไว้แล้ว
 function autofillMdvrModel(imei){
   const target = (imei || '').trim();
   if(!target) return;
-  const dev = mdvrAvailableDevices.find(d => (d.imei||'').trim() === target);
+  const dev = mdvrImeiPickList().find(d => (d.imei||'').trim() === target);
   if(!dev || !dev.deviceType) return;
   const matched = MDVR_DEVICE_TYPE_MATCH[dev.deviceType];
   if(!matched || !(liveCatalog || PRODUCTS).includes(matched)) return;
@@ -1418,13 +1450,11 @@ async function loadMdvrAvailable(){
   }
   if(document.activeElement && document.activeElement.id === 'mdvrImeiInput') renderMdvrImeiSuggest();
 }
-// ทุกเครื่อง MDVR ที่มีแถวอยู่จริงใน Tracking ไม่ใช่แค่ที่ว่างอยู่ — ใช้เฉพาะ
-// ช่อง "เปลี่ยน MDVR ทั้งเครื่อง" (buildMdvrUnitSwapHalf()) เท่านั้น ต่างจาก
-// mdvrAvailableDevices (ติดตั้งใหม่ ต้องเป็นเครื่องว่างเท่านั้น ห้ามเลือกเครื่อง
-// ที่ติดอยู่ที่อื่นอยู่แล้ว) — การเปลี่ยน MDVR ทั้งเครื่องคือการ "ย้าย" เครื่อง
-// จากคันนึงไปอีกคันตรงๆ ช่างเลยต้องหา/เลือกเครื่องที่ติดอยู่ที่อื่นได้ด้วย
-// เหมือนที่ทำกับ SN กล้อง DMS/ADAS (loadDeviceTrackingSNs()) — กันพิมพ์/เลือก
-// IMEI ผิดแล้วบันทึกไม่ขึ้น เพราะ backend เขียนได้เฉพาะ IMEI ที่มีแถวอยู่จริง
+// ทุกเครื่อง MDVR ที่มีแถวอยู่จริงใน Tracking ไม่ใช่แค่ที่ว่างอยู่ — ใช้ทั้งช่อง
+// "เปลี่ยน MDVR ทั้งเครื่อง" (buildMdvrUnitSwapHalf()) และ IMEI ตอนติดตั้งใหม่
+// (renderMdvrImeiSuggest ด้านบน): เครื่องที่ plate ไม่ว่างเป๊ะๆ (ติดอยู่ที่อื่น
+// จริง หรือแค่ placeholder ค้างในชีตแบบ "No.73") เคยหายไปจากทั้งสองช่องเลย หา
+// ไม่เจอทั้งที่มีแถวอยู่จริง — ตอนนี้หาเจอเสมอ แค่เตือนแทนถ้า plate ไม่ว่าง
 let mdvrAllDevices = [];
 let mdvrAllDevicesLoading = false;
 async function loadMdvrAllDevices(){
@@ -1438,6 +1468,8 @@ async function loadMdvrAllDevices(){
     console.error('[MDVR list]', e);
     mdvrAllDevices = [];
   }
+  if(document.activeElement && document.activeElement.id === 'mdvrImeiInput') renderMdvrImeiSuggest();
+  updateMdvrImeiWarning(state.mdvrImei);
   renderFixRows();
 }
 
@@ -4523,7 +4555,7 @@ document.getElementById('jobPlate').addEventListener('input', e=>{ state.plate =
 document.getElementById('jobTrailerPlate').addEventListener('input', e=>{ state.trailerPlate = e.target.value; updatePreview(); });
 document.getElementById('jobNewPlate').addEventListener('input', e=>{ state.newPlate = e.target.value; updatePreview(); renderFixRows(); });
 document.getElementById('jobAssignSelect').addEventListener('change', e=>{ onAssignmentSelect(e.target.value); });
-document.getElementById('mdvrImeiInput').addEventListener('input', e=>{ state.mdvrImei = e.target.value; updatePreview(); });
+document.getElementById('mdvrImeiInput').addEventListener('input', e=>{ state.mdvrImei = e.target.value; updatePreview(); updateMdvrImeiWarning(e.target.value); });
 document.getElementById('mdvrImeiInput').addEventListener('blur', e=>{ autofillMdvrModel(e.target.value); });
 document.getElementById('mdvrDeviceId').addEventListener('input', e=>{ state.mdvrDeviceId = e.target.value; updatePreview(); });
 document.getElementById('mdvrServerSelect').addEventListener('change', e=>{ state.mdvrServer = e.target.value; updatePreview(); });
