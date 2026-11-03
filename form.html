@@ -10,7 +10,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.92.0">
+<meta name="app-version" content="1.93.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -1457,15 +1457,48 @@ function refreshScannedEmeiDatalist(type){
   let dl = document.getElementById(dlId);
   if(!dl){ dl = document.createElement('datalist'); dl.id = dlId; document.body.appendChild(dl); }
   dl.innerHTML = '';
+  const seen = new Set();
   scannedDeviceEmeis.filter(d=> d.type === type).forEach(d=>{
     const val = (d.sn || d.imei || '').trim();
-    if(!val) return;
+    if(!val || seen.has(val)) return;
+    seen.add(val);
     const opt = document.createElement('option');
     opt.value = val;
     opt.label = `${val}${d.noStock ? ' · ' + d.noStock : ''}${d.plate ? ' · ' + d.plate : ''}`;
     dl.appendChild(opt);
   });
+  // SN ที่มีอยู่แล้วจริงใน Ai Box/ADAS/DMS Tracking (ไม่ใช่แค่ที่สแกนไว้ตอน
+  // จัดของวันนี้) — ให้เลือกได้ด้วย เพราะ swapDevice() ฝั่ง backend เขียนได้
+  // เฉพาะ SN ที่มีแถวอยู่แล้วในชีตเท่านั้น (ไม่สร้างแถวใหม่ให้) พิมพ์เลขที่ไม่
+  // ตรงกับที่มีอยู่จริงจะเงียบๆ ไม่ถูกบันทึกเลย — ดู loadDeviceTrackingSNs()
+  (deviceTrackingSNs[type] || []).forEach(d=>{
+    const val = (d.sn || '').trim();
+    if(!val || seen.has(val)) return;
+    seen.add(val);
+    const opt = document.createElement('option');
+    opt.value = val;
+    opt.label = `${val}${d.version ? ' · ' + d.version : ''}${d.plate ? ' · ติดอยู่ ' + d.plate : ' · ว่าง'}`;
+    dl.appendChild(opt);
+  });
   return dlId;
+}
+
+// SN ทั้งหมดที่มีแถวอยู่จริงใน Ai Box/ADAS/DMS Tracking ต่อประเภท — โหลดครั้ง
+// เดียวต่อ type (cache ไว้) ตอนช่างเริ่มพิมพ์ช่อง SN เครื่องใหม่ครั้งแรก แล้ว
+// รวมเข้า <datalist> เดียวกับ scannedDeviceEmeis ผ่าน refreshScannedEmeiDatalist()
+let deviceTrackingSNs = { dms: [], adas: [], aibox: [] };
+let deviceTrackingSNsLoading = {};
+async function loadDeviceTrackingSNs(type){
+  if(deviceTrackingSNsLoading[type]) return;
+  deviceTrackingSNsLoading[type] = true;
+  try{
+    const res = await fetch(`https://songdee-vehicle-lookup.songdeegps.workers.dev/device-list?type=${encodeURIComponent(type)}`);
+    const data = await res.json();
+    deviceTrackingSNs[type] = (data && data.items) || [];
+  }catch(e){
+    console.error('[Device tracking SNs]', e);
+  }
+  refreshScannedEmeiDatalist(type);
 }
 
 // Non-fatal like pushSheetUpdates()/pushDeviceSwaps()/pushIssueClose() —
@@ -1522,6 +1555,31 @@ async function pushMdvrUnitSwaps(){
     results.push(data);
   }
   return results;
+}
+
+// "ตรวจสอบการติดตั้งกล่องเหล็ก"/"ตรวจสอบการใส่น็อตยึดหัว DB9" ใน SHARED_CHECKLIST
+// (ทุก template) — เติมผลลง MDVR Tracking's "กล่องเก็บ MDVR"/"น๊อทเสริมเครื่อง
+// รูดบัตร" ด้วย ไม่ใช่แค่บันทึกในรายงาน — แยกจาก pushMdvrInstall()/
+// pushMdvrUnitSwaps() เพราะเช็คลิสต์นี้ทำทุกครั้งที่ไปหน้างาน ไม่ใช่แค่ตอน
+// เปลี่ยน/ติดตั้งเครื่อง MDVR เอง จึงหาแถวด้วยทะเบียนตรงๆ (ต้องมีแถวอยู่แล้ว —
+// รันหลัง pushMdvrInstall()/pushMdvrUnitSwaps() เสมอ เผื่อทะเบียนเพิ่งย้ายแถว)
+async function pushMdvrChecklist(){
+  const plate = (state.plate || '').trim();
+  if(!plate) return null;
+  const steelbox = state.checklist && state.checklist.steelbox;
+  const db9 = state.checklist && state.checklist.db9;
+  const body = { plate };
+  if(steelbox && typeof steelbox.has === 'boolean') body.steelbox = steelbox.has;
+  if(db9 && typeof db9.has === 'boolean') body.db9 = db9.has;
+  if(!('steelbox' in body) && !('db9' in body)) return null; // ยังไม่ได้ตรวจสักอย่าง ไม่ต้องยิง
+  const res = await fetch('https://songdee-vehicle-lookup.songdeegps.workers.dev/mdvr-checklist', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify(body)
+  });
+  const data = await res.json();
+  if(!res.ok || !data.ok) throw new Error(data.error || ('HTTP ' + res.status));
+  return data;
 }
 
 // Reference list of everything the vehicle currently has on file, shown
@@ -3293,6 +3351,7 @@ function buildProductHalf(row, idx, ctx){
       // พิมพ์มือเดา — ดู loadScannedDeviceEmeis()
       const dlId = refreshScannedEmeiDatalist(snType);
       newSN.setAttribute('list', dlId);
+      loadDeviceTrackingSNs(snType); // not awaited — merges in once it lands, see refreshScannedEmeiDatalist()
     }
     wrap.appendChild(newSN);
     if(snHints[idx]){
@@ -4619,6 +4678,19 @@ async function sendToLine(){
     }catch(e){
       console.error('[MDVR unit swap]', e);
       saveSuffix += ` (เปลี่ยน MDVR ไม่สำเร็จ: ${e.message})`;
+    }
+
+    // กล่องเหล็ก/น็อต DB9 ของเช็คลิสต์ — เติมลง Track (คอลัมน์ "กล่องเก็บ
+    // MDVR"/"น๊อทเสริมเครื่องรูดบัตร") ด้วย ต้องรันหลัง pushMdvrInstall()/
+    // pushMdvrUnitSwaps() เสมอ (เผื่อทะเบียนเพิ่งย้ายไปอยู่แถวเครื่องใหม่)
+    try{
+      const checklistRes = await pushMdvrChecklist();
+      if(checklistRes && checklistRes.written && checklistRes.written.length){
+        saveSuffix += ` · บันทึกเช็คลิสต์ลง Track ✓`;
+      }
+    }catch(e){
+      console.error('[MDVR checklist]', e);
+      saveSuffix += ` (บันทึกเช็คลิสต์ลง Track ไม่สำเร็จ: ${e.message})`;
     }
 
     // Update the MDVR Tracking sheet for any equipment swapped from the
