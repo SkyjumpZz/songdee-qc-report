@@ -10,7 +10,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.105.0">
+<meta name="app-version" content="1.106.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -3775,7 +3775,7 @@ function buildOldModelHalf(row, idx, standalone){
   const oldWrap = document.createElement('div');
   oldWrap.className = standalone ? 'fix-entry' : 'old-model-row';
   const oldLabel = document.createElement('label');
-  oldLabel.textContent = standalone ? 'อุปกรณ์เดิมที่ถอด' : 'รุ่นเก่าที่เปลี่ยน หรือช่องว่างที่ยังไม่มีอุปกรณ์ (ถ้ามี)';
+  oldLabel.textContent = standalone ? 'อุปกรณ์เดิมที่ถอด' : 'อุปกรณ์เดิมที่ถอด/เปลี่ยน หรือช่องว่างที่ยังไม่มีอุปกรณ์ (ถ้ามี) — เลือกอุปกรณ์ใหม่ด้านล่างด้วยถ้ามีของมาแทน ถ้าถอดออกเฉยๆ ไม่ต้องเลือกช่อง "อุปกรณ์"';
   // Only ever sourced from this vehicle's actual recorded equipment —
   // no generic PRODUCTS catalog fallback group. If nothing's on file
   // for this plate yet, the only option is "ไม่มีการเปลี่ยนอุปกรณ์";
@@ -3932,7 +3932,12 @@ function buildFixRowExpanded(row, idx, ctx){
   bar.appendChild(collapseBtn);
   outer.appendChild(bar);
   const wrap = buildProductHalf(row, idx, ctx);
-  if(tplHasOldModel(state.tpl)) wrap.appendChild(buildOldModelHalf(row, idx, false));
+  // ของเดิม (ถอด/เปลี่ยน) มาก่อนของใหม่เสมอ — ตามลำดับงานจริง: ถอดของเดิมออก
+  // ก่อน แล้วค่อยตัดสินใจว่าจะใส่ของใหม่หรือไม่ (บางแถวถอดออกเฉยๆ ไม่มีของใหม่
+  // มาแทนเลยก็ได้ — ไม่ต้องเลือกช่อง "อุปกรณ์" ด้านล่างถ้าไม่มี) ใช้ insertBefore
+  // ไม่ใช่ appendChild เพราะ buildProductHalf() คืนค่า wrap ที่มีเนื้อหาของมัน
+  // เองอยู่แล้ว ต้องแทรกของเดิมไว้หน้าสุด ไม่ใช่ต่อท้าย
+  if(tplHasOldModel(state.tpl)) wrap.insertBefore(buildOldModelHalf(row, idx, false), wrap.firstChild);
   outer.appendChild(wrap);
   return outer;
 }
@@ -4593,14 +4598,31 @@ async function pushSheetUpdates(){
 // ใหม่" คนละคันแล้ว (ดู buildSheetUpdates() — เดิมเคยข้ามการเคลียร์ตอนมีของ
 // ใหม่มาแทน โดยสมมติว่าเป็นการสลับอุปกรณ์บนคันเดิม ซึ่งผิดสำหรับการย้ายข้ามคัน).
 function buildSheetClears(){
-  if(state.tpl !== 'remove') return [];
   const clears = [];
-  state.fixes.forEach(row=>{
-    if(row.section === 'edit') return;
-    const src = vehicleOldModels.find(m=> m.label === row.oldModel);
-    if(!src) return;
-    clears.push({ column: src.column });
-  });
+  if(state.tpl === 'remove'){
+    state.fixes.forEach(row=>{
+      if(row.section === 'edit') return;
+      const src = vehicleOldModels.find(m=> m.label === row.oldModel);
+      if(!src) return;
+      clears.push({ column: src.column });
+    });
+    return clears;
+  }
+  // อัปเกรด/ซ่อม — ถอดของเดิมออกแล้วไม่ได้เลือกของใหม่มาแทนเลย (ถอดออกเฉยๆ)
+  // buildSheetUpdates() ข้ามแถวนี้ไปเลย (newName ว่าง ไม่มีอะไรจะเขียนทับ) ถ้า
+  // ไม่เคลียร์ตรงนี้ด้วย ค่าเดิมในชีตจะค้างอยู่เหมือนยังไม่ได้ถอดออกจริง
+  if(tplHasOldModel(state.tpl)){
+    state.fixes.forEach(row=>{
+      const src = vehicleOldModels.find(m=> m.label === row.oldModel);
+      // vehicleEmptySlots ไม่เข้าเงื่อนไขนี้ (ช่องว่างอยู่แล้ว ไม่มีอะไรต้องเคลียร์)
+      // src.column === 'Device type' (เปลี่ยน MDVR ทั้งเครื่อง) ไปทาง
+      // pushMdvrUnitSwaps() แยกต่างหากเสมอ ไม่ว่าจะเลือกของใหม่หรือไม่ก็ตาม
+      if(!src || src.column === 'Device type') return;
+      const newName = row.product === "อื่นๆ (พิมพ์เอง)" ? (row.custom || "") : row.product;
+      if(newName) return;
+      clears.push({ column: src.column });
+    });
+  }
   return clears;
 }
 
