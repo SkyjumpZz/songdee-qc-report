@@ -10,7 +10,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.104.0">
+<meta name="app-version" content="1.105.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -1332,6 +1332,23 @@ function scheduleStockLockCheck(){
 function normPlate(s){
   return String(s||'').normalize('NFC').replace(/[\s.\-‐-―]/g,'').toLowerCase();
 }
+// Even normPlate() above can miss a real ใบเบิก/assignment match — some
+// plates get saved with extra junk around them (e.g. a device ID typed in
+// parens: "(917)068-0884"), which normPlate() doesn't strip. Falls back to
+// a loose, punctuation-stripped substring match only when the strict
+// normPlate() equality fails — same two-tier approach (and the same
+// containment check, proven against real sample data) songdee-vehicle-lookup's
+// worker.js already uses for its own ISSUES-All plate matching.
+function normPlateLoose(s){
+  return String(s||'').normalize('NFC').replace(/[^\p{L}\p{N}]/gu,'').toLowerCase();
+}
+function plateMatches(candidate, target, looseTarget){
+  if(normPlate(candidate) === target) return true;
+  if(!looseTarget) return false;
+  const loose = normPlateLoose(candidate);
+  if(!loose) return false;
+  return loose.includes(looseTarget) || looseTarget.includes(loose);
+}
 
 // เติม SN เครื่อง DMS/ADAS ให้แถว fix ที่เลือกอุปกรณ์ตรงกับของในใบเบิกที่สแกน
 // EMEI/SN มาแล้ว (stockLock.devices) — เติมเฉพาะตอนช่องยังว่าง (ไม่ทับค่าที่
@@ -1367,9 +1384,11 @@ async function checkStockLock(){
   banner.className = 'stock-lock-banner';
   try{
     const snap = await stockDocsSnapshot();
+    const targetPlate = normPlate(plate);
+    const targetPlateLoose = normPlateLoose(plate);
     const docs = snap.docs
       .map(d=>{ try{ return JSON.parse(d.data().v); }catch{ return null; } })
-      .filter(d=> d && d.plate && !d.cancelled && normPlate(d.plate) === normPlate(plate))
+      .filter(d=> d && d.plate && !d.cancelled && plateMatches(d.plate, targetPlate, targetPlateLoose))
       .sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
     // If this report came from a picked งานที่ได้รับมอบหมาย (and the plate
     // still matches that job — a manual edit afterward could've changed
@@ -1377,7 +1396,7 @@ async function checkStockLock(){
     // just "latest ใบเบิก that happens to share the same ทะเบียน" — Admin
     // web links them via adminJobId when the withdrawal is made.
     const linkedAssignment = selectedAssignmentId ? assignments.find(a=> a.id === selectedAssignmentId) : null;
-    const trustJobLink = !!(linkedAssignment && normPlate(linkedAssignment.vehicle) === normPlate(plate));
+    const trustJobLink = !!(linkedAssignment && plateMatches(linkedAssignment.vehicle, targetPlate, targetPlateLoose));
     let match = trustJobLink ? docs.find(d=> d.adminJobId === selectedAssignmentId) : null;
     const matchedByJob = !!match;
     if(!match) match = docs[0];
