@@ -10,7 +10,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.101.0">
+<meta name="app-version" content="1.102.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -2270,6 +2270,9 @@ function fixRowSummaryForDiff(row){
   if(row.oldSN) parts.push(`SNเดิม:${row.oldSN}`);
   if(row.oldModelVersion) parts.push(`รุ่นเดิม:${row.oldModelVersion}`);
   if(row.ch) parts.push(`CH:${row.ch}`);
+  if(row.storageSlot) parts.push(`ช่องตัวบันทึก:${row.storageSlot}`);
+  if(row.oldPhoneNo) parts.push(`เบอร์เดิม:${row.oldPhoneNo}`);
+  if(row.phoneNo) parts.push(`เบอร์:${row.phoneNo}`);
   if(row.newMdvrImei) parts.push(`IMEIใหม่:${row.newMdvrImei}`);
   if(row.remark) parts.push(`หมายเหตุ:${row.remark}`);
   return parts.join(' ') || '(ว่าง)';
@@ -2615,6 +2618,20 @@ function rowNeedsChannel(product){
 // Track รู้ว่ากล้อง/อุปกรณ์แต่ละตัวต่อช่องไหน
 const MDVR_CHANNEL_OPTIONS = ['Ch1','Ch2','Ch3','Ch4','Ch5','Ch6','Ch7','Ch8','Ch9'];
 
+// MDVR Tracking มีช่องเก็บข้อมูล "ตัวบันทึก" (SD/SSD) 3 ช่องแยกกัน แต่ละคัน
+// มีไม่เท่ากัน (บางคัน SD Card Slot 1 อย่างเดียว บางคันมีทั้ง 1-2 บางคันเป็น
+// SSD) — เหมือนปัญหาเดียวกับ CH (Ch1-Ch9): ถ้าเพิ่ม/เปลี่ยน SD card โดยไม่ได้
+// เลือกจาก "รุ่นเก่าที่เปลี่ยน" (ไม่รู้ว่าช่องไหนว่าง/จะแทนที่ช่องไหน) ไม่มีทาง
+// ระบุได้เลยว่าจะลงช่องไหน เขียนชีตไม่ได้ หรือกรณีเลือกรุ่นเก่าแบบรวมๆ มาอาจ
+// ลงผิดช่อง (เช่น ตั้งใจลง Slot 2 แต่ระบบไปจับ Slot 1 แทน) — เปิดให้เลือกช่อง
+// ตรงๆ เหมือน CH picker ด้านบน
+const STORAGE_SLOT_OPTIONS = ['SD Card Slot 1', 'SD Card Slot 2', 'SSD Brand'];
+function isStorageProduct(product){
+  if(!product) return false;
+  const p = product.toLowerCase();
+  return p.includes('sd card') || p.includes('sd-card') || p.includes('micro-sd') || p.includes('ssd') || p.includes('hdd') || p.includes('การ์ดความจำ');
+}
+
 // Maps DMS/ADAS Tracking's own free-text "Version" column (short-form,
 // e.g. "Dms V.3") to a Stock catalog product name — built by hand from the
 // real distinct values in both sheets, cross-checked against Stock's live
@@ -2918,7 +2935,7 @@ function defaultState(){
     // starting row shows up under "① ถอด" only if that template ends up
     // picked, not paired with an empty "② ติดตั้ง" slot (ตามที่ขอ แยกอิสระ
     // จากกัน) — "+ เพิ่มอุปกรณ์ที่ติดตั้ง" adds that side separately now.
-    fixes: [{product:"", qty:1, custom:"", oldModel:"", oldModelCustom:"", newSN:"", oldSN:"", ch:"", phoneNo:"", remark:"", newMdvrImei:"", mdvrDeviceId:"", mdvrServer:"", section:"remove"}],
+    fixes: [{product:"", qty:1, custom:"", oldModel:"", oldModelCustom:"", newSN:"", oldSN:"", ch:"", storageSlot:"", phoneNo:"", oldPhoneNo:"", remark:"", newMdvrImei:"", mdvrDeviceId:"", mdvrServer:"", section:"remove"}],
     stickers: {},
     stickerRemark: "", // optional free-text note shown above the sticker checklist — never required
     checklist: {},
@@ -3095,7 +3112,7 @@ function renderProblemRows(){
 // buildProductHalf() regardless of whether the rest of the form is locked
 // to a ใบเบิก/Spare list, and doesn't count against lockedOptionsCount.
 function addFixRow(extra){
-  state.fixes.push({product:"", qty:1, custom:"", oldModel:"", oldModelCustom:"", newSN:"", oldSN:"", ch:"", phoneNo:"", remark:"", newMdvrImei:"", mdvrDeviceId:"", mdvrServer:"", section:"pair", extra: !!extra});
+  state.fixes.push({product:"", qty:1, custom:"", oldModel:"", oldModelCustom:"", newSN:"", oldSN:"", ch:"", storageSlot:"", phoneNo:"", oldPhoneNo:"", remark:"", newMdvrImei:"", mdvrDeviceId:"", mdvrServer:"", section:"pair", extra: !!extra});
   renderFixRows();
   updatePreview();
 }
@@ -3108,17 +3125,17 @@ function addFixRow(extra){
 // in both columns for backward compatibility, see renderRemoveSections();
 // never created new.
 function addRemoveOldRow(extra){
-  state.fixes.push({product:"", qty:1, custom:"", oldModel:"", oldModelCustom:"", newSN:"", oldSN:"", ch:"", phoneNo:"", remark:"", newMdvrImei:"", mdvrDeviceId:"", mdvrServer:"", section:"remove", extra: !!extra});
+  state.fixes.push({product:"", qty:1, custom:"", oldModel:"", oldModelCustom:"", newSN:"", oldSN:"", ch:"", storageSlot:"", phoneNo:"", oldPhoneNo:"", remark:"", newMdvrImei:"", mdvrDeviceId:"", mdvrServer:"", section:"remove", extra: !!extra});
   renderFixRows();
   updatePreview();
 }
 function addRemoveNewRow(extra){
-  state.fixes.push({product:"", qty:1, custom:"", oldModel:"", oldModelCustom:"", newSN:"", oldSN:"", ch:"", phoneNo:"", remark:"", newMdvrImei:"", mdvrDeviceId:"", mdvrServer:"", section:"install", extra: !!extra});
+  state.fixes.push({product:"", qty:1, custom:"", oldModel:"", oldModelCustom:"", newSN:"", oldSN:"", ch:"", storageSlot:"", phoneNo:"", oldPhoneNo:"", remark:"", newMdvrImei:"", mdvrDeviceId:"", mdvrServer:"", section:"install", extra: !!extra});
   renderFixRows();
   updatePreview();
 }
 function addRemoveEditRow(extra){
-  state.fixes.push({product:"", qty:1, custom:"", oldModel:"", oldModelCustom:"", newSN:"", oldSN:"", ch:"", phoneNo:"", remark:"", newMdvrImei:"", mdvrDeviceId:"", mdvrServer:"", section:"edit", extra: !!extra});
+  state.fixes.push({product:"", qty:1, custom:"", oldModel:"", oldModelCustom:"", newSN:"", oldSN:"", ch:"", storageSlot:"", phoneNo:"", oldPhoneNo:"", remark:"", newMdvrImei:"", mdvrDeviceId:"", mdvrServer:"", section:"edit", extra: !!extra});
   renderFixRows();
   updatePreview();
 }
@@ -3484,6 +3501,25 @@ function buildProductHalf(row, idx, ctx){
     wrap.appendChild(chSel);
   }
 
+  // ตัวบันทึก (SD/SSD) — MDVR Tracking มี 3 ช่องแยกกัน (SD Card Slot 1/2,
+  // SSD Brand) แต่ละคันมีไม่เท่ากัน เหมือนปัญหา CH ด้านบนเป๊ะ: เพิ่ม/เปลี่ยน
+  // SD card โดยไม่ได้เลือกจาก "รุ่นเก่าที่เปลี่ยน" ไม่มีทางระบุได้ว่าจะลงช่อง
+  // ไหน (ตามที่แจ้ง "ประเภทของตัวบันทึกก็ลงผิดช่อง") — เปิดให้เลือกช่องตรงๆ
+  if((state.tpl === 'new_install' || needsChForRemove || state.tpl === 'upgrade' || state.tpl === 'repair') && isStorageProduct(row.product)){
+    const slotSel = document.createElement('select');
+    slotSel.style.marginTop = '6px';
+    const slotBlank = document.createElement('option');
+    slotBlank.value=''; slotBlank.textContent='-- ไม่ระบุช่องตัวบันทึก --'; slotSel.appendChild(slotBlank);
+    STORAGE_SLOT_OPTIONS.forEach(slot=>{
+      const o = document.createElement('option');
+      o.value=slot; o.textContent=slot;
+      if(slot===row.storageSlot) o.selected=true;
+      slotSel.appendChild(o);
+    });
+    slotSel.onchange = ()=>{ row.storageSlot = slotSel.value; updatePreview(); };
+    wrap.appendChild(slotSel);
+  }
+
   if(!rowLocked && row.product === "อื่นๆ (พิมพ์เอง)"){
     const custom = document.createElement('input');
     custom.type='text'; custom.placeholder='พิมพ์ชื่ออุปกรณ์'; custom.value=row.custom;
@@ -3622,6 +3658,24 @@ function buildOldModelHalf(row, idx, standalone){
       oldHint.textContent = oldHintText;
       oldWrap.appendChild(oldHint);
     }
+  }
+
+  // ซิม — เปลี่ยนเบอร์ (ไม่ใช่แค่เปลี่ยนค่าย) ต้องรู้ทั้งเบอร์เดิมและเบอร์ใหม่
+  // ถึงจะบอกได้ว่า "เปลี่ยนจากอะไรเป็นอะไร" — เดิมมีแค่ row.phoneNo (เบอร์ใหม่)
+  // เบอร์เดิมไม่เคยถูกเก็บเลย ทำให้ fixLine() ไม่มีข้อมูลพอจะบอกความต่าง ต้อง
+  // พึ่งช่าง "พิมพ์เอง" ใน remark แทน (เช่น "เปลี่ยน sim จาก AIS เป็น AIS" ซึ่ง
+  // บอกแค่ค่าย ไม่บอกเบอร์ — ไม่ตรงตามต้องการ) auto-fill จากประวัติทะเบียนถ้า
+  // เลือก "รุ่นเก่า" ตรงกับคอลัมน์ "Phone No." พอดี (ดู oldModelSrc ด้านล่าง)
+  const oldModelSrc = vehicleOldModels.find(m=> m.label === row.oldModel)
+    || vehicleEmptySlots.find(m=> m.label === row.oldModel);
+  const oldIsSim = oldModelSrc ? oldModelSrc.column === 'Phone No.' : isSimProduct(row.oldModel);
+  if(oldIsSim){
+    if(oldModelSrc && oldModelSrc.value && !row.oldPhoneNo) row.oldPhoneNo = oldModelSrc.value;
+    const oldPhone = document.createElement('input');
+    oldPhone.type='tel'; oldPhone.placeholder='เบอร์ซิมเดิม (เช่น 0812345678)';
+    oldPhone.value = row.oldPhoneNo || ''; oldPhone.style.marginTop='6px';
+    oldPhone.oninput = ()=>{ row.oldPhoneNo = oldPhone.value; updatePreview(); };
+    oldWrap.appendChild(oldPhone);
   }
 
   if(standalone){
@@ -4099,18 +4153,23 @@ function fixLine(row){
   // buildMdvrUnitSwapHalf() (เปลี่ยน MDVR ทั้งเครื่อง) เท่านั้น ดู pushMdvrUnitSwaps()
   const deviceIdTag = (row.newMdvrImei && (row.mdvrDeviceId || '').trim()) ? ` (Device ID: ${row.mdvrDeviceId.trim()})` : '';
   const chTag = row.ch ? ` (${row.ch})` : '';
+  const storageSlotTag = row.storageSlot ? ` (${row.storageSlot})` : '';
   const phoneTag = (isSimProduct(row.product) && row.phoneNo) ? ` (เบอร์: ${row.phoneNo})` : '';
+  // ซิม — เปลี่ยนเบอร์ ไม่ใช่แค่เปลี่ยนค่าย ต้องบอกทั้งเบอร์เดิม/เบอร์ใหม่ถึงจะ
+  // รู้ว่า "เปลี่ยนจากอะไรเป็นอะไร" จริงๆ (ตามที่ขอ) — ดู oldPhoneNo input ใน
+  // buildOldModelHalf()
+  const oldPhoneTag = (row.oldPhoneNo || '').trim() ? ` (เบอร์เดิม: ${row.oldPhoneNo.trim()})` : '';
   const extraTag = row.extra ? ' [ของนอกเหนือรายการ]' : '';
   // ไม่ได้เปลี่ยนอุปกรณ์เลย (เช่น สายหลวม หมุนให้แน่น) — ใช้ remark ตรงๆ เป็น
   // บรรทัดของแถวนี้แทน; ถ้าเลือกอุปกรณ์/รุ่นเก่าไว้ด้วย remark ต่อท้ายเป็น
   // หมายเหตุแทน ดู buildProductHalf()'s remark textarea.
   const remark = (row.remark || '').trim();
   const remarkTag = remark ? ` (${remark})` : '';
-  if(oldName && name) return `- ทำการเปลี่ยน ${oldName}${oldTag} เป็น ${name}${deviceIdTag}${chTag}${phoneTag}${extraTag}${remarkTag}`;
+  if(oldName && name) return `- ทำการเปลี่ยน ${oldName}${oldTag}${oldPhoneTag} เป็น ${name}${deviceIdTag}${chTag}${storageSlotTag}${phoneTag}${extraTag}${remarkTag}`;
   if(name){
     const qty = row.qty ? ` x${row.qty}` : '';
     // ตัดคำ "ทำการติดตั้ง" ออก (ตามที่ขอ "สั้นๆ") — เหลือแค่ "- ชื่ออุปกรณ์..."
-    return `- ${name}${qty}${deviceIdTag}${chTag}${phoneTag}${extraTag}${remarkTag}`;
+    return `- ${name}${qty}${deviceIdTag}${chTag}${storageSlotTag}${phoneTag}${extraTag}${remarkTag}`;
   }
   if(oldName) return `- ทำการถอด ${oldName}${oldTag}${remarkTag}`;
   if(remark) return `- ${remark}`;
@@ -4180,6 +4239,10 @@ function buildSheetUpdates(){
         if(phone) updates.push({ plate: newPlate, column: PHONE_NO_COLUMN, value: phone });
         return;
       }
+      if(row.storageSlot && isStorageProduct(row.product)){
+        const storName = row.product === "อื่นๆ (พิมพ์เอง)" ? (row.custom || "") : row.product;
+        if(storName) updates.push({ plate: newPlate, column: row.storageSlot, value: storName });
+      }
       if(!row.ch || !rowNeedsChannel(row.product)) return;
       const newName = row.product === "อื่นๆ (พิมพ์เอง)" ? (row.custom || "") : row.product;
       if(!newName) return;
@@ -4206,6 +4269,12 @@ function buildSheetUpdates(){
             updates.push({ plate: state.plate, column: row.ch, value });
           }
         }
+        // ตัวบันทึก (SD/SSD) — เหตุผลเดียวกับ CH ด้านบน แค่คนละคอลัมน์ (ดู
+        // isStorageProduct()/STORAGE_SLOT_OPTIONS)
+        if(row.storageSlot && isStorageProduct(row.product)){
+          const storName = row.product === "อื่นๆ (พิมพ์เอง)" ? (row.custom || "") : row.product;
+          if(storName) updates.push({ plate: state.plate, column: row.storageSlot, value: storName });
+        }
         return;
       }
       // เปลี่ยน MDVR ทั้งเครื่อง (คอลัมน์ "Device type") — เขียนผ่าน
@@ -4229,6 +4298,10 @@ function buildSheetUpdates(){
       // product picker already clear row.ch off a row that doesn't need one,
       // but a report saved before that guard existed could still have a
       // stale ch.
+      if(row.storageSlot && isStorageProduct(row.product)){
+        const storName = row.product === "อื่นๆ (พิมพ์เอง)" ? (row.custom || "") : row.product;
+        if(storName) updates.push({ plate: state.plate, column: row.storageSlot, value: storName });
+      }
       if(!row.ch || !rowNeedsChannel(row.product)) return;
       const newName = row.product === "อื่นๆ (พิมพ์เอง)" ? (row.custom || "") : row.product;
       if(!newName) return;
