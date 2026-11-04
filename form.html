@@ -10,7 +10,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.103.0">
+<meta name="app-version" content="1.104.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -2889,6 +2889,13 @@ async function autofillDeviceSN(row, idx, type, sn){
 async function autofillOldDeviceVersion(row, idx, type, sn){
   const target = (sn || '').trim();
   if(!target || !type){ row.oldModelVersion = ''; oldSnHints[idx] = ''; renderFixRows(); return; }
+  // ตั้ง oldModelVersion ให้พ้นจาก undefined "ก่อน" renderFixRows() ข้างล่าง —
+  // buildOldModelHalf() เรียกฟังก์ชันนี้ซ้ำอัตโนมัติทุกครั้งที่ render ถ้ายัง
+  // เป็น undefined อยู่ (ดูคอมเมนต์ที่นั่น) renderFixRows() ที่นี่เป็น sync เลย
+  // ไหลเข้า buildOldModelHalf() ทันทีก่อน fetch ด้านล่างจะ resolve — ถ้าไม่ตัด
+  // undefined ออกก่อน จะเรียกตัวเองซ้ำไม่รู้จบ (stack overflow, หน้าเว็บค้าง/
+  // พัง — เจอจริงตอนเลือก "รุ่นเก่า" เป็น AI System: AI Box)
+  row.oldModelVersion = '';
   oldSnHints[idx] = 'กำลังค้นหา SN...';
   renderFixRows();
   try{
