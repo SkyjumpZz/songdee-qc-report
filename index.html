@@ -771,7 +771,66 @@ const FIREBASE_CONFIG = {
   messagingSenderId: "702521617982",
   appId: "1:702521617982:web:dcb3c77e44d208a679ab6f"
 };
+/* ตัวนับการอ่าน Firestore ของแอปนี้ (ไม่กินโควตา Firestore — ส่งยอดไปเก็บที่ songdee-line-proxy /stats/reads)
+   นับเฉพาะที่อ่านจาก server (ไม่นับจากแคชในเครื่อง) แยกตามคอลเลกชัน: get() = จำนวนเอกสาร (อย่างน้อย 1),
+   onSnapshot = ครั้งแรกทั้งหมด แล้วนับเฉพาะเอกสารที่เปลี่ยน · ส่งยอดทุก 15 นาที และตอนปิด/สลับออกจากแอป
+   ตัวเลขเป็นค่าประมาณ (ใกล้เคียงยอดที่ Firebase คิด) ไว้ดูว่าแอปไหน/ส่วนไหนอ่านเยอะ */
+function installReadMeter(appName, statsUrl, headersFn){
+  try{
+    const fs = window.firebase && firebase.firestore;
+    if(!fs || !fs.Query || !fs.DocumentReference || window.__readMeter) return;
+    const counts = {}; window.__readMeter = counts;
+    const add = (name, n)=>{ if(n > 0) counts[name] = (counts[name]||0) + n; };
+    const top = path=> (String(path||'').split('/').filter(Boolean)[0]) || 'other';
+    const qName = q=>{ try{
+      if(q.path) return top(q.path);
+      const p = q._delegate && q._delegate._query && q._delegate._query.path;
+      return p ? top(p.canonicalString ? p.canonicalString() : String(p)) : 'query';
+    }catch(e){ return 'query'; } };
+    const fromServer = s=> !(s && s.metadata && s.metadata.fromCache);
+    const QP = fs.Query.prototype, DP = fs.DocumentReference.prototype;
+    const qGet = QP.get;
+    QP.get = function(){ const name = qName(this);
+      return qGet.apply(this, arguments).then(s=>{ try{ if(fromServer(s)) add(name, Math.max(1, s.size)); }catch(e){} return s; }); };
+    const dGet = DP.get;
+    DP.get = function(){ const name = top(this.path) + '(doc)';
+      return dGet.apply(this, arguments).then(s=>{ try{ if(fromServer(s)) add(name, 1); }catch(e){} return s; }); };
+    const wrapListen = (orig, nameOf, isDoc)=> function(){
+      const name = nameOf(this) + '(live)';
+      const args = [...arguments]; let first = true;
+      const count = s=>{ try{ if(!fromServer(s)) return;
+        if(isDoc){ add(name, 1); return; }
+        if(first){ add(name, Math.max(1, s.size)); first = false; return; }
+        add(name, s.docChanges().length);
+      }catch(e){} };
+      const i = args.findIndex(a=> typeof a === 'function' || (a && typeof a.next === 'function'));
+      if(i > -1){
+        if(typeof args[i] === 'function'){ const fn = args[i]; args[i] = function(s){ count(s); return fn.apply(this, arguments); }; }
+        else { const ob = args[i]; args[i] = {...ob, next: s=>{ count(s); return ob.next(s); }}; }
+      }
+      return orig.apply(this, args);
+    };
+    QP.onSnapshot = wrapListen(QP.onSnapshot, qName, false);
+    DP.onSnapshot = wrapListen(DP.onSnapshot, d=>top(d.path), true);
+    let busy = false;
+    const flush = async ()=>{
+      if(busy) return;
+      const c = {...counts}; if(!Object.keys(c).length) return;
+      busy = true; Object.keys(c).forEach(k=> delete counts[k]);
+      try{
+        const h = await headersFn();
+        const r = await fetch(statsUrl, {method:'POST', headers:h, body:JSON.stringify({app:appName, counts:c}), keepalive:true});
+        if(!r.ok) throw new Error('HTTP '+r.status);
+      }catch(e){ Object.entries(c).forEach(([k,n])=> counts[k] = (counts[k]||0) + n); }
+      busy = false;
+    };
+    window.__flushReadMeter = flush;
+    setInterval(flush, 15*60*1000);
+    document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState === 'hidden') flush(); });
+  }catch(e){ console.warn('[read meter]', e); }
+}
 firebase.initializeApp(FIREBASE_CONFIG);
+installReadMeter('qc-home', 'https://songdee-line-proxy.songdeegps.workers.dev/stats/reads', async()=>({'Content-Type':'application/json', Authorization:'Bearer '+await firebase.auth().currentUser.getIdToken()}));
 const _auth = firebase.auth();
 const _db = firebase.firestore();
 
