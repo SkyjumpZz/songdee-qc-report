@@ -10,7 +10,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.108.0">
+<meta name="app-version" content="1.109.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -711,10 +711,12 @@
     </div>
   </div>
 
-  <!-- MDVR position/จุดจั๊มไฟ/Province/Status DLT — ข้อมูลของทะเบียนนี้ใน
+  <!-- MDVR position/จุดจั๊มไฟ/Province/Status DLT/TAP IO — ข้อมูลของทะเบียนนี้ใน
        MDVR Tracking เอง ไม่ใช่อุปกรณ์ที่ "เปลี่ยน" ได้ เลยไม่ผ่านระบบรุ่นเก่าที่
        เปลี่ยน เป็นช่องกรอกแยกต่างหาก ใช้ได้ทุกประเภทงาน (ไม่ใช่แค่ติดตั้งใหม่)
-       ไม่บังคับกรอก — ว่างไว้ก็ไม่เขียนทับของเดิมในชีต (ดู pushMdvrChecklist()) -->
+       ไม่บังคับกรอก — ว่างไว้ก็ไม่เขียนทับของเดิมในชีต (ดู pushMdvrChecklist())
+       TAP IO เพิ่มมาทีหลัง (เดิมอยู่ในตัวเลือกอุปกรณ์แต่เป็นโน้ตสายไฟล้วนๆ ไม่ใช่
+       ชื่ออุปกรณ์ จับคู่กับ catalog ไม่ได้จริง — ดู worker.js's EQUIPMENT_COLUMNS) -->
   <div class="card" id="mdvrAdminCard">
     <div class="card-title"><span class="dot">🗂️</span>ข้อมูล MDVR Tracking เพิ่มเติม (ถ้ามี)</div>
     <div class="row2">
@@ -736,6 +738,10 @@
         <label>Status DLT</label>
         <input type="text" id="statusDltInput" placeholder="สถานะ DLT" autocomplete="off">
       </div>
+    </div>
+    <div>
+      <label>หมายเหตุสาย IO (TAP IO)</label>
+      <textarea id="tapIoInput" rows="2" placeholder="เช่น IO2 = PTO"></textarea>
     </div>
   </div>
 
@@ -1809,7 +1815,7 @@ async function pushMdvrChecklist(){
     plate,
     customer: state.customer || '', fleet: state.fleet || '', technician: onSiteTechName(),
     mdvrPosition: state.mdvrPosition || '', groundPoint: state.groundPoint || '',
-    province: state.province || '', statusDlt: state.statusDlt || '',
+    province: state.province || '', statusDlt: state.statusDlt || '', tapIo: state.tapIo || '',
   };
   if(steelbox && typeof steelbox.has === 'boolean') body.steelbox = steelbox.has;
   if(db9 && typeof db9.has === 'boolean') body.db9 = db9.has;
@@ -2471,6 +2477,7 @@ const REPORT_FIELD_LABELS = {
   installSpeakerPlacement: 'จุดติดตั้งลำโพง', installMicPlacement: 'จุดติดตั้งไมค์',
   stickerRemark: 'Remark สติ๊กเกอร์', onSiteTechNames: 'ช่างที่กำลังทำรายงานนี้',
   mdvrPosition: 'MDVR position', groundPoint: 'จุดจั๊มไฟ', province: 'Province', statusDlt: 'Status DLT',
+  tapIo: 'หมายเหตุสาย IO (TAP IO)',
 };
 function diffReportFields(oldDoc, payload){
   const changes = [];
@@ -2563,7 +2570,7 @@ async function saveReport(){
     installMicPlacement: state.installMicPlacement || '',
     network: state.network || '',
     mdvrPosition: state.mdvrPosition || '', groundPoint: state.groundPoint || '',
-    province: state.province || '', statusDlt: state.statusDlt || '',
+    province: state.province || '', statusDlt: state.statusDlt || '', tapIo: state.tapIo || '',
     techUid: tester.uid, techName: tester.techName,
     // ช่างที่กำลังทำรายงานนี้ (ของ Spare/มอบหมายงานที่ใช้ตอนกรอก) — เดิมไม่เคย
     // บันทึกไว้เลย เป็นแค่ state ในหน่วยความจำของเบราว์เซอร์ ทำให้เปิดรายงาน
@@ -2626,7 +2633,7 @@ function loadReportIntoForm(doc){
     installMicPlacement: doc.installMicPlacement || '',
     network: doc.network || '',
     mdvrPosition: doc.mdvrPosition || '', groundPoint: doc.groundPoint || '',
-    province: doc.province || '', statusDlt: doc.statusDlt || '',
+    province: doc.province || '', statusDlt: doc.statusDlt || '', tapIo: doc.tapIo || '',
   };
   syncFormInputsFromState();
   resetSendButton();
@@ -3166,6 +3173,7 @@ function defaultState(){
     groundPoint: "",
     province: "",
     statusDlt: "",
+    tapIo: "",
   };
 }
 let state = defaultState();
@@ -3246,6 +3254,7 @@ function syncFormInputsFromState(){
   document.getElementById('groundPointInput').value = state.groundPoint || '';
   document.getElementById('provinceInput').value = state.province || '';
   document.getElementById('statusDltInput').value = state.statusDlt || '';
+  document.getElementById('tapIoInput').value = state.tapIo || '';
 }
 
 const TPL_ICON = { upgrade: '⬆️', new_install: '✨', repair: '🛠️', remove: '📤' };
@@ -4481,7 +4490,7 @@ function fixLine(row){
 // instead is exactly the bug that put the literal text "Buzzer" in a
 // ทะเบียน's Buzzer cell — see git log for the fix.
 const YES_NO_EQUIPMENT_COLUMNS = new Set([
-  "IP Resolution", "Motor", "Buzzer", "LED switch", "Mic", "Panic",
+  "IP Resolution", "Fuel Sensor", "Motor", "Buzzer", "LED switch", "Mic", "Panic",
   "Rear Sensor", "Sensor Display", "Front Sensor", "Power Plug",
 ]);
 function sheetValueForColumn(column, product){
@@ -4842,6 +4851,7 @@ function buildMessage(){
     state.groundPoint ? `จุดจั๊มไฟ : ${state.groundPoint}` : null,
     state.province ? `Province : ${state.province}` : null,
     state.statusDlt ? `Status DLT : ${state.statusDlt}` : null,
+    state.tapIo ? `TAP IO : ${state.tapIo}` : null,
   ].filter(Boolean);
   if(installDetailLines.length){
     lines.push('');
@@ -5037,6 +5047,7 @@ document.getElementById('mdvrPositionInput').addEventListener('input', e=>{ stat
 document.getElementById('groundPointInput').addEventListener('input', e=>{ state.groundPoint = e.target.value; updatePreview(); });
 document.getElementById('provinceInput').addEventListener('input', e=>{ state.province = e.target.value; updatePreview(); });
 document.getElementById('statusDltInput').addEventListener('input', e=>{ state.statusDlt = e.target.value; updatePreview(); });
+document.getElementById('tapIoInput').addEventListener('input', e=>{ state.tapIo = e.target.value; updatePreview(); });
 document.getElementById('mdvrServerSelect').addEventListener('change', e=>{ state.mdvrServer = e.target.value; updatePreview(); });
 document.getElementById('installMdvrPlacementInput').addEventListener('input', e=>{ state.installMdvrPlacement = e.target.value; updatePreview(); });
 document.getElementById('installPowerSourceInput').addEventListener('input', e=>{ state.installPowerSource = e.target.value; updatePreview(); });
