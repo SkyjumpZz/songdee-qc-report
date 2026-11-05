@@ -7,7 +7,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>Dashboard · SONGDEE GPS</title>
-<meta name="app-version" content="1.35.0">
+<meta name="app-version" content="1.36.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -682,21 +682,39 @@
     <div class="name-map-status" id="trackNameMapStatus"></div>
   </div>
 
-  <div class="card app-hidden" id="equipmentNameMapCard">
-    <div class="card-title"><span class="dot">🏷️</span>ชื่อที่เขียนลง Sheet/LINE</div>
+  <div class="card app-hidden" id="equipmentLineNameMapCard">
+    <div class="card-title"><span class="dot">💬</span>ชื่ออุปกรณ์ที่เขียนลง LINE</div>
     <div class="admin-hint">
-      ชื่ออุปกรณ์ที่เลือกได้ในฟอร์ม (จาก catalog ของ Stock) → ชื่อจริงที่จะเขียนลงชีต MDVR Tracking และข้อความ LINE
-      แทน — สำหรับอุปกรณ์ที่ชื่อใน catalog ยาว/ไม่ตรงกับชื่อที่ชีตใช้มานาน อุปกรณ์ที่ยังไม่ตั้งไว้ที่นี่จะใช้ชื่อ
-      catalog ดิบๆ ไปเขียนเหมือนเดิม (ไม่เปลี่ยนพฤติกรรมเดิม)
+      ชื่ออุปกรณ์ที่เลือกได้ในฟอร์ม (จาก catalog ของ Stock) → ชื่อที่จะโชว์ในข้อความ LINE แทน — สำหรับอุปกรณ์ที่ชื่อ
+      ใน catalog ยาว/อ่านยาก แยกต่างหากจากชื่อที่ลงชีต (ดูการ์ด "ชื่ออุปกรณ์ที่เขียนลง Track" ด้านล่าง — จะตั้งให้
+      เหมือนกันหรือต่างกันก็ได้) อุปกรณ์ที่ยังไม่ตั้งไว้ที่นี่จะใช้ชื่อ catalog ดิบๆ ไปเขียนเหมือนเดิม
     </div>
-    <div id="equipmentNameMapRows"></div>
+    <div id="equipmentLineNameMapRows"></div>
     <div class="name-map-add">
-      <select id="equipmentNameMapNewItem" onchange="updateEquipmentNameMapPreview()"><option value="">-- เลือกอุปกรณ์ --</option></select>
-      <input type="text" id="equipmentNameMapNewReal" placeholder="ชื่อจริงที่จะลง Sheet/LINE" oninput="updateEquipmentNameMapPreview()">
-      <button type="button" onclick="addEquipmentNameMapRow()">+ เพิ่ม</button>
+      <select id="equipmentLineNameMapNewItem" onchange="updateEquipmentLineNameMapPreview()"><option value="">-- เลือกอุปกรณ์ --</option></select>
+      <input type="text" id="equipmentLineNameMapNewReal" placeholder="ชื่อที่จะลง LINE" oninput="updateEquipmentLineNameMapPreview()">
+      <button type="button" onclick="addEquipmentLineNameMapRow()">+ เพิ่ม</button>
     </div>
-    <div class="hint" id="equipmentNameMapPreview" style="margin-top:6px;"></div>
-    <div class="name-map-status" id="equipmentNameMapStatus"></div>
+    <div class="hint" id="equipmentLineNameMapPreview" style="margin-top:6px;"></div>
+    <div class="name-map-status" id="equipmentLineNameMapStatus"></div>
+  </div>
+
+  <div class="card app-hidden" id="equipmentSheetNameMapCard">
+    <div class="card-title"><span class="dot">🏷️</span>ชื่ออุปกรณ์ที่เขียนลง Track (ชีต)</div>
+    <div class="admin-hint">
+      ชื่ออุปกรณ์ที่เลือกได้ในฟอร์ม (จาก catalog ของ Stock) → ชื่อจริงที่จะเขียนลงชีต MDVR Tracking แทน — สำหรับ
+      อุปกรณ์ที่ชื่อใน catalog ไม่ตรงกับชื่อที่ชีตใช้มานาน (เช่นคอลัมน์ Ch ใช้แค่ "DMS"/"ADAS" ไม่ใช่ชื่อรุ่นเต็มๆ)
+      แยกต่างหากจากชื่อที่ลง LINE ด้านบน อุปกรณ์ที่ยังไม่ตั้งไว้ที่นี่จะใช้ชื่อ catalog ดิบๆ ไปเขียนเหมือนเดิม
+      (ไม่กระทบคอลัมน์ Yes/No เช่น Motor/Buzzer — คอลัมน์พวกนั้นลง "Yes" เสมอไม่ว่าจะตั้งชื่อไว้หรือไม่)
+    </div>
+    <div id="equipmentSheetNameMapRows"></div>
+    <div class="name-map-add">
+      <select id="equipmentSheetNameMapNewItem" onchange="updateEquipmentSheetNameMapPreview()"><option value="">-- เลือกอุปกรณ์ --</option></select>
+      <input type="text" id="equipmentSheetNameMapNewReal" placeholder="ชื่อจริงที่จะลงชีต" oninput="updateEquipmentSheetNameMapPreview()">
+      <button type="button" onclick="addEquipmentSheetNameMapRow()">+ เพิ่ม</button>
+    </div>
+    <div class="hint" id="equipmentSheetNameMapPreview" style="margin-top:6px;"></div>
+    <div class="name-map-status" id="equipmentSheetNameMapStatus"></div>
   </div>
 
   <div class="card app-hidden" id="lineGroupMapCard">
@@ -1016,7 +1034,8 @@ _auth.onAuthStateChanged(async user=>{
     // ฟอร์ม "ช่างที่กำลังทำรายงานนี้" ไม่ใช่ roles.techName ตอนล็อกอิน)
     document.getElementById('adminNameMapCard').classList.toggle('app-hidden', !role.superAdmin);
     document.getElementById('trackNameMapCard').classList.toggle('app-hidden', !role.superAdmin);
-    document.getElementById('equipmentNameMapCard').classList.toggle('app-hidden', !role.superAdmin);
+    document.getElementById('equipmentLineNameMapCard').classList.toggle('app-hidden', !role.superAdmin);
+    document.getElementById('equipmentSheetNameMapCard').classList.toggle('app-hidden', !role.superAdmin);
     document.getElementById('testerRosterCard').classList.toggle('app-hidden', !role.superAdmin);
     document.getElementById('customerFleetListCard').classList.toggle('app-hidden', !role.superAdmin);
     document.getElementById('lineGroupMapCard').classList.toggle('app-hidden', !role.superAdmin);
@@ -1026,8 +1045,9 @@ _auth.onAuthStateChanged(async user=>{
       await loadKnownTechNames(); // ก่อน loadNameMap()/loadTrackNameMap()/loadLineGroupMap() — ทั้งหมดต้องมี knownTechNames พร้อมก่อนถึง render dropdown ได้ถูกต้องตั้งแต่ครั้งแรก
       await loadNameMap();
       await loadTrackNameMap();
-      await loadEquipmentCatalog(); // ก่อน loadEquipmentNameMap() — การ์ด "ชื่อที่เขียนลง Sheet/LINE" ต้องมี catalog พร้อมก่อนถึง render dropdown ได้ถูกต้องตั้งแต่ครั้งแรก
-      await loadEquipmentNameMap();
+      await loadEquipmentCatalog(); // ก่อน loadEquipmentLineNameMap()/loadEquipmentSheetNameMap() — ต้องมี catalog พร้อมก่อนถึง render dropdown ได้ถูกต้องตั้งแต่ครั้งแรก
+      await loadEquipmentLineNameMap();
+      await loadEquipmentSheetNameMap();
       await loadTesterRoster();
       await loadCustomerFleetLists();
       await loadLineGroupMap();
@@ -1237,14 +1257,18 @@ function addTrackNameMapRow(){
 }
 
 // ---------------------------------------------------------------
-// ชื่ออุปกรณ์ catalog (ของ Stock) -> ชื่อจริงที่เขียนลงชีต MDVR Tracking/ข้อความ
-// LINE — รูปแบบเดียวกับ trackNameMap ด้านบนทุกประการ (sd:<key> blob เดียวกัน,
-// แค่คนละ doc id) แค่ฝั่งซ้ายเป็นชื่ออุปกรณ์แทนชื่อช่าง อ่านโดย form.html's
-// equipmentRealName() (sheetValueForColumn()/fixLine() ทั้งคู่) อุปกรณ์ที่ยัง
-// ไม่ตั้งไว้ที่นี่ใช้ชื่อ catalog ดิบๆ ไปเขียนเหมือนเดิม (ไม่เปลี่ยนพฤติกรรมเดิม)
+// ชื่ออุปกรณ์ catalog (ของ Stock) -> ชื่อจริงที่เขียนลง LINE / ชื่อจริงที่เขียนลง
+// ชีต MDVR Tracking — สองรายการแยกกันเด็ดขาด (ตามที่ขอ "ต้องแยก 2 ส่วน: 1) ไว้
+// ใส่ใน Line 2) ไว้ใส่ใน Tracking อื่นๆ" — เดิมใช้ map เดียวกันทั้งคู่ บางครั้ง
+// ชื่อที่อยากให้อ่านง่ายใน LINE กับชื่อย่อที่ชีตใช้มานานไม่เหมือนกัน) รูปแบบ
+// เดียวกับ trackNameMap ด้านบนทุกประการ (sd:<key> blob เดียวกัน, แค่คนละ doc
+// id) แค่ฝั่งซ้ายเป็นชื่ออุปกรณ์แทนชื่อช่าง อ่านโดย form.html's
+// equipmentLineName()/equipmentSheetName() (fixLine()/sheetValueForColumn()
+// ตามลำดับ) อุปกรณ์ที่ยังไม่ตั้งไว้ที่นี่ใช้ชื่อ catalog ดิบๆ ไปเขียนเหมือนเดิม
 // ---------------------------------------------------------------
-let equipmentCatalogCats = []; // [{cat, items}] จาก sd_cats — เก็บเป็นหมวดไว้ ไม่ flatten เพราะใช้ทำ <optgroup> ให้ไล่หาง่ายขึ้น (catalog มีหลายร้อยรายการ)
-let equipmentNameMap = {};
+let equipmentCatalogCats = []; // [{cat, items}] จาก sd_cats — เก็บเป็นหมวดไว้ ไม่ flatten เพราะใช้ทำ <optgroup> ให้ไล่หาง่ายขึ้น (catalog มีหลายร้อยรายการ) — ใช้ร่วมกันทั้งสอง map ด้านล่าง
+let equipmentLineNameMap = {};
+let equipmentSheetNameMap = {};
 
 async function loadEquipmentCatalog(){
   try{
@@ -1258,42 +1282,43 @@ async function loadEquipmentCatalog(){
     console.error('[Equipment catalog] load failed', e);
     equipmentCatalogCats = [];
   }
-  renderEquipmentNameMapOptions();
+  renderEquipmentLineNameMapOptions();
+  renderEquipmentSheetNameMapOptions();
 }
 
-async function loadEquipmentNameMap(){
+async function loadEquipmentLineNameMap(){
   try{
-    const snap = await _db.collection('sd').doc('sd_equipmentNameMap').get();
-    equipmentNameMap = snap.exists ? JSON.parse(snap.data().v || '{}') : {};
+    const snap = await _db.collection('sd').doc('sd_equipmentLineNameMap').get();
+    equipmentLineNameMap = snap.exists ? JSON.parse(snap.data().v || '{}') : {};
   }catch(e){
-    console.error('[Equipment name map] load failed', e);
-    equipmentNameMap = {};
+    console.error('[Equipment LINE name map] load failed', e);
+    equipmentLineNameMap = {};
   }
-  renderEquipmentNameMapEditor();
+  renderEquipmentLineNameMapEditor();
 }
 
-async function saveEquipmentNameMap(){
-  await _db.collection('sd').doc('sd_equipmentNameMap').set({ k:'sd:equipmentNameMap', v: JSON.stringify(equipmentNameMap) });
+async function saveEquipmentLineNameMap(){
+  await _db.collection('sd').doc('sd_equipmentLineNameMap').set({ k:'sd:equipmentLineNameMap', v: JSON.stringify(equipmentLineNameMap) });
 }
 
-async function persistEquipmentNameMap(){
-  const statusEl = document.getElementById('equipmentNameMapStatus');
+async function persistEquipmentLineNameMap(){
+  const statusEl = document.getElementById('equipmentLineNameMapStatus');
   if(statusEl){ statusEl.textContent = 'กำลังบันทึก...'; statusEl.className = 'name-map-status'; }
   try{
-    await saveEquipmentNameMap();
+    await saveEquipmentLineNameMap();
     if(statusEl){ statusEl.textContent = 'บันทึกแล้ว ✓'; statusEl.className = 'name-map-status ok'; }
   }catch(e){
     if(statusEl){ statusEl.textContent = 'บันทึกไม่สำเร็จ: ' + e.message; statusEl.className = 'name-map-status err'; }
   }
 }
 
-function renderEquipmentNameMapOptions(){
-  const sel = document.getElementById('equipmentNameMapNewItem');
+function renderEquipmentLineNameMapOptions(){
+  const sel = document.getElementById('equipmentLineNameMapNewItem');
   if(!sel) return;
   const current = sel.value;
   sel.innerHTML = '<option value="">-- เลือกอุปกรณ์ --</option>';
   equipmentCatalogCats.forEach(c=>{
-    const items = (Array.isArray(c.items) ? c.items : []).filter(n=> n && !(n in equipmentNameMap));
+    const items = (Array.isArray(c.items) ? c.items : []).filter(n=> n && !(n in equipmentLineNameMap));
     if(!items.length) return;
     const og = document.createElement('optgroup');
     og.label = c.cat || '';
@@ -1307,12 +1332,12 @@ function renderEquipmentNameMapOptions(){
   if([...sel.options].some(o=> o.value === current)) sel.value = current;
 }
 
-function renderEquipmentNameMapEditor(){
-  const wrap = document.getElementById('equipmentNameMapRows');
+function renderEquipmentLineNameMapEditor(){
+  const wrap = document.getElementById('equipmentLineNameMapRows');
   if(!wrap) return;
   wrap.innerHTML = '';
-  renderEquipmentNameMapOptions();
-  Object.entries(equipmentNameMap).sort(([a],[b])=>a.localeCompare(b)).forEach(([itemName, realName])=>{
+  renderEquipmentLineNameMapOptions();
+  Object.entries(equipmentLineNameMap).sort(([a],[b])=>a.localeCompare(b)).forEach(([itemName, realName])=>{
     const row = document.createElement('div');
     row.className = 'name-map-row';
 
@@ -1322,12 +1347,12 @@ function renderEquipmentNameMapEditor(){
 
     const realInput = document.createElement('input');
     realInput.type = 'text'; realInput.value = realName;
-    realInput.oninput = ()=>{ equipmentNameMap[itemName] = realInput.value; };
-    realInput.onblur = persistEquipmentNameMap;
+    realInput.oninput = ()=>{ equipmentLineNameMap[itemName] = realInput.value; };
+    realInput.onblur = persistEquipmentLineNameMap;
 
     const rm = document.createElement('button');
     rm.type = 'button'; rm.textContent = 'ลบ';
-    rm.onclick = ()=>{ delete equipmentNameMap[itemName]; renderEquipmentNameMapEditor(); persistEquipmentNameMap(); };
+    rm.onclick = ()=>{ delete equipmentLineNameMap[itemName]; renderEquipmentLineNameMapEditor(); persistEquipmentLineNameMap(); };
 
     row.appendChild(itemInput); row.appendChild(realInput); row.appendChild(rm);
     wrap.appendChild(row);
@@ -1335,26 +1360,121 @@ function renderEquipmentNameMapEditor(){
 }
 
 // พรีวิวสดระหว่างกรอกแถวเพิ่มใหม่ — เหมือน updateTrackNameMapPreview() ด้านบน
-function updateEquipmentNameMapPreview(){
-  const previewEl = document.getElementById('equipmentNameMapPreview');
+function updateEquipmentLineNameMapPreview(){
+  const previewEl = document.getElementById('equipmentLineNameMapPreview');
   if(!previewEl) return;
-  const itemName = document.getElementById('equipmentNameMapNewItem').value;
-  const realName = document.getElementById('equipmentNameMapNewReal').value.trim();
+  const itemName = document.getElementById('equipmentLineNameMapNewItem').value;
+  const realName = document.getElementById('equipmentLineNameMapNewReal').value.trim();
   if(!itemName){ previewEl.textContent = ''; return; }
-  previewEl.textContent = `ตัวอย่าง: "${itemName}" จะถูกเขียนลง Sheet/LINE เป็นชื่อ "${realName || itemName}"`;
+  previewEl.textContent = `ตัวอย่าง: "${itemName}" จะถูกเขียนลง LINE เป็นชื่อ "${realName || itemName}"`;
 }
 
-function addEquipmentNameMapRow(){
-  const itemInput = document.getElementById('equipmentNameMapNewItem');
-  const realInput = document.getElementById('equipmentNameMapNewReal');
+function addEquipmentLineNameMapRow(){
+  const itemInput = document.getElementById('equipmentLineNameMapNewItem');
+  const realInput = document.getElementById('equipmentLineNameMapNewReal');
   const itemName = itemInput.value.trim();
   const realName = realInput.value.trim();
   if(!itemName || !realName) return;
-  equipmentNameMap[itemName] = realName;
+  equipmentLineNameMap[itemName] = realName;
   itemInput.value = ''; realInput.value = '';
-  renderEquipmentNameMapEditor();
-  persistEquipmentNameMap();
-  updateEquipmentNameMapPreview();
+  renderEquipmentLineNameMapEditor();
+  persistEquipmentLineNameMap();
+  updateEquipmentLineNameMapPreview();
+}
+
+async function loadEquipmentSheetNameMap(){
+  try{
+    const snap = await _db.collection('sd').doc('sd_equipmentSheetNameMap').get();
+    equipmentSheetNameMap = snap.exists ? JSON.parse(snap.data().v || '{}') : {};
+  }catch(e){
+    console.error('[Equipment sheet name map] load failed', e);
+    equipmentSheetNameMap = {};
+  }
+  renderEquipmentSheetNameMapEditor();
+}
+
+async function saveEquipmentSheetNameMap(){
+  await _db.collection('sd').doc('sd_equipmentSheetNameMap').set({ k:'sd:equipmentSheetNameMap', v: JSON.stringify(equipmentSheetNameMap) });
+}
+
+async function persistEquipmentSheetNameMap(){
+  const statusEl = document.getElementById('equipmentSheetNameMapStatus');
+  if(statusEl){ statusEl.textContent = 'กำลังบันทึก...'; statusEl.className = 'name-map-status'; }
+  try{
+    await saveEquipmentSheetNameMap();
+    if(statusEl){ statusEl.textContent = 'บันทึกแล้ว ✓'; statusEl.className = 'name-map-status ok'; }
+  }catch(e){
+    if(statusEl){ statusEl.textContent = 'บันทึกไม่สำเร็จ: ' + e.message; statusEl.className = 'name-map-status err'; }
+  }
+}
+
+function renderEquipmentSheetNameMapOptions(){
+  const sel = document.getElementById('equipmentSheetNameMapNewItem');
+  if(!sel) return;
+  const current = sel.value;
+  sel.innerHTML = '<option value="">-- เลือกอุปกรณ์ --</option>';
+  equipmentCatalogCats.forEach(c=>{
+    const items = (Array.isArray(c.items) ? c.items : []).filter(n=> n && !(n in equipmentSheetNameMap));
+    if(!items.length) return;
+    const og = document.createElement('optgroup');
+    og.label = c.cat || '';
+    items.forEach(n=>{
+      const o = document.createElement('option');
+      o.value = n; o.textContent = n;
+      og.appendChild(o);
+    });
+    sel.appendChild(og);
+  });
+  if([...sel.options].some(o=> o.value === current)) sel.value = current;
+}
+
+function renderEquipmentSheetNameMapEditor(){
+  const wrap = document.getElementById('equipmentSheetNameMapRows');
+  if(!wrap) return;
+  wrap.innerHTML = '';
+  renderEquipmentSheetNameMapOptions();
+  Object.entries(equipmentSheetNameMap).sort(([a],[b])=>a.localeCompare(b)).forEach(([itemName, realName])=>{
+    const row = document.createElement('div');
+    row.className = 'name-map-row';
+
+    const itemInput = document.createElement('input');
+    itemInput.type = 'text'; itemInput.value = itemName; itemInput.disabled = true;
+    itemInput.title = 'เปลี่ยนชื่อฝั่งนี้ไม่ได้ — ลบแล้วเพิ่มใหม่แทน';
+
+    const realInput = document.createElement('input');
+    realInput.type = 'text'; realInput.value = realName;
+    realInput.oninput = ()=>{ equipmentSheetNameMap[itemName] = realInput.value; };
+    realInput.onblur = persistEquipmentSheetNameMap;
+
+    const rm = document.createElement('button');
+    rm.type = 'button'; rm.textContent = 'ลบ';
+    rm.onclick = ()=>{ delete equipmentSheetNameMap[itemName]; renderEquipmentSheetNameMapEditor(); persistEquipmentSheetNameMap(); };
+
+    row.appendChild(itemInput); row.appendChild(realInput); row.appendChild(rm);
+    wrap.appendChild(row);
+  });
+}
+
+function updateEquipmentSheetNameMapPreview(){
+  const previewEl = document.getElementById('equipmentSheetNameMapPreview');
+  if(!previewEl) return;
+  const itemName = document.getElementById('equipmentSheetNameMapNewItem').value;
+  const realName = document.getElementById('equipmentSheetNameMapNewReal').value.trim();
+  if(!itemName){ previewEl.textContent = ''; return; }
+  previewEl.textContent = `ตัวอย่าง: "${itemName}" จะถูกเขียนลงชีตเป็นชื่อ "${realName || itemName}"`;
+}
+
+function addEquipmentSheetNameMapRow(){
+  const itemInput = document.getElementById('equipmentSheetNameMapNewItem');
+  const realInput = document.getElementById('equipmentSheetNameMapNewReal');
+  const itemName = itemInput.value.trim();
+  const realName = realInput.value.trim();
+  if(!itemName || !realName) return;
+  equipmentSheetNameMap[itemName] = realName;
+  itemInput.value = ''; realInput.value = '';
+  renderEquipmentSheetNameMapEditor();
+  persistEquipmentSheetNameMap();
+  updateEquipmentSheetNameMapPreview();
 }
 
 // ---------------------------------------------------------------

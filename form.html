@@ -10,7 +10,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.109.0">
+<meta name="app-version" content="1.110.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -1030,7 +1030,8 @@ _auth.onAuthStateChanged(async user=>{
     loadScannedDeviceEmeis(); // not awaited, same reasoning
     await loadNameMap(); // resolved before any assignments fetch uses the real mapping
     loadTrackNameMap(); // not awaited — only read by onSiteTechName() at send time, same reasoning as loadLineGroupMap() below
-    loadEquipmentNameMap(); // not awaited — re-renders itself once resolved, same reasoning as loadLiveCatalog() above
+    loadEquipmentLineNameMap(); // not awaited — re-renders itself once resolved, same reasoning as loadLiveCatalog() above
+    loadEquipmentSheetNameMap(); // not awaited — only read at write time by sheetValueForColumn(), same reasoning as loadTrackNameMap() above
     loadLineGroupMap(); // not awaited — sendToLine() can't run before the user finishes the form anyway
     loadStickerOptions(); // not awaited, same reasoning — re-renders once resolved
     loadNetworkOptions(); // not awaited, same reasoning
@@ -2304,19 +2305,23 @@ async function loadTrackNameMap(){
   }
 }
 
-// ชื่ออุปกรณ์ catalog (ของ Stock) -> ชื่อจริงที่เขียนลงชีต MDVR Tracking/ข้อความ
-// LINE แทน — ตั้งค่าได้จากการ์ด "ชื่อที่เขียนลง Sheet/LINE" ใน index.html
-// (รูปแบบเดียวกับ trackNameMap ด้านบน) อุปกรณ์ที่ยังไม่ตั้งไว้ใช้ชื่อ catalog
-// ดิบๆ ไปเขียนเหมือนเดิม — ดู equipmentRealName()/sheetValueForColumn()/fixLine()
-let equipmentNameMap = {};
+// ชื่ออุปกรณ์ catalog (ของ Stock) -> ชื่อจริงที่เขียนลง LINE / ชื่อจริงที่เขียนลง
+// ชีต MDVR Tracking — สองรายการแยกกันเด็ดขาด (ตั้งค่าได้จากการ์ด "ชื่ออุปกรณ์ที่
+// เขียนลง LINE"/"ชื่ออุปกรณ์ที่เขียนลง Track (ชีต)" ใน index.html รูปแบบเดียว
+// กับ trackNameMap ด้านบน) — เดิมใช้ map เดียวกันทั้งคู่ บางครั้งชื่อที่อยากให้
+// อ่านง่ายใน LINE กับชื่อย่อที่ชีตใช้มานานไม่เหมือนกัน อุปกรณ์ที่ยังไม่ตั้งไว้
+// ใช้ชื่อ catalog ดิบๆ ไปเขียนเหมือนเดิม — ดู equipmentLineName()/
+// equipmentSheetName()/sheetValueForColumn()/fixLine()
+let equipmentLineNameMap = {};
+let equipmentSheetNameMap = {};
 
-async function loadEquipmentNameMap(){
+async function loadEquipmentLineNameMap(){
   try{
-    const snap = await _db.collection('sd').doc('sd_equipmentNameMap').get();
-    equipmentNameMap = snap.exists ? JSON.parse(snap.data().v || '{}') : {};
+    const snap = await _db.collection('sd').doc('sd_equipmentLineNameMap').get();
+    equipmentLineNameMap = snap.exists ? JSON.parse(snap.data().v || '{}') : {};
   }catch(e){
-    console.error('[Equipment name map] load failed', e);
-    equipmentNameMap = {};
+    console.error('[Equipment LINE name map] load failed', e);
+    equipmentLineNameMap = {};
   }
   // ต่างจาก trackNameMap (อ่านแค่ตอนส่งรายงาน) — ตัวนี้กระทบ preview ที่ช่าง
   // เห็นระหว่างกรอกฟอร์มด้วย เลยต้อง re-render ทันทีที่โหลดเสร็จ ถ้าช่างกรอก
@@ -2324,8 +2329,18 @@ async function loadEquipmentNameMap(){
   renderFixRows(); updatePreview();
 }
 
-function equipmentRealName(product){
-  return (product && equipmentNameMap[product]) || product;
+async function loadEquipmentSheetNameMap(){
+  try{
+    const snap = await _db.collection('sd').doc('sd_equipmentSheetNameMap').get();
+    equipmentSheetNameMap = snap.exists ? JSON.parse(snap.data().v || '{}') : {};
+  }catch(e){
+    console.error('[Equipment sheet name map] load failed', e);
+    equipmentSheetNameMap = {};
+  }
+}
+
+function equipmentLineName(product){
+  return (product && equipmentLineNameMap[product]) || product;
 }
 
 // ---------------------------------------------------------------
@@ -4424,11 +4439,11 @@ function problemLine(row){
 }
 
 function fixLine(row){
-  // ชื่อ catalog ดิบของจริง (ไม่ผ่าน equipmentNameMap) — "อื่นๆ (พิมพ์เอง)" เป็น
+  // ชื่อ catalog ดิบของจริง (ไม่ผ่าน equipmentLineNameMap) — "อื่นๆ (พิมพ์เอง)" เป็น
   // ชื่อที่ช่างพิมพ์เองอยู่แล้ว ไม่ต้องแมปซ้ำ (ไม่มีทางอยู่ใน map อยู่แล้วเพราะไม่ใช่
   // ชื่อ catalog แต่กันไว้เผื่อชื่อที่พิมพ์เองบังเอิญซ้ำคีย์ในแมป)
   const rawName = row.product === "อื่นๆ (พิมพ์เอง)" ? (row.custom || "") : row.product;
-  const name = row.product === "อื่นๆ (พิมพ์เอง)" ? rawName : equipmentRealName(rawName);
+  const name = row.product === "อื่นๆ (พิมพ์เอง)" ? rawName : equipmentLineName(rawName);
   // Ignore oldModel/oldSN for job types that don't show that field — a
   // report loaded from before the tpl-based section split (or edited
   // across a tpl switch) can still have it set in state even though the
@@ -4495,13 +4510,14 @@ const YES_NO_EQUIPMENT_COLUMNS = new Set([
 ]);
 function sheetValueForColumn(column, product){
   // คอลัมน์ Yes/No (เช่น Motor, Buzzer, Mic) เป็นช่อง checklist ล้วนๆ ไม่ใช่ช่อง
-  // ชื่ออุปกรณ์ — ต้องเช็คก่อน equipmentNameMap เสมอ ไม่งั้นถ้ามีคนตั้งชื่อจริง
-  // ของอุปกรณ์ที่ไปลงคอลัมน์นี้ไว้ (เช่นอยากให้ชื่อสวยขึ้นตอนขึ้น LINE) จะดัน
-  // ไปเขียนทับ "Yes" ที่ควรจะเป็นในชีตด้วยโดยไม่ตั้งใจ
+  // ชื่ออุปกรณ์ — ต้องเช็คก่อน equipmentSheetNameMap เสมอ ไม่งั้นถ้ามีคนตั้งชื่อจริง
+  // ของอุปกรณ์ที่ไปลงคอลัมน์นี้ไว้ จะดันไปเขียนทับ "Yes" ที่ควรจะเป็นในชีตด้วยโดย
+  // ไม่ตั้งใจ
   if(YES_NO_EQUIPMENT_COLUMNS.has(column)) return "Yes";
-  // ชื่อจริงที่ตั้งไว้ในการ์ด "ชื่อที่เขียนลง Sheet/LINE" (index.html) มาก่อน
-  // heuristic ทั่วไปด้านล่าง — เป็น override ที่ตั้งใจเจาะจงรายชิ้น
-  if(equipmentNameMap[product]) return equipmentNameMap[product];
+  // ชื่อจริงที่ตั้งไว้ในการ์ด "ชื่ออุปกรณ์ที่เขียนลง Track (ชีต)" (index.html) มาก่อน
+  // heuristic ทั่วไปด้านล่าง — เป็น override ที่ตั้งใจเจาะจงรายชิ้น (แยกจากชื่อที่ลง
+  // LINE — ดู equipmentLineName() ที่ fixLine() ใช้)
+  if(equipmentSheetNameMap[product]) return equipmentSheetNameMap[product];
   const type = deviceTypeForProduct(product);
   if(/^Ch[1-9]$/.test(column) && (type === 'dms' || type === 'adas')){
     return type.toUpperCase();
