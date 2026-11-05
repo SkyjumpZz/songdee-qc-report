@@ -10,7 +10,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.107.1">
+<meta name="app-version" content="1.108.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -3056,7 +3056,14 @@ const CHECK_PASS_LABEL = {
 //   (an upgrade isn't fixing a reported issue).
 // - ซ่อม: logs ปัญหา, and รุ่นเก่าที่เปลี่ยน is optional (may or may not
 //   involve swapping a part).
-function tplHasProblems(tpl){ return tpl === "repair"; }
+// เดิมโชว์การ์ด "ปัญหา" (รวม issueBanner — ดู pushIssueClose() ด้านล่าง) เฉพาะ
+// เทมเพลต "ซ่อม" เท่านั้น ทำให้งานติดตั้งใหม่/อัปเกรด/ถอดย้ายที่บังเอิญไปเจอ
+// Issue ค้างอยู่ที่ทะเบียนนั้น (openIssues ดึงมาทุกเทมเพลตอยู่แล้ว ดู
+// scheduleStockLockCheck()) ไม่มีทางเห็น/ปิดมันได้เลยในรายงานนั้น ต้องรอมี
+// งานซ่อมแยกต่างหากถึงจะปิดได้ — ตามที่ขอ "ให้ทุกเมนูมีการดูและปิด Issue เหมือน
+// การซ่อมด้วย" เลยเปิดให้ทุกเทมเพลตเห็น/กรอกปัญหาได้เหมือนกัน (แค่ไม่บังคับ
+// กรอกนอกจากเทมเพลตซ่อม — ดู getMissingFields()'s "ปัญหาอย่างน้อย 1 รายการ")
+function tplHasProblems(tpl){ return true; }
 function tplHasOldModel(tpl){ return tpl !== "new_install"; }
 
 // ข้อความแสดงผลของแต่ละ checklist item ตอนพรีวิว/การ์ด LINE — แยกกรณี
@@ -3253,7 +3260,6 @@ function renderTabs(){
     b.onclick = ()=>{
       state.tpl = key;
       state.checklist = {};
-      if(!tplHasProblems(key)) state.problems = [{symptom:""}];
       if(!tplHasOldModel(key)) state.fixes.forEach(row=>{ row.oldModel = ''; row.oldModelCustom = ''; });
       renderAll();
     };
@@ -4744,12 +4750,10 @@ async function pushDeviceSwaps(){
 }
 
 // ISSUE Tracking close — one call per ticket the tech left checked (a plate
-// can have several open at once, see openIssues above), only when the
-// issueBanner was actually visible (tplHasProblems — issueBanner lives in
-// problemsCard, which is hidden for อัปเกรด/ติดตั้งใหม่). Without that last
-// check this would silently close open tickets the tech never saw, just
-// because they happened to match the plate — openIssues is set from the
-// plate lookup regardless of which job-type tab is active.
+// can have several open at once, see openIssues above). issueBanner lives in
+// problemsCard, now shown for every template (see tplHasProblems() above),
+// so this always proceeds — kept as a guard (not just inlined) in case
+// problemsCard's visibility rule ever changes again.
 async function pushIssueClose(){
   if(!tplHasProblems(state.tpl)) return null;
   const toClose = openIssues.filter(i => i.closeChecked);
@@ -4981,7 +4985,10 @@ function getMissingFields(){
   // fixLine() (the same functions buildMessage()/buildLineCard() already
   // use to decide whether a row produces real text) instead of a second,
   // separately-maintained "is this row filled in" check.
-  if(tplHasProblems(state.tpl) && !state.problems.some(r=> problemLine(r))){
+  // บังคับกรอกปัญหาอย่างน้อย 1 รายการเฉพาะเทมเพลตซ่อม — เทมเพลตอื่นตอนนี้เห็น
+  // การ์ด "ปัญหา" ได้เหมือนกันแล้ว (ดู tplHasProblems() ด้านบน) แต่เป็นช่อง
+  // เสริม ไม่ใช่ทุกงานติดตั้ง/อัปเกรดจะมีปัญหาให้กรอก
+  if(state.tpl === 'repair' && !state.problems.some(r=> problemLine(r))){
     missing.push('ปัญหาอย่างน้อย 1 รายการ');
   }
   if(!state.fixes.some(r=> fixLine(r))){
