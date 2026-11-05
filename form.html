@@ -10,7 +10,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.107.0">
+<meta name="app-version" content="1.107.1">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -4479,10 +4479,14 @@ const YES_NO_EQUIPMENT_COLUMNS = new Set([
   "Rear Sensor", "Sensor Display", "Front Sensor", "Power Plug",
 ]);
 function sheetValueForColumn(column, product){
-  // ชื่อจริงที่ตั้งไว้ในการ์ด "ชื่อที่เขียนลง Sheet/LINE" (index.html) มาก่อนเสมอ
-  // — เป็น override ที่ตั้งใจเจาะจงรายชิ้น ให้ชนะ heuristic ทั่วไปด้านล่าง
-  if(equipmentNameMap[product]) return equipmentNameMap[product];
+  // คอลัมน์ Yes/No (เช่น Motor, Buzzer, Mic) เป็นช่อง checklist ล้วนๆ ไม่ใช่ช่อง
+  // ชื่ออุปกรณ์ — ต้องเช็คก่อน equipmentNameMap เสมอ ไม่งั้นถ้ามีคนตั้งชื่อจริง
+  // ของอุปกรณ์ที่ไปลงคอลัมน์นี้ไว้ (เช่นอยากให้ชื่อสวยขึ้นตอนขึ้น LINE) จะดัน
+  // ไปเขียนทับ "Yes" ที่ควรจะเป็นในชีตด้วยโดยไม่ตั้งใจ
   if(YES_NO_EQUIPMENT_COLUMNS.has(column)) return "Yes";
+  // ชื่อจริงที่ตั้งไว้ในการ์ด "ชื่อที่เขียนลง Sheet/LINE" (index.html) มาก่อน
+  // heuristic ทั่วไปด้านล่าง — เป็น override ที่ตั้งใจเจาะจงรายชิ้น
+  if(equipmentNameMap[product]) return equipmentNameMap[product];
   const type = deviceTypeForProduct(product);
   if(/^Ch[1-9]$/.test(column) && (type === 'dms' || type === 'adas')){
     return type.toUpperCase();
