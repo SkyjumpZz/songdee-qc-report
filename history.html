@@ -6,7 +6,7 @@
 (function(){try{if(localStorage.getItem('sd-theme')==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
-<meta name="app-version" content="1.5.0">
+<meta name="app-version" content="1.6.0">
 <title>ประวัติรายงาน · SONGDEE GPS</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -140,11 +140,12 @@
   main{max-width:640px; margin:0 auto; padding:18px 16px 60px;}
   .history-item{
     border:1px solid var(--line-soft); border-radius:var(--r-md); padding:13px 15px;
-    margin-bottom:10px; cursor:pointer; background:var(--bg-panel); text-decoration:none; display:block;
+    margin-bottom:10px; background:var(--bg-panel); position:relative;
     box-shadow:var(--shadow-sm);
     transition:border-color .15s ease, transform .15s ease, box-shadow .15s ease;
   }
   .history-item:hover{border-color:var(--accent); transform:translateY(-1px); box-shadow:var(--shadow-md);}
+  .history-item .hi-link{display:block; text-decoration:none; color:inherit; cursor:pointer; padding-right:64px;}
   .history-item .hi-row{display:flex; align-items:flex-start; gap:11px;}
   .history-item .hi-icon{
     width:34px; height:34px; border-radius:11px; flex-shrink:0;
@@ -155,8 +156,48 @@
   .history-item.tpl-new_install .hi-icon{background:linear-gradient(150deg, rgba(61,220,151,.22), rgba(61,220,151,.06)); border-color:rgba(61,220,151,.28);}
   .history-item.tpl-repair .hi-icon{background:linear-gradient(150deg, rgba(220,38,38,.18), rgba(220,38,38,.06)); border-color:rgba(220,38,38,.26);}
   .history-item .hi-text{flex:1; min-width:0;}
-  .history-item .title{font-size:14px; font-weight:600; color:var(--text);}
+  .history-item .title{font-size:14px; font-weight:600; color:var(--text); display:flex; align-items:center; gap:7px; flex-wrap:wrap;}
   .history-item .meta{font-size:12px; color:var(--text-dim); margin-top:4px;}
+  .hi-sent-badge{font-size:10.5px; font-weight:700; padding:2px 7px; border-radius:20px; white-space:nowrap;}
+  .hi-sent-badge.sent{color:#3ddc97; background:rgba(61,220,151,.14); border:1px solid rgba(61,220,151,.28);}
+  .hi-sent-badge.unsent{color:#ffb020; background:rgba(255,176,32,.14); border:1px solid rgba(255,176,32,.28);}
+  .hi-menu-btn{
+    position:absolute; top:10px; right:10px; width:26px; height:26px; border-radius:8px;
+    border:1px solid var(--line-soft); background:var(--bg-panel-2); color:var(--text-dim);
+    display:flex; align-items:center; justify-content:center; font-size:15px; line-height:1; cursor:pointer;
+  }
+  .hi-menu-btn:hover{color:var(--text); border-color:var(--accent);}
+  .hi-menu{
+    position:absolute; top:38px; right:10px; z-index:30; min-width:210px;
+    background:var(--bg-panel); border:1px solid var(--line-soft); border-radius:var(--r-md);
+    box-shadow:var(--shadow-md); padding:6px; display:flex; flex-direction:column; gap:2px;
+  }
+  .hi-menu-status{font-size:11px; color:var(--text-dim); padding:6px 8px 8px; border-bottom:1px solid var(--line-soft); margin-bottom:2px;}
+  .hi-menu-item{
+    display:block; padding:8px 8px; border-radius:7px; font-size:13px; color:var(--text);
+    text-decoration:none; cursor:pointer; background:none; border:none; text-align:left; font-family:inherit;
+  }
+  .hi-menu-item:hover{background:var(--bg-panel-2);}
+  .hi-expand-btn{
+    position:absolute; top:10px; right:42px; width:26px; height:26px; border-radius:8px;
+    border:1px solid var(--line-soft); background:var(--bg-panel-2); color:var(--text-dim);
+    display:flex; align-items:center; justify-content:center; font-size:12px; line-height:1; cursor:pointer;
+    transition:transform .15s ease;
+  }
+  .hi-expand-btn:hover{color:var(--text); border-color:var(--accent);}
+  .hi-expand-btn.open{transform:rotate(180deg);}
+  .hi-expand{
+    margin-top:10px; padding-top:10px; border-top:1px solid var(--line-soft);
+    font-size:12px; color:var(--text-dim); display:flex; flex-direction:column; gap:5px;
+  }
+  .hi-expand .warn{color:#ffb020;}
+  .hi-expand .ok{color:#3ddc97;}
+  .hi-retrack-btn{
+    align-self:flex-start; margin-top:3px; font-size:12px; font-weight:600;
+    padding:6px 11px; border-radius:var(--r-pill); border:1px solid var(--line-soft);
+    background:var(--bg-panel-2); color:var(--text); cursor:pointer; font-family:inherit;
+  }
+  .hi-retrack-btn:hover{border-color:var(--accent); color:var(--accent);}
   .date-group{
     font-size:11.5px; font-weight:700; color:var(--text-faint); text-transform:uppercase; letter-spacing:.05em;
     margin:16px 0 8px; padding-left:2px;
@@ -480,6 +521,57 @@ async function deleteReportAsAdmin(doc){
   }
 }
 
+// วันที่/เวลาแบบ พ.ศ.-อิสระ (toLocaleString('th-TH') จะใช้ปี พ.ศ. ทำให้สับสน
+// กับที่อื่นในแอปที่ใช้ ค.ศ. ทั้งหมด) — เลขเรียบง่าย dd/mm/yyyy hh:mm
+function formatSentAt(ts){
+  if(!ts) return '';
+  const d = new Date(ts);
+  const pad = n=> String(n).padStart(2,'0');
+  return `${pad(d.getDate())}/${pad(d.getMonth()+1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+// สรุปสถานะ track/ปิด Issue จาก doc.trackResults (บันทึกจาก runTrackWriteBacks()
+// ใน form.html, ดูคอมเมนต์ที่นั่น) — เหมือนกับ index.html's trackStatusSummary()
+// เป๊ะๆ (เดิมมีแค่ใน index.html — ตามที่ขอ "ให้ทุกเมนูมีการดูและปิด Issue เหมือน
+// การซ่อมด้วย" พอร์ตมาที่นี่ด้วยให้หน้า "ประวัติ" เห็นสถานะเดียวกัน ไม่ใช่แค่
+// Dashboard) รายงานเก่าก่อนฟีเจอร์นี้จะไม่มี trackResults เลย แสดง "ไม่มีข้อมูล"
+// แทนการเดา ให้กดปุ่ม "Track ให้ใหม่อีกครั้ง" เพื่อ sync/เช็คสถานะจริงได้
+function trackStatusSummary(doc){
+  const tr = doc.trackResults;
+  if(!tr){
+    return { trackLine: 'ไม่มีข้อมูล (รายงานนี้ยังไม่เคยบันทึกสถานะ track)', trackClass: '', issueLine: null, issueClass: '' };
+  }
+  const relevantKeys = ['mdvrInstall', 'mdvrUnitSwap', 'mdvrChecklist', 'sheetUpdates', 'mdvrClears', 'deviceSwaps'];
+  let anyRan = false, anyFail = false;
+  relevantKeys.forEach(k=>{
+    if(tr[k]){ anyRan = true; if(!tr[k].ok) anyFail = true; }
+  });
+  const atStr = doc.trackResultsAt ? ` (${formatSentAt(doc.trackResultsAt)})` : '';
+  let trackLine, trackClass;
+  if(!anyRan){ trackLine = 'ไม่มีรายการที่ต้อง track สำหรับรายงานนี้' + atStr; trackClass = ''; }
+  else if(anyFail){ trackLine = '⚠️ Track ไม่สำเร็จบางรายการ' + atStr; trackClass = 'warn'; }
+  else { trackLine = '✅ Track สำเร็จ' + atStr; trackClass = 'ok'; }
+
+  let issueLine = null, issueClass = '';
+  if(tr.issueClose){
+    if(tr.issueClose.ok){
+      const tickets = (tr.issueClose.tickets||[]).join(', ');
+      issueLine = `✅ ปิด Issue แล้ว${tickets ? ' (' + escapeHtmlLite(tickets) + ')' : ''}`;
+      issueClass = 'ok';
+    } else {
+      issueLine = `⚠️ ปิด Issue ไม่สำเร็จ: ${escapeHtmlLite(tr.issueClose.error || '')}`;
+      issueClass = 'warn';
+    }
+  }
+  return { trackLine, trackClass, issueLine, issueClass };
+}
+
+// เมนู ⋮ ของแต่ละการ์ด — เปิดได้ทีละอันเท่านั้น และปิดเองเมื่อคลิกนอกเมนู
+function closeAllHiMenus(){
+  document.querySelectorAll('.hi-menu').forEach(m=> m.classList.add('app-hidden'));
+}
+document.addEventListener('click', closeAllHiMenus);
+
 // "วันนี้"/"เมื่อวาน" instead of a bare date — doc.date is already YYYY-MM-DD
 // (same format used to build today's/yesterday's comparison strings), so a
 // plain string compare is enough, no timezone-sensitive Date parsing needed.
@@ -512,26 +604,75 @@ function renderList(list, showAdmin){
     }
     const tplLabel = TEMPLATE_LABELS[doc.tpl] || doc.tpl || '';
     const tplIcon = TEMPLATE_ICONS[doc.tpl] || '📄';
-    const wrap = document.createElement('div');
-    wrap.className = 'history-item-wrap';
-    const a = document.createElement('a');
-    a.className = 'history-item' + (doc.tpl ? ' tpl-' + doc.tpl : '');
-    a.href = `form.html?report=${encodeURIComponent(doc.id)}`;
+    const editHref = `form.html?report=${encodeURIComponent(doc.id)}`;
+    const resendHref = `form.html?report=${encodeURIComponent(doc.id)}&autosend=1`;
+    const retrackHref = `form.html?report=${encodeURIComponent(doc.id)}&retrack=1`;
+    const sentBadge = doc.lineSentAt
+      ? `<span class="hi-sent-badge sent">✓ ส่งแล้ว</span>`
+      : `<span class="hi-sent-badge unsent">ยังไม่ส่ง LINE</span>`;
+    const sentStatusText = doc.lineSentAt
+      ? `ส่งเข้า LINE แล้ว — ${formatSentAt(doc.lineSentAt)}`
+      : 'ยังไม่เคยส่งเข้า LINE';
+    const { trackLine, trackClass, issueLine, issueClass } = trackStatusSummary(doc);
     const ownerLine = showAdmin ? `<div class="owner">ผู้ทดสอบ: ${escapeHtmlLite(doc.techName||'-')}</div>` : '';
     // ถอดย้ายอุปกรณ์ — doc.plate คือทะเบียนเก่า (คันที่ถอดออกมา) เลเบลให้ชัด
     // กว่า "ทะเบียน" เฉยๆ และโชว์ทะเบียนใหม่ด้วยถ้ามี (ดู form.html's dual-plate)
     const plateMeta = (doc.tpl === 'remove')
       ? `ทะเบียนเก่า: ${escapeHtmlLite(doc.plate||'-')}${doc.newPlate ? ` → ใหม่: ${escapeHtmlLite(doc.newPlate)}` : ''}`
       : `ทะเบียน: ${escapeHtmlLite(doc.plate||'-')}`;
-    a.innerHTML = `<div class="hi-row"><div class="hi-icon">${tplIcon}</div><div class="hi-text"><div class="title">${escapeHtmlLite(tplLabel)} ${escapeHtmlLite(doc.customer||'')}</div><div class="meta">${plateMeta}</div>${ownerLine}</div></div>`;
-    wrap.appendChild(a);
+
+    const wrap = document.createElement('div');
+    wrap.className = 'history-item-wrap';
+    const item = document.createElement('div');
+    item.className = 'history-item' + (doc.tpl ? ' tpl-' + doc.tpl : '');
+    item.innerHTML = `
+      <a class="hi-link" href="${editHref}">
+        <div class="hi-row">
+          <div class="hi-icon">${tplIcon}</div>
+          <div class="hi-text">
+            <div class="title">${escapeHtmlLite(tplLabel)} ${escapeHtmlLite(doc.customer||'')} ${sentBadge}</div>
+            <div class="meta">${plateMeta}</div>
+            ${ownerLine}
+          </div>
+        </div>
+      </a>
+      <button type="button" class="hi-expand-btn" title="ดูสถานะ Track/Issue">▾</button>
+      <button type="button" class="hi-menu-btn" title="ตัวเลือกเพิ่มเติม">⋮</button>
+      <div class="hi-menu app-hidden">
+        <div class="hi-menu-status">${escapeHtmlLite(sentStatusText)}</div>
+        <a class="hi-menu-item" href="${resendHref}">📤 ส่งเข้า LINE อีกครั้ง</a>
+        <a class="hi-menu-item" href="${editHref}">✏️ แก้ไขรายงาน</a>
+      </div>
+      <div class="hi-expand app-hidden">
+        ${issueLine ? `<div class="${issueClass}">${issueLine}</div>` : ''}
+        <div class="${trackClass}">${trackLine}</div>
+        <a class="hi-retrack-btn" href="${retrackHref}">🔄 Track ให้ใหม่อีกครั้ง</a>
+      </div>
+    `;
+    item.querySelector('.hi-menu-btn').addEventListener('click', e=>{
+      e.preventDefault(); e.stopPropagation();
+      const menu = item.querySelector('.hi-menu');
+      const willShow = menu.classList.contains('app-hidden');
+      closeAllHiMenus();
+      menu.classList.toggle('app-hidden', !willShow);
+    });
+    item.querySelector('.hi-expand-btn').addEventListener('click', e=>{
+      e.preventDefault(); e.stopPropagation();
+      const panel = item.querySelector('.hi-expand');
+      const btn = item.querySelector('.hi-expand-btn');
+      const willShow = panel.classList.contains('app-hidden');
+      panel.classList.toggle('app-hidden', !willShow);
+      btn.classList.toggle('open', willShow);
+    });
+    item.querySelector('.hi-retrack-btn').addEventListener('click', e=>{ e.stopPropagation(); });
+    wrap.appendChild(item);
     if(showAdmin){
       const delBtn = document.createElement('button');
       delBtn.className = 'del-btn';
       delBtn.type = 'button';
       delBtn.title = 'ลบรายงาน';
       delBtn.textContent = '🗑️';
-      delBtn.onclick = (e)=>{ e.preventDefault(); deleteReportAsAdmin(doc); };
+      delBtn.onclick = (e)=>{ e.preventDefault(); e.stopPropagation(); deleteReportAsAdmin(doc); };
       wrap.appendChild(delBtn);
     }
     listEl.appendChild(wrap);
