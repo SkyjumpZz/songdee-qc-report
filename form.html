@@ -10,7 +10,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.106.0">
+<meta name="app-version" content="1.107.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -1024,6 +1024,7 @@ _auth.onAuthStateChanged(async user=>{
     loadScannedDeviceEmeis(); // not awaited, same reasoning
     await loadNameMap(); // resolved before any assignments fetch uses the real mapping
     loadTrackNameMap(); // not awaited — only read by onSiteTechName() at send time, same reasoning as loadLineGroupMap() below
+    loadEquipmentNameMap(); // not awaited — re-renders itself once resolved, same reasoning as loadLiveCatalog() above
     loadLineGroupMap(); // not awaited — sendToLine() can't run before the user finishes the form anyway
     loadStickerOptions(); // not awaited, same reasoning — re-renders once resolved
     loadNetworkOptions(); // not awaited, same reasoning
@@ -2295,6 +2296,30 @@ async function loadTrackNameMap(){
     console.error('[Track name map] load failed', e);
     trackNameMap = {};
   }
+}
+
+// ชื่ออุปกรณ์ catalog (ของ Stock) -> ชื่อจริงที่เขียนลงชีต MDVR Tracking/ข้อความ
+// LINE แทน — ตั้งค่าได้จากการ์ด "ชื่อที่เขียนลง Sheet/LINE" ใน index.html
+// (รูปแบบเดียวกับ trackNameMap ด้านบน) อุปกรณ์ที่ยังไม่ตั้งไว้ใช้ชื่อ catalog
+// ดิบๆ ไปเขียนเหมือนเดิม — ดู equipmentRealName()/sheetValueForColumn()/fixLine()
+let equipmentNameMap = {};
+
+async function loadEquipmentNameMap(){
+  try{
+    const snap = await _db.collection('sd').doc('sd_equipmentNameMap').get();
+    equipmentNameMap = snap.exists ? JSON.parse(snap.data().v || '{}') : {};
+  }catch(e){
+    console.error('[Equipment name map] load failed', e);
+    equipmentNameMap = {};
+  }
+  // ต่างจาก trackNameMap (อ่านแค่ตอนส่งรายงาน) — ตัวนี้กระทบ preview ที่ช่าง
+  // เห็นระหว่างกรอกฟอร์มด้วย เลยต้อง re-render ทันทีที่โหลดเสร็จ ถ้าช่างกรอก
+  // มาก่อนหน้านี้แล้ว (เช่น เปิดฟอร์มทิ้งไว้ตอนยังโหลดไม่เสร็จ)
+  renderFixRows(); updatePreview();
+}
+
+function equipmentRealName(product){
+  return (product && equipmentNameMap[product]) || product;
 }
 
 // ---------------------------------------------------------------
@@ -4384,7 +4409,11 @@ function problemLine(row){
 }
 
 function fixLine(row){
-  const name = row.product === "อื่นๆ (พิมพ์เอง)" ? (row.custom || "") : row.product;
+  // ชื่อ catalog ดิบของจริง (ไม่ผ่าน equipmentNameMap) — "อื่นๆ (พิมพ์เอง)" เป็น
+  // ชื่อที่ช่างพิมพ์เองอยู่แล้ว ไม่ต้องแมปซ้ำ (ไม่มีทางอยู่ใน map อยู่แล้วเพราะไม่ใช่
+  // ชื่อ catalog แต่กันไว้เผื่อชื่อที่พิมพ์เองบังเอิญซ้ำคีย์ในแมป)
+  const rawName = row.product === "อื่นๆ (พิมพ์เอง)" ? (row.custom || "") : row.product;
+  const name = row.product === "อื่นๆ (พิมพ์เอง)" ? rawName : equipmentRealName(rawName);
   // Ignore oldModel/oldSN for job types that don't show that field — a
   // report loaded from before the tpl-based section split (or edited
   // across a tpl switch) can still have it set in state even though the
@@ -4450,6 +4479,9 @@ const YES_NO_EQUIPMENT_COLUMNS = new Set([
   "Rear Sensor", "Sensor Display", "Front Sensor", "Power Plug",
 ]);
 function sheetValueForColumn(column, product){
+  // ชื่อจริงที่ตั้งไว้ในการ์ด "ชื่อที่เขียนลง Sheet/LINE" (index.html) มาก่อนเสมอ
+  // — เป็น override ที่ตั้งใจเจาะจงรายชิ้น ให้ชนะ heuristic ทั่วไปด้านล่าง
+  if(equipmentNameMap[product]) return equipmentNameMap[product];
   if(YES_NO_EQUIPMENT_COLUMNS.has(column)) return "Yes";
   const type = deviceTypeForProduct(product);
   if(/^Ch[1-9]$/.test(column) && (type === 'dms' || type === 'adas')){
