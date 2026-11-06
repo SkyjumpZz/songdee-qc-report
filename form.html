@@ -10,7 +10,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.110.1">
+<meta name="app-version" content="1.111.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -3076,6 +3076,7 @@ const CHECK_PASS_LABEL = {
   cable: "ล็อคเรียบร้อย / เก็บสายเรียบร้อย",
   signal: "สัญญาณปกติ ทดสอบผ่าน",
   camera: "ภาพชัดเจน ทดสอบผ่าน",
+  ir: "IR ทำงานปกติ ทดสอบผ่าน",
   db9: "ใส่น็อตยึดหัว DB9 เรียบร้อย"
 };
 
@@ -3135,6 +3136,7 @@ const SHARED_CHECKLIST = [
   {key:"apn",      text:"ตรวจสอบ Config APN", type:"apn"},
   {key:"signal",   text:"ทดสอบสัญญาณ GPS / เครือข่าย", type:"signal"},
   {key:"camera",   text:"ทดสอบภาพกล้องทุกช่อง", type:"camera"},
+  {key:"ir",       text:"ตรวจสอบ IR", type:"ir"},
   {key:"cable",    text:"ตรวจสอบ การเก็บ/ล็อคสายทั้งหมด", type:"cable"},
   {key:"steelbox", text:"ตรวจสอบการติดตั้งกล่องเหล็ก", type:"steelbox"},
   {key:"db9",      text:"ตรวจสอบการใส่น็อตยึดหัว DB9", type:"db9"},
