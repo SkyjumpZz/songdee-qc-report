@@ -10,7 +10,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.110.0">
+<meta name="app-version" content="1.110.1">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -1931,7 +1931,15 @@ async function loadOpenIssue(){
     const res = await fetch(`${ISSUE_ENDPOINT}?plate=${encodeURIComponent(plate)}`);
     const data = await res.json();
     const items = (data && Array.isArray(data.items)) ? data.items : [];
-    openIssues = items.map(it => ({ ...it, closeChecked: true, cause: '' }));
+    // closeChecked เริ่มต้นติ๊กไว้เฉพาะเทมเพลตซ่อม (งานซ่อมมักเป็นการแก้ Issue
+    // นั้นจริงๆ) — เทมเพลตอื่น (ติดตั้งใหม่/อัปเกรด/ถอดย้าย) ตอนนี้เห็นการ์ด
+    // "ปัญหา" ได้เหมือนกันแล้ว (ดู tplHasProblems()) แต่ Issue ที่เจอมักไม่
+    // เกี่ยวกับงานที่ทำอยู่เลย — ถ้ายังติ๊กไว้ให้อัตโนมัติ getMissingFields()
+    // จะบังคับเลือก Cause ก่อนส่งได้ ทั้งที่ช่างไม่ได้ตั้งใจจะปิด Issue นั้น ทำให้
+    // ปุ่มส่งถูกปิดเงียบๆ โดยช่างไม่รู้ตัว (อาการ: กดส่งแล้วดูเหมือนไม่เกิดอะไร
+    // ขึ้นเลย เพราะปุ่มถูก disable ไว้ตั้งแต่แรก) — เทมเพลตอื่นต้องให้ช่างติ๊ก
+    // เองถ้าจะปิดจริงๆ
+    openIssues = items.map(it => ({ ...it, closeChecked: state.tpl === 'repair', cause: '' }));
   }catch(e){
     console.error('[Issue lookup]', e);
     openIssues = [];
