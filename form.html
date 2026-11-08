@@ -2997,7 +2997,7 @@ async function autofillOldDeviceVersion(row, idx, type, sn){
 // ดู loadStickerOptions() ด้านล่าง) STATUS_OPTS.sticker เป็น getter เพื่อให้
 // จุดที่เรียกใช้เดิมทุกจุดยังทำงานเหมือนเดิมทุกประการ ไม่ต้องแก้โค้ดที่อื่น
 const STICKER_PLACEHOLDER = "-- เลือกผล --";
-const DEFAULT_STICKER_OPTIONS = ["มีติดอยู่แล้ว","ติดใหม่เรียบร้อย","ลูกค้าไม่ให้ติด","ช่างของหมด"];
+const DEFAULT_STICKER_OPTIONS = ["มีติดอยู่แล้ว","ติดใหม่เรียบร้อย","ลูกค้าไม่ให้ติด","ไม่ได้ติดตั้งอุปกรณ์","ช่างของหมด"];
 let stickerOptionsList = [];
 const STATUS_OPTS = {
   get sticker(){
