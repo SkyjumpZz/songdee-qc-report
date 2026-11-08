@@ -10,7 +10,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.111.0">
+<meta name="app-version" content="1.111.1">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -4849,10 +4849,10 @@ function buildMessage(){
     lines.push('');
   }
 
-  lines.push('🔹ตรวจสอบ สติ๊กเกอร์ 3 จุด🔹');
   if((state.stickerRemark || '').trim()){
     lines.push(`📝 Remark: ${state.stickerRemark.trim()}`);
   }
+  lines.push('🔹ตรวจสอบ สติ๊กเกอร์ 3 จุด🔹');
   STICKERS.forEach(s=>{
     const v = state.stickers[s.key];
     lines.push(`> ${s.text} : ${v && v !== STATUS_OPTS.sticker[0] ? v : '(ยังไม่เลือก)'}`);
