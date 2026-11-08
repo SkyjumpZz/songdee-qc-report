@@ -10,7 +10,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.111.1">
+<meta name="app-version" content="1.112.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -4983,7 +4983,13 @@ function buildLineCard(){
 function getMissingFields(){
   const missing = [];
   if(!state.date) missing.push('วันที่');
-  if(!state.plate) missing.push(state.tpl === 'remove' ? 'ทะเบียนเก่า' : 'ทะเบียน');
+  // บางคัน (เช่นหัวลาก) มีแต่ทะเบียนหางให้กรอก ไม่รู้ทะเบียนหลักตอนนั้น — ให้ใส่
+  // แค่ทะเบียนหลัก หรือแค่ทะเบียนหางอย่างใดอย่างหนึ่งก็ส่งได้ ไม่บังคับทั้งคู่
+  // (ทะเบียนหางไม่ได้ผูกกับ Sheet/ใบเบิกใดๆ อยู่แล้ว — ถ้าไม่กรอกทะเบียนหลัก
+  // การเขียน Tracking sheet แค่ no-op เงียบๆ ไม่ error เพราะไม่รู้จะเขียนแถวไหน)
+  if(!state.plate && !(state.trailerPlate||'').trim()){
+    missing.push(state.tpl === 'remove' ? 'ทะเบียนเก่า' : 'ทะเบียน');
+  }
   // ถอดย้ายอุปกรณ์ + ย้ายข้ามคัน — บังคับทะเบียนใหม่เสมอ (ไม่ใช่แค่ตอนมี
   // รายการติดตั้งจริง) ตามที่ขอ ให้ระบุครบทั้งทะเบียนเก่า/ใหม่ทุกครั้ง
   if(state.tpl === 'remove' && !(state.newPlate||'').trim()){
