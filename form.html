@@ -10,7 +10,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.117.0">
+<meta name="app-version" content="1.118.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@100..900&display=swap" rel="stylesheet">
@@ -1820,6 +1820,45 @@ async function pushMdvrUnitSwaps(){
   return results;
 }
 
+// ติดตั้ง MDVR ใหม่ตรงๆ (ไม่ใช่เปลี่ยนของเดิม — ไม่มี row.oldModel ให้
+// buildMdvrUnitSwaps() จับคู่ จึงข้ามแถวนี้ไปเอง) จากแถว "② ติดตั้ง" ที่เลือก
+// IMEI ไว้ผ่าน showMdvrImeiPicker ใน buildProductHalf() (ดูคอมเมนต์ที่นั่น —
+// ตามที่แจ้ง "เลือกแล้วไม่เห็นมีให้ใส่ Emei อุปกรณ์") ใช้ /mdvr-install
+// endpoint เดียวกับ pushMdvrInstall() (ติดตั้งใหม่ทั้งคัน — new_install
+// เท่านั้น) เพราะฝั่ง backend (installMdvrDevice()) ไม่ได้สนใจว่ารถนี้เคยมี
+// MDVR มาก่อนหรือไม่ แค่หาแถวที่ IMEI ตรงใน Tracking แล้วเขียนทะเบียน/ลูกค้า/
+// ผู้ติดตั้งลงไป — ต่างจาก /mdvr-unit-swap ตรงที่ไม่มีแถวเก่าให้ clear
+function buildMdvrFixInstalls(){
+  if(!tplHasOldModel(state.tpl) || state.tpl === 'remove') return [];
+  const installs = [];
+  state.fixes.forEach(row=>{
+    if(row.oldModel) return; // มี oldModel แปลว่าเป็นแถวสลับของเดิม — buildMdvrUnitSwaps() จัดการแทน
+    const newImei = (row.newMdvrImei || '').trim();
+    if(!newImei) return;
+    installs.push({ imei: newImei, deviceId: (row.mdvrDeviceId || '').trim(), server: (row.mdvrServer || '').trim() });
+  });
+  return installs;
+}
+
+async function pushMdvrFixInstalls(){
+  const installs = buildMdvrFixInstalls();
+  if(!installs.length) return null;
+  const plate = (state.plate || '').trim();
+  if(!plate) return null;
+  const results = [];
+  for(const it of installs){
+    const res = await fetch(MDVR_INSTALL_ENDPOINT, {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ imei: it.imei, deviceId: it.deviceId, server: it.server, plate, customer: state.customer, fleet: state.fleet, date: state.date, technician: onSiteTechName() })
+    });
+    const data = await res.json();
+    if(!res.ok || !data.ok) throw new Error(data.error || ('HTTP ' + res.status));
+    results.push(data);
+  }
+  return results;
+}
+
 // "ตรวจสอบการติดตั้งกล่องเหล็ก"/"ตรวจสอบการใส่น็อตยึดหัว DB9" ใน SHARED_CHECKLIST
 // (ทุก template) — เติมผลลง MDVR Tracking's "กล่องเก็บ MDVR"/"น๊อทเสริมเครื่อง
 // รูดบัตร" ด้วย ไม่ใช่แค่บันทึกในรายงาน — แยกจาก pushMdvrInstall()/
@@ -2832,6 +2871,10 @@ function deviceTypeForProduct(name){
   if(n.includes('dms')) return 'dms';
   if(n.includes('adas')) return 'adas';
   if(n.includes('ai box') || n.includes('aibox')) return 'aibox';
+  // ตัว MDVR เอง (เช่น "MDVR ME 40-04") — ต่างจาก dms/adas/aibox ตรงที่ identity
+  // คือ IMEI ที่เลือกจาก pool เครื่องว่าง (mdvrAllDevices/mdvrAvailableDevices)
+  // ไม่ใช่ SN พิมพ์เอง ดู buildProductHalf()'s showMdvrImeiPicker
+  if(n.includes('mdvr')) return 'mdvr';
   return undefined;
 }
 // ซิม — identity คือเบอร์โทร ไม่ใช่ยี่ห้อ/รุ่นเหมือนอุปกรณ์อื่น เลือกแล้วโชว์
@@ -3811,7 +3854,64 @@ function buildProductHalf(row, idx, ctx){
   }
 
   const snType = deviceTypeForProduct(row.product);
-  if(snType){
+  // ติดตั้ง MDVR ใหม่ตรงๆ ในแถว "② ติดตั้ง" (ไม่ใช่เปลี่ยนของเดิม ไม่มี
+  // row.oldModel ให้ buildMdvrUnitSwapHalf() จับคู่ IMEI เก่า/ใหม่แบบนั้น) —
+  // เดิมไม่มีช่องให้เลือก IMEI เลยถ้าไม่ได้ผ่านเส้นทางสลับของเดิม (ตามที่แจ้ง
+  // "เลือกแล้วไม่เห็นมีให้ใส่ Emei อุปกรณ์") เฉพาะ upgrade/ซ่อม (ไม่รวม
+  // new_install ที่มีการ์ด "ข้อมูลเครื่อง MDVR" ของตัวเองอยู่แล้ว และไม่รวม
+  // remove ซึ่งฝั่งติดตั้งหมายถึงย้ายไปทะเบียนใหม่ คนละ write-back) — ใช้
+  // row.newMdvrImei/mdvrDeviceId/mdvrServer ชุดเดียวกับที่ buildMdvrUnitSwapHalf()
+  // ใช้ แต่เพราะแถวนี้ไม่มี row.oldModel เลย buildMdvrUnitSwaps() จะข้ามแถวนี้
+  // ไปเอง (เช็ค src จาก row.oldModel ก่อนเสมอ) — ดู buildMdvrFixInstalls()/
+  // pushMdvrFixInstalls() ที่ยิง /mdvr-install (ไม่ใช่ /mdvr-unit-swap) ให้แทน
+  const showMdvrImeiPicker = snType === 'mdvr' && tplHasOldModel(state.tpl) && state.tpl !== 'remove';
+  if(showMdvrImeiPicker){
+    const hint = document.createElement('div');
+    hint.className = 'hint'; hint.style.marginTop = '6px';
+    hint.textContent = '📡 เลือก IMEI เครื่อง MDVR ที่ว่างอยู่ (ติดตั้งใหม่ ไม่ใช่เปลี่ยนของเดิม)';
+    wrap.appendChild(hint);
+
+    loadMdvrAllDevices(); // not awaited — merges เข้า pickList เองรอบถัดไปที่ renderFixRows(), ดู loadMdvrAllDevices()
+    const pickList = mdvrImeiPickList();
+    const groups = [{
+      label: null,
+      options: pickList.map(d=> ({ value: d.imei, text: `${d.imei}${d.deviceType ? ' — ' + d.deviceType : ''}${d.plate ? ' · ติดอยู่ ' + d.plate : ' · ว่าง'}` })),
+    }];
+    const imeiSel = buildSearchableSelect(groups, row.newMdvrImei || '', '-- เลือก IMEI เครื่อง --', (newValue)=>{
+      row.newMdvrImei = newValue;
+      updatePreview(); renderFixRows();
+    });
+    imeiSel.style.marginTop = '6px';
+    wrap.appendChild(imeiSel);
+
+    const pickedDev = row.newMdvrImei ? pickList.find(d=> d.imei === row.newMdvrImei) : null;
+    if(pickedDev && pickedDev.plate){
+      const warn = document.createElement('div');
+      warn.className = 'hint'; warn.style.marginTop = '6px'; warn.style.color = 'var(--danger)';
+      warn.textContent = `⚠️ เครื่อง IMEI นี้มี Tracking อยู่แล้วที่ทะเบียน ${pickedDev.plate} — ถ้าเลือก ระบบจะย้ายออกจากทะเบียนนั้นมาที่นี่`;
+      wrap.appendChild(warn);
+    }
+
+    const deviceIdInput = document.createElement('input');
+    deviceIdInput.type = 'text'; deviceIdInput.placeholder = 'Device ID'; deviceIdInput.style.marginTop = '6px';
+    deviceIdInput.value = row.mdvrDeviceId || '';
+    deviceIdInput.oninput = ()=>{ row.mdvrDeviceId = deviceIdInput.value; updatePreview(); };
+    wrap.appendChild(deviceIdInput);
+
+    const serverSel = document.createElement('select');
+    serverSel.style.marginTop = '6px';
+    const serverBlank = document.createElement('option');
+    serverBlank.value = ''; serverBlank.textContent = '-- เลือก Server --';
+    serverSel.appendChild(serverBlank);
+    ['60','63','73','75','90'].forEach(s=>{
+      const o = document.createElement('option');
+      o.value = s; o.textContent = s;
+      if(s === row.mdvrServer) o.selected = true;
+      serverSel.appendChild(o);
+    });
+    serverSel.onchange = ()=>{ row.mdvrServer = serverSel.value; updatePreview(); };
+    wrap.appendChild(serverSel);
+  } else if(snType){
     const newSN = document.createElement('input');
     newSN.type='text'; newSN.placeholder='SN เครื่องใหม่ (จาก Ai Box/ADAS/DMS Tracking)';
     newSN.value = row.newSN || ''; newSN.style.marginTop='6px';
@@ -5328,6 +5428,15 @@ async function runTrackWriteBacks(){
     console.error('[MDVR unit swap]', e);
     results.mdvrUnitSwap = {ok:false, error: e.message};
     suffix += ` (เปลี่ยน MDVR ไม่สำเร็จ: ${e.message})`;
+  }
+
+  try{
+    const fixInstallRes = await pushMdvrFixInstalls();
+    if(fixInstallRes){ results.mdvrFixInstall = {ok:true, count: fixInstallRes.length}; suffix += ` · ติดตั้ง MDVR ใหม่ ${fixInstallRes.length} เครื่อง ✓`; }
+  }catch(e){
+    console.error('[MDVR fix install]', e);
+    results.mdvrFixInstall = {ok:false, error: e.message};
+    suffix += ` (ติดตั้ง MDVR ใหม่ไม่สำเร็จ: ${e.message})`;
   }
 
   try{
