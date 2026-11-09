@@ -6,7 +6,7 @@
 (function(){try{if(localStorage.getItem('sd-theme')==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
-<meta name="app-version" content="1.7.0">
+<meta name="app-version" content="1.8.0">
 <title>ประวัติรายงาน · SONGDEE GPS</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -482,16 +482,24 @@ function setScope(scope){
 }
 
 // where()+orderBy() on different fields needs a composite index we don't
-// have — filter server-side (or not at all for the admin "all" view), sort
+// have — filter server-side (no orderBy) for the "mine" view, sort
 // client-side instead.
+// บั๊กเดิม: "all" (admin) เคยใช้ .limit(300) ตรงๆ โดยไม่ orderBy() มาก่อน —
+// Firestore ไม่มี orderBy ให้ limit() ทำงานแบบ "300 เอกสารแรกตามลำดับ
+// เอกสาร (document ID)" ซึ่งไม่เกี่ยวกับเวลาสร้างเลย ไม่ใช่ "300 รายงาน
+// ล่าสุด" จริงๆ ทำให้รายงานที่เพิ่งส่งไปบางใบหลุดจากลิสต์ไปเฉยๆ (สุ่มๆ ตาม
+// ID ของเอกสาร) ทั้งที่บันทึกลง Firestore สำเร็จแล้ว — เป็นสาเหตุของ "ส่งเข้า
+// Line แล้วไม่ขึ้นในรายการ" ที่รายงานไว้ (เช่น No.48 LCB1) orderBy() เดี่ยว
+// (ไม่มี where ประกบ) ไม่ต้องสร้าง composite index เพิ่ม — ใช้ index เดียวกับ
+// ที่ index.html ใช้งานอยู่แล้วสำหรับ query เดียวกันนี้
 async function loadReports(){
   const listEl = document.getElementById('list');
   renderSkeleton(listEl, 4);
   try{
     const showAll = isAdmin && viewScope === 'all';
     const query = showAll
-      ? _db.collection('qc_reports').limit(300)
-      : _db.collection('qc_reports').where('techUid', '==', currentUser.uid).limit(200);
+      ? _db.collection('qc_reports').orderBy('createdAt', 'desc').limit(300)
+      : _db.collection('qc_reports').where('techUid', '==', currentUser.uid).limit(2000);
     const snap = await query.get();
     const list = snap.docs
       .map(d=>({id:d.id, ...d.data()}))
