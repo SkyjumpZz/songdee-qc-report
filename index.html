@@ -7,7 +7,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>Dashboard · SONGDEE GPS</title>
-<meta name="app-version" content="1.37.0">
+<meta name="app-version" content="1.38.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@100..900&display=swap" rel="stylesheet">
@@ -273,12 +273,6 @@
   .input-eye .eye-off{display:none;}
   .input-eye.showing .eye{display:none;}
   .input-eye.showing .eye-off{display:block;}
-
-  .remember-row{
-    display:flex; align-items:center; gap:8px; margin:16px 0 0;
-    font-size:13px; color:var(--text-dim); font-weight:400; cursor:pointer;
-  }
-  .remember-row input{width:15px; height:15px; accent-color:var(--accent-2); cursor:pointer;}
 
   .login-footer{
     text-align:center; margin-top:26px; font-size:11px; color:var(--text-dim);
@@ -608,11 +602,6 @@
           </button>
         </div>
 
-        <label class="remember-row">
-          <input type="checkbox" id="rememberMe" checked>
-          <span data-i18n="remember"></span>
-        </label>
-
         <button class="btn-primary" id="loginBtn" onclick="doLogin()" data-i18n="loginBtn"></button>
         <div class="login-error" id="loginError"></div>
       </div>
@@ -889,7 +878,6 @@ const I18N = {
     emailPlaceholder: 'เช่น somchai@songdeegps.com',
     passwordLabel: 'รหัสผ่าน',
     passwordPlaceholder: 'รหัสผ่าน',
-    remember: 'จดจำฉันไว้',
     loginBtn: 'เข้าสู่ระบบ',
     loginBtnBusy: 'กำลังเข้าสู่ระบบ...',
     errRequired: 'กรอกอีเมลและรหัสผ่านให้ครบ',
@@ -912,7 +900,6 @@ const I18N = {
     emailPlaceholder: 'e.g. somchai@songdeegps.com',
     passwordLabel: 'Password',
     passwordPlaceholder: 'Password',
-    remember: 'Remember me',
     loginBtn: 'Log in',
     loginBtnBusy: 'Logging in...',
     errRequired: 'Please enter both email and password',
@@ -968,14 +955,22 @@ applyLang(currentLang);
 async function doLogin(){
   const email = document.getElementById('loginEmail').value.trim();
   const password = document.getElementById('loginPassword').value;
-  const remember = document.getElementById('rememberMe').checked;
   const btn = document.getElementById('loginBtn');
   const err = document.getElementById('loginError');
   err.textContent = '';
   if(!email || !password){ err.textContent = t('errRequired'); return; }
   btn.disabled = true; btn.textContent = t('loginBtnBusy');
   try{
-    await _auth.setPersistence(remember ? firebase.auth.Auth.Persistence.LOCAL : firebase.auth.Auth.Persistence.SESSION);
+    // เดิมมีตัวเลือก "จดจำฉันไว้" ให้เลือก SESSION persistence แทน LOCAL ได้ —
+    // แต่แอปนี้เป็น multi-page (form.html/index.html/history.html แยกไฟล์
+    // กันจริงๆ ทุกครั้งที่กดเปลี่ยนแท็บคือโหลดหน้าใหม่ทั้งหน้า) SESSION
+    // persistence (sessionStorage) ไม่ถูกเช็คอัตโนมัติตอนหน้าใหม่โหลด เว้นแต่
+    // หน้านั้นจะเรียก setPersistence(SESSION) เองซ้ำก่อน — form.html/history.html
+    // ไม่เคยเรียกเลย ทำให้ onAuthStateChanged ที่นั่นเจอ user เป็น null เสมอ
+    // (เช็คจาก LOCAL/IndexedDB ตาม default) แล้วเด้งกลับไปหน้า Login ทุกครั้งที่
+    // สลับหน้า (ตามที่แจ้ง) — ใช้ LOCAL เสมอ ตัดตัวเลือกนี้ออกไปเลย ให้ทุกหน้า
+    // หาเซสชันเจอตรงกันแน่นอน
+    await _auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
     await _auth.signInWithEmailAndPassword(email, password);
   }catch(e){
     err.textContent = t('errMap')[e.code] || (t('errGeneric') + e.message);
