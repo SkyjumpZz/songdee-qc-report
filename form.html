@@ -10,7 +10,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.115.0">
+<meta name="app-version" content="1.116.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@100..900&display=swap" rel="stylesheet">
@@ -3997,7 +3997,9 @@ function buildFixRowCollapsedSummary(row, idx){
   const text = document.createElement('div');
   text.className = 'fix-summary-text';
   const line = fixLine(row);
-  text.textContent = line ? line.replace(/^- /, '') : '(ยังไม่ได้เลือกอุปกรณ์)';
+  // fixLine() อาจคืนมา 2 บรรทัด (ขึ้นต้น "- " ทั้งคู่) ต่อกันด้วย \n ตอนแถวมีทั้ง
+  // ถอด+ติดตั้งพร้อมกัน — ตัด "- " ออกทุกบรรทัด ไม่ใช่แค่บรรทัดแรก (regex /gm)
+  text.textContent = line ? line.replace(/^- /gm, '') : '(ยังไม่ได้เลือกอุปกรณ์)';
   const expandBtn = document.createElement('button');
   expandBtn.type = 'button'; expandBtn.className = 'fix-expand-btn'; expandBtn.title = 'ขยายดู/แก้ไข';
   expandBtn.textContent = '▾';
@@ -4546,7 +4548,11 @@ function fixLine(row){
   // หมายเหตุแทน ดู buildProductHalf()'s remark textarea.
   const remark = (row.remark || '').trim();
   const remarkTag = remark ? ` (${remark})` : '';
-  if(oldName && name) return `- ทำการเปลี่ยน ${oldName}${oldTag}${oldPhoneTag} เป็น ${name}${deviceIdTag}${chTag}${storageSlotTag}${phoneTag}${extraTag}${remarkTag}`;
+  // แถวที่มีทั้ง oldModel และ product พร้อมกัน (เช่น เปลี่ยน MDVR ทั้งเครื่อง —
+  // ดู buildMdvrUnitSwapHalf()) เดิมรวมเป็นบรรทัดเดียว "ทำการเปลี่ยน X เป็น Y"
+  // แยกเป็น 2 บรรทัดแทน (ตามที่ขอ "Upgrade ให้เป็นรายการแยกกัน") ให้ฟอร์แมต
+  // ตรงกับแถวถอด-อย่างเดียว/ติดตั้ง-อย่างเดียวด้านล่างเป๊ะๆ
+  if(oldName && name) return `- ทำการถอด ${oldName}${oldTag}${oldPhoneTag}\n- ${name}${deviceIdTag}${chTag}${storageSlotTag}${phoneTag}${extraTag}${remarkTag}`;
   if(name){
     const qty = row.qty ? ` x${row.qty}` : '';
     // ตัดคำ "ทำการติดตั้ง" ออก (ตามที่ขอ "สั้นๆ") — เหลือแค่ "- ชื่ออุปกรณ์..."
