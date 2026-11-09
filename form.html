@@ -10,7 +10,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.116.0">
+<meta name="app-version" content="1.117.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@100..900&display=swap" rel="stylesheet">
@@ -4882,6 +4882,36 @@ async function pushIssueClose(){
   return results;
 }
 
+// อัปเกรด — แยกรายการเป็นหัวข้อ "ถอด"/"ติดตั้ง" คนละก้อน (ตามที่ขอ พร้อม
+// ตัวอย่างจริงจากรายงาน ถอดย้ายอุปกรณ์ ที่ใช้รูปแบบนี้อยู่แล้ว) แทนการรวมทุก
+// แถวไว้ใต้หัวข้อเดียว "ถอด/ติดตั้ง" แถวที่มีแค่ oldModel → กลุ่ม "ถอด", มีแค่
+// product → กลุ่ม "ติดตั้ง", แถวที่มีทั้งคู่ (เปลี่ยน MDVR ทั้งเครื่อง — ดู
+// buildMdvrUnitSwapHalf()) fixLine() คืนมา 2 บรรทัดคั่นด้วย \n (ดูคอมเมนต์ใน
+// fixLine()) แยกครึ่งแรก/ครึ่งหลังไปคนละกลุ่มตามนั้น ส่วนแถวที่ไม่มีทั้ง
+// oldModel/product เลย (แก้ไข/remark ล้วนๆ จาก addRemoveEditRow()) ไปกลุ่ม
+// "แก้ไข" แยกต่างหาก
+function buildUpgradeFixSections(){
+  const removeLines = [], installLines = [], editLines = [];
+  state.fixes.forEach(row=>{
+    const line = fixLine(row);
+    if(!line) return;
+    const hasOld = !!row.oldModel;
+    const hasNew = !!row.product;
+    if(hasOld && hasNew){
+      const [removeHalf, installHalf] = line.split('\n');
+      if(removeHalf) removeLines.push(removeHalf);
+      if(installHalf) installLines.push(installHalf);
+    } else if(hasOld){
+      removeLines.push(line);
+    } else if(hasNew){
+      installLines.push(line);
+    } else {
+      editLines.push(line);
+    }
+  });
+  return { removeLines, installLines, editLines };
+}
+
 function buildMessage(){
   const dateStr = state.date ? state.date.split('-').reverse().join('/') : '(ยังไม่ระบุวันที่)';
   const lines = [];
@@ -4909,11 +4939,18 @@ function buildMessage(){
     lines.push(...problemLines);
     lines.push('');
   }
-  const fixLines = state.fixes.map(fixLine).filter(Boolean);
-  if(fixLines.length){
-    lines.push(FIXES_CARD_LABEL[state.tpl] || 'แก้ไข');
-    lines.push(...fixLines);
-    lines.push('');
+  if(state.tpl === 'upgrade'){
+    const { removeLines, installLines, editLines } = buildUpgradeFixSections();
+    if(removeLines.length){ lines.push('ถอด'); lines.push(...removeLines); lines.push(''); }
+    if(installLines.length){ lines.push('ติดตั้ง'); lines.push(...installLines); lines.push(''); }
+    if(editLines.length){ lines.push('แก้ไข'); lines.push(...editLines); lines.push(''); }
+  } else {
+    const fixLines = state.fixes.map(fixLine).filter(Boolean);
+    if(fixLines.length){
+      lines.push(FIXES_CARD_LABEL[state.tpl] || 'แก้ไข');
+      lines.push(...fixLines);
+      lines.push('');
+    }
   }
 
   if((state.stickerRemark || '').trim()){
