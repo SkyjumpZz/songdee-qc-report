@@ -10,7 +10,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.114.0">
+<meta name="app-version" content="1.115.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@100..900&display=swap" rel="stylesheet">
@@ -310,6 +310,21 @@
   }
   .check-item:has(.check-toggle.checked){border-color:rgba(61,220,151,.4);}
   .check-toggle.checked{color:var(--accent-2); background:rgba(61,220,151,.08);}
+  /* ช่อง "- ไม่มีอุปกรณ์นี้" (เช่นไม่มีกล้องเลย ตรวจ "รัดล็อคอุปกรณ์กล้อง"/"มุม
+     กล้อง" ไม่ได้จริงๆ) — แยกจากปุ่ม "ผ่าน" เดิม ไม่ใช่แค่ไม่ติ๊กเฉยๆ (ซึ่ง
+     getMissingFields() จะฟ้อง "ยังไม่ตรวจสอบ" อยู่ดี) ใช้แถวเดียวกับ checkbox
+     เดิม ไม่ใช่การ์ดแยก ต่างจาก steelbox/db9 ที่มีเหตุผลประกอบ */
+  .check-footer-row{display:flex; border-top:1px solid var(--line-soft);}
+  .check-footer-row .check-toggle{flex:1; border-top:none;}
+  .check-na-btn{
+    flex-shrink:0; padding:11px 13px; border:none; border-left:1px solid var(--line-soft);
+    background:var(--bg-input); color:var(--text-dim); font-size:12.5px; font-weight:500;
+    font-family:inherit; cursor:pointer; white-space:nowrap;
+    transition:color .15s ease, background .15s ease;
+  }
+  .check-na-btn:hover{color:var(--text);}
+  .check-na-btn.active{color:var(--text); background:rgba(255,255,255,.07);}
+  .check-item:has(.check-na-btn.active){border-color:var(--line);}
   .problem-row{
     display:grid; grid-template-columns:1fr auto; gap:8px; align-items:end;
     margin-bottom:8px;
@@ -3110,6 +3125,7 @@ function checklistItemLabel(item){
     return v.has ? 'มีการติดตั้งกล่องเหล็ก' : `ไม่มีการติดตั้งกล่องเหล็ก — เหตุผล: ${v.reason || '-'}`;
   }
   if(item.type === 'db9') return db9Label(state.checklist[item.key]);
+  if(state.checklist[item.key] === 'na') return '- ไม่มีอุปกรณ์นี้';
   return state.checklist[item.key] ? CHECK_PASS_LABEL[item.type] : '(ยังไม่ตรวจสอบ)';
 }
 
@@ -4222,21 +4238,35 @@ function renderChecklist(){
       return;
     }
 
+    const footer = document.createElement('div');
+    footer.className = 'check-footer-row';
+
     const toggle = document.createElement('label');
-    toggle.className = 'check-toggle' + (state.checklist[item.key] ? ' checked' : '');
+    toggle.className = 'check-toggle' + (state.checklist[item.key] === true ? ' checked' : '');
     const cb = document.createElement('input');
     cb.type = 'checkbox';
-    cb.checked = !!state.checklist[item.key];
+    cb.checked = state.checklist[item.key] === true;
     const txt = document.createElement('span');
     txt.textContent = CHECK_PASS_LABEL[item.type];
     cb.onchange = ()=>{
-      state.checklist[item.key] = cb.checked;
-      toggle.classList.toggle('checked', cb.checked);
+      state.checklist[item.key] = cb.checked ? true : undefined;
+      renderChecklist();
       updatePreview();
     };
     toggle.appendChild(cb); toggle.appendChild(txt);
 
-    box.appendChild(lbl); box.appendChild(toggle);
+    const naBtn = document.createElement('button');
+    naBtn.type = 'button';
+    naBtn.className = 'check-na-btn' + (state.checklist[item.key] === 'na' ? ' active' : '');
+    naBtn.textContent = '- ไม่มีอุปกรณ์นี้';
+    naBtn.onclick = ()=>{
+      state.checklist[item.key] = state.checklist[item.key] === 'na' ? undefined : 'na';
+      renderChecklist();
+      updatePreview();
+    };
+
+    footer.appendChild(toggle); footer.appendChild(naBtn);
+    box.appendChild(lbl); box.appendChild(footer);
     wrap.appendChild(box);
   });
 
