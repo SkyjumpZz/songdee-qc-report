@@ -10,9 +10,10 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.113.0">
+<meta name="app-version" content="1.114.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@100..900&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
@@ -86,7 +87,7 @@
       var(--bg);
     background-attachment:fixed;
     color:var(--text);
-    font-family:'IBM Plex Sans Thai','Kanit',sans-serif;
+    font-family:'Noto Sans Thai',sans-serif;
     min-height:100vh;
     padding-bottom:132px;
     position:relative;
@@ -159,7 +160,7 @@
     padding:4px 10px; margin-bottom:10px;
   }
   header h1{
-    font-family:'Kanit',sans-serif; font-weight:700; font-size:22px; margin:0;
+    font-family:'Noto Sans Thai',sans-serif; font-weight:700; font-size:22px; margin:0;
     letter-spacing:-.01em;
   }
   .version-tag{
@@ -169,7 +170,7 @@
   .update-banner{
     position:fixed; top:0; left:0; right:0; z-index:200;
     background:var(--accent); color:#fff;
-    font-family:'Kanit',sans-serif; font-weight:600; font-size:13.5px;
+    font-family:'Noto Sans Thai',sans-serif; font-weight:600; font-size:13.5px;
     text-align:center; padding:10px; transform:translateY(-100%);
     transition:transform .25s ease;
   }
@@ -203,7 +204,7 @@
   #previewCard{--card-hue:var(--hue-blue);}
   .card-title{
     display:flex; align-items:center; gap:11px;
-    font-family:'Kanit',sans-serif; font-weight:600; font-size:15.5px;
+    font-family:'Noto Sans Thai',sans-serif; font-weight:600; font-size:15.5px;
     color:var(--text); margin-bottom:14px;
   }
   .card-title .dot{
@@ -346,7 +347,7 @@
   .remove-subsection{margin-top:16px;}
   .remove-subsection:first-child{margin-top:0;}
   .remove-subsection-title{
-    font-family:'Kanit',sans-serif; font-weight:600; font-size:13px;
+    font-family:'Noto Sans Thai',sans-serif; font-weight:600; font-size:13px;
     color:var(--text-dim); margin-bottom:8px;
   }
   .remove-subsection .fix-entry{background:var(--bg-input);}
@@ -409,7 +410,7 @@
   .page-tabs{display:flex; gap:6px; margin-top:12px;}
   .page-tabs a, .page-tabs span.tab{
     flex:1; padding:9px 8px; border-radius:var(--r-sm); border:1px solid var(--line-soft);
-    background:var(--bg-panel-2); color:var(--text-dim); font-family:'Kanit',sans-serif;
+    background:var(--bg-panel-2); color:var(--text-dim); font-family:'Noto Sans Thai',sans-serif;
     font-size:13px; font-weight:600; text-align:center; text-decoration:none; cursor:pointer;
     transition:border-color .15s ease, color .15s ease, background .15s ease;
   }
@@ -418,7 +419,7 @@
     background:rgba(216,25,33,0.16); border-color:var(--accent); color:var(--accent); cursor:default;
   }
   .preview{
-    font-family:'IBM Plex Sans Thai', sans-serif;
+    font-family:'Noto Sans Thai', sans-serif;
     font-size:13.5px; line-height:1.85; white-space:pre-wrap;
     background:var(--bg-input); border:1px solid var(--line);
     border-radius:var(--r-sm); padding:14px; color:var(--text);
@@ -436,7 +437,7 @@
     box-shadow:var(--shadow-lg);
   }
   .btn-primary, .btn-secondary{
-    flex:1; padding:13px; border-radius:var(--r-md); border:none; font-family:'Kanit',sans-serif;
+    flex:1; padding:13px; border-radius:var(--r-md); border:none; font-family:'Noto Sans Thai',sans-serif;
     font-weight:600; font-size:14.5px; cursor:pointer; display:flex; align-items:center;
     justify-content:center; gap:8px;
     transition:transform .15s ease, box-shadow .15s ease, filter .15s ease;
@@ -459,7 +460,7 @@
   .toast{
     position:fixed; top:16px; left:50%; transform:translateX(-50%) translateY(-140%);
     background:var(--accent-2); color:#06251a; padding:11px 18px; border-radius:var(--r-sm);
-    font-family:'Kanit',sans-serif; font-weight:600; font-size:13.5px;
+    font-family:'Noto Sans Thai',sans-serif; font-weight:600; font-size:13.5px;
     transition:transform .25s ease; z-index:100; box-shadow:0 8px 24px rgba(0,0,0,0.4);
   }
   .toast.show{transform:translateX(-50%) translateY(0);}
