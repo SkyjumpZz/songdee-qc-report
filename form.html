@@ -10,7 +10,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.112.0">
+<meta name="app-version" content="1.113.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -815,8 +815,8 @@
     <button class="btn-add" id="addFixBtn" onclick="addFixRow()">+ เพิ่มรายการแก้ไข</button>
     <button class="btn-add app-hidden" type="button" id="addFixExtraBtn" onclick="addFixRow(true)">+ เพิ่มของนอกเหนือรายการ</button>
 
-    <!-- ถอดย้ายอุปกรณ์ only — renderRemoveSections() fills these; toggled
-         against #fixRows/#addFixBtn above in applyTemplate(). -->
+    <!-- ถอดย้ายอุปกรณ์ + อัปเกรด — renderRemoveSections() fills these; toggled
+         against #fixRows/#addFixBtn above in renderFixRows(). -->
     <div id="removeSections" class="app-hidden">
       <div class="remove-subsection">
         <div class="remove-subsection-title">① ถอด</div>
@@ -827,6 +827,9 @@
         <div class="remove-subsection-title">② ติดตั้ง</div>
         <div id="removeNewRows"></div>
         <button class="btn-add" type="button" id="addRemoveNewBtn" onclick="addRemoveNewRow()">+ เพิ่มอุปกรณ์ที่ติดตั้ง</button>
+        <!-- อัปเกรดเท่านั้น (ล็อกตามใบเบิก/ของ Spare — ดู installCtx ใน
+             renderRemoveSections()) — ถอดย้ายฝั่งนี้ free-pick อยู่แล้วเลยไม่ต้องมี -->
+        <button class="btn-add app-hidden" type="button" id="addRemoveNewExtraBtn" onclick="addRemoveNewRow(true)">+ เพิ่มของนอกเหนือรายการ</button>
       </div>
       <div class="remove-subsection">
         <div class="remove-subsection-title">③ แก้ไข (ถ้ามี)</div>
@@ -3167,11 +3170,12 @@ function defaultState(){
     // ดู renderTabs()/buildSheetUpdates()/buildDeviceSwaps()
     newPlate: "",
     problems: [{symptom:""}],
-    // section "remove" only matters for ถอดย้ายอุปกรณ์ (renderRemoveSections())
-    // — other templates ignore it entirely. A brand-new report's one
-    // starting row shows up under "① ถอด" only if that template ends up
-    // picked, not paired with an empty "② ติดตั้ง" slot (ตามที่ขอ แยกอิสระ
-    // จากกัน) — "+ เพิ่มอุปกรณ์ที่ติดตั้ง" adds that side separately now.
+    // section "remove" only matters for ถอดย้ายอุปกรณ์/อัปเกรด
+    // (renderRemoveSections()) — other templates ignore it entirely. A
+    // brand-new report's one starting row shows up under "① ถอด" only if
+    // one of those two templates ends up picked, not paired with an empty
+    // "② ติดตั้ง" slot (ตามที่ขอ แยกอิสระจากกัน) — "+ เพิ่มอุปกรณ์ที่ติดตั้ง"
+    // adds that side separately now.
     fixes: [{product:"", qty:1, custom:"", oldModel:"", oldModelCustom:"", newSN:"", oldSN:"", ch:"", storageSlot:"", phoneNo:"", oldPhoneNo:"", remark:"", newMdvrImei:"", mdvrDeviceId:"", mdvrServer:"", section:"remove"}],
     stickers: {},
     stickerRemark: "", // optional free-text note shown above the sticker checklist — never required
@@ -4009,12 +4013,15 @@ function buildFixRowExpanded(row, idx, ctx){
 
 function renderFixRows(){
   const ctx = fixRowsStockContext();
-  const isRemoveTpl = state.tpl === 'remove';
-  document.getElementById('fixRows').classList.toggle('app-hidden', isRemoveTpl);
-  document.getElementById('addFixBtn').classList.toggle('app-hidden', isRemoveTpl);
-  document.getElementById('removeSections').classList.toggle('app-hidden', !isRemoveTpl);
+  // อัปเกรด ใช้โครง "① ถอด/② ติดตั้ง" เดียวกับถอดย้ายอุปกรณ์แล้ว (ตามที่ขอ
+  // "Upgrade ให้แยกเป็นถอดกับติดตั้ง รูปแบบเดียวกันกับติดตั้ง") — ดู
+  // renderRemoveSections() ที่ตอนนี้รองรับทั้งสองเทมเพลต
+  const useSplitSections = state.tpl === 'remove' || state.tpl === 'upgrade';
+  document.getElementById('fixRows').classList.toggle('app-hidden', useSplitSections);
+  document.getElementById('addFixBtn').classList.toggle('app-hidden', useSplitSections);
+  document.getElementById('removeSections').classList.toggle('app-hidden', !useSplitSections);
 
-  if(isRemoveTpl){ renderRemoveSections(ctx); return; }
+  if(useSplitSections){ renderRemoveSections(ctx); return; }
 
   const container = document.getElementById('fixRows');
   container.innerHTML = '';
@@ -4033,16 +4040,17 @@ function renderFixRows(){
   if(addExtraBtn) addExtraBtn.classList.toggle('app-hidden', !ctx.locked);
 }
 
-// ถอดย้ายอุปกรณ์ only — same state.fixes array as every other template, just
+// ถอดย้ายอุปกรณ์ + อัปเกรด (ตามที่ขอ "Upgrade ให้แยกเป็นถอดกับติดตั้ง รูปแบบ
+// เดียวกันกับติดตั้ง") — same state.fixes array as every other template, just
 // shown as 3 separate lists instead of one combined row:
 //  - "remove" rows (added via "+ เพิ่มอุปกรณ์ที่ถอด") are a standalone
-//    old-model-only entry in "① ถอด".
+//    old-model-only entry in "① ถอด" — buildRemoveOldEntry() below.
 //  - "install" rows (added via "+ เพิ่มอุปกรณ์ที่ติดตั้ง") are a standalone
 //    product-only entry in "② ติดตั้ง" — ตามที่ขอ ไม่ผูกกับฝั่งถอดอีกต่อไป:
-//    เพิ่ม/ลบฝั่งไหนไม่กระทบอีกฝั่ง ไม่บังคับต้องมีคู่กัน. Always free-pick
-//    from the full catalog regardless of ใบเบิก/ของ Spare lock state (ตามที่
-//    ขอ — ยังไม่ต้องดึงของจาก Stock มาก็ได้ในส่วนติดตั้งนี้) — see unlockedCtx
-//    below.
+//    เพิ่ม/ลบฝั่งไหนไม่กระทบอีกฝั่ง ไม่บังคับต้องมีคู่กัน. ถอดย้ายอุปกรณ์: free-pick
+//    จาก catalog เสมอ (ของใหม่ไปติดตั้งทะเบียนใหม่คนละคัน ไม่ได้เบิกจาก Stock
+//    ของทะเบียนนี้ — ดู installCtx ด้านล่าง) อัปเกรด: ยังเป็นการติดตั้งบนคันเดิม
+//    จริงๆ เลยล็อกตามใบเบิก/ของ Spare ปกติเหมือนทุกเทมเพลตอื่น.
 //  - "pair" is legacy only (reports saved before this split, when ① ถอด/
 //    ② ติดตั้ง shared one row object) — still rendered in both columns so
 //    reopening an old report doesn't silently drop either half; never
@@ -4052,33 +4060,55 @@ function renderFixRows(){
 //    product-only entry with no old-model pairing, for anything else done
 //    on the visit that isn't a remove/install — still respects the normal
 //    ใบเบิก/ของ Spare lock, unlike ② ติดตั้ง above.
+//
+// buildSheetUpdates()/buildSheetClears()/buildMdvrUnitSwaps()/buildDeviceSwaps()
+// all already read row.oldModel/row.product independently per-row (never
+// assumed they live on the same combined row) — ไม่ต้องแก้อะไรฝั่งเขียนชีตเลย
+// แค่เปลี่ยนการ render/จัดกลุ่มแถวเท่านั้น
+function buildRemoveOldEntry(row, idx){
+  // "Device type" (เปลี่ยน MDVR ทั้งเครื่อง) ต้องเลือก IMEI เครื่องใหม่คู่กันใน
+  // ที่เดียว (buildMdvrUnitSwapHalf) ไม่งั้น buildMdvrUnitSwaps() จะหา
+  // newMdvrImei คู่กับ oldModel บนแถวเดียวกันไม่เจอ (ต้องอยู่แถวเดียวกันเท่านั้น)
+  // — เฉพาะอัปเกรด/ซ่อม เหมือนที่ combined-row เดิมทำ ("remove" ไม่รองรับเปลี่ยน
+  // MDVR ทั้งเครื่องอยู่แล้ว ดู buildMdvrUnitSwaps()'s early return บนเทมเพลตนี้)
+  if(state.tpl !== 'remove'){
+    const unitSrc = vehicleOldModels.find(m=> m.label === row.oldModel);
+    if(unitSrc && unitSrc.column === 'Device type'){
+      return buildMdvrUnitSwapHalf(row, idx);
+    }
+  }
+  return buildOldModelHalf(row, idx, true);
+}
 function renderRemoveSections(ctx){
   const oldContainer = document.getElementById('removeOldRows');
   const newContainer = document.getElementById('removeNewRows');
   const editContainer = document.getElementById('removeEditRows');
   oldContainer.innerHTML = ''; newContainer.innerHTML = ''; editContainer.innerHTML = '';
 
-  const unlockedCtx = { ...ctx, locked: false };
+  const installCtx = state.tpl === 'remove' ? { ...ctx, locked: false } : ctx;
   state.fixes.forEach((row, idx)=>{
     if(row.section === 'edit'){
       editContainer.appendChild(buildProductHalf(row, idx, ctx));
       return;
     }
     if(row.section === 'remove' || row.section === 'pair'){
-      oldContainer.appendChild(buildOldModelHalf(row, idx, true));
+      oldContainer.appendChild(buildRemoveOldEntry(row, idx));
     }
     if(row.section === 'install' || row.section === 'pair'){
-      newContainer.appendChild(buildProductHalf(row, idx, unlockedCtx));
+      newContainer.appendChild(buildProductHalf(row, idx, installCtx));
     }
   });
 
-  // ① ถอด/② ติดตั้ง ไม่มีแคปจำนวนจากใบเบิก/ของ Spare อีกต่อไป (ถอดอิงประวัติ
-  // รถเอง, ติดตั้งเป็น free-pick เสมอแล้ว) — เหลือแค่ ③ แก้ไข ที่ยังล็อกตาม
-  // ใบเบิก/ของ Spare ปกติ เหมือน renderFixRows() ด้านบน
+  // ① ถอด ไม่มีแคปจำนวนจากใบเบิก/ของ Spare (อิงประวัติรถเอง ไม่ได้เบิกของ) —
+  // ② ติดตั้ง ล็อกตามใบเบิก/ของ Spare เฉพาะอัปเกรด (installCtx ด้านบน — ถอดย้าย
+  // ยัง free-pick เสมอ ไม่มีแคป) — ③ แก้ไข ล็อกตามปกติเหมือน renderFixRows()
   const lockedRowCount = state.fixes.filter(r=> !r.extra).length;
   document.getElementById('addRemoveEditBtn').disabled = ctx.locked && lockedRowCount >= ctx.lockedOptionsCount;
   const addRemoveEditExtraBtn = document.getElementById('addRemoveEditExtraBtn');
   if(addRemoveEditExtraBtn) addRemoveEditExtraBtn.classList.toggle('app-hidden', !ctx.locked);
+  document.getElementById('addRemoveNewBtn').disabled = installCtx.locked && lockedRowCount >= installCtx.lockedOptionsCount;
+  const addRemoveNewExtraBtn = document.getElementById('addRemoveNewExtraBtn');
+  if(addRemoveNewExtraBtn) addRemoveNewExtraBtn.classList.toggle('app-hidden', !installCtx.locked);
 }
 
 function renderStickers(){
