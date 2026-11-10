@@ -10,7 +10,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.121.0">
+<meta name="app-version" content="1.122.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@100..900&display=swap" rel="stylesheet">
@@ -4692,6 +4692,37 @@ function markRemoveHeader(header){
   return header.includes('ถอด') ? `🔴 ${header}` : header;
 }
 
+// คู่กับ markRemoveLine() ข้างบน — บรรทัด "ติดตั้ง" เดิมไม่มีคำบอกเลยว่าเป็น
+// ของใหม่ที่ใส่เข้าไป (ตัดคำ "ทำการติดตั้ง" ออกไปก่อนหน้านี้ตามที่เคยขอให้สั้นๆ
+// — ดู fixLine()) พอมารวมกับบรรทัด "ถอด" ที่มี 🔴 นำหน้าแล้ว บรรทัดติดตั้งที่
+// เหลือแค่ชื่อเฉยๆ เลยดูแยกไม่ออกว่าเป็นถอดหรือติดตั้ง (ตามที่แจ้ง "ไม่มีคำมา
+// บอกมันจะทำให้อ่านยาก") ใช้ 🟢 นำหน้าแทน ไม่เอาคำกลับมา (ตามที่เลือก) —
+// markInstallLine() ไม่เช็ค prefix เฉพาะเจาะจงแบบ markRemoveLine() เพราะบรรทัด
+// ติดตั้งไม่มี prefix คงที่ให้เช็ค (ต่างจาก "- ทำการถอด ") ผู้เรียกต้องมั่นใจเองว่า
+// line ที่ส่งเข้ามาเป็นบรรทัดติดตั้งจริงๆ ไม่ใช่บรรทัด remark เฉยๆ — ดู
+// markedFixLine() ด้านล่างที่เช็คจากข้อมูลแถว (row.oldModel/row.product) แทน
+// การเดาจากข้อความ เพื่อไม่ให้ไปติดบรรทัด remark ที่หน้าตาเหมือนกันทุกประการ
+function markInstallLine(line){
+  return line.startsWith('- ') ? `- 🟢 ${line.slice(2)}` : line;
+}
+// ใช้เฉพาะตอนสร้างข้อความ Line (buildMessage()) เท่านั้น — fixLine() เองยังคืน
+// ค่าดิบไม่มีสัญลักษณ์ ให้ที่อื่นที่ใช้ fixLine() ตรงๆ (pushIssueClose()'s
+// fixedDetails, pushQcReportLog()'s fixSummary, diffReportFields(),
+// buildFixRowCollapsedSummary() ในฟอร์ม) ไม่ติดอิโมจิไปด้วยโดยไม่ตั้งใจ
+function markedFixLine(row){
+  const line = fixLine(row);
+  if(!line) return line;
+  const hasOld = !!row.oldModel;
+  const hasNew = !!row.product;
+  if(hasOld && hasNew){
+    const [removeHalf, installHalf] = line.split('\n');
+    return [removeHalf && markRemoveLine(removeHalf), installHalf && markInstallLine(installHalf)].filter(Boolean).join('\n');
+  }
+  if(hasOld) return markRemoveLine(line);
+  if(hasNew) return markInstallLine(line);
+  return line; // แถว remark ล้วนๆ ไม่มีทั้ง oldModel/product — ไม่ใช่ถอดหรือติดตั้ง ไม่ต้องติดสัญลักษณ์
+}
+
 // MDVR Tracking's Ch1-Ch9 columns record DMS/ADAS generically — checked the
 // real sheet data: "DMS"/"ADAS" literal are by far the dominant values
 // there (1602/1503 occurrences), the specific catalog variant ("DMS Camera
@@ -5071,10 +5102,10 @@ function buildMessage(){
   if(state.tpl === 'upgrade'){
     const { removeLines, installLines, editLines } = buildUpgradeFixSections();
     if(removeLines.length){ lines.push(markRemoveHeader('ถอด')); lines.push(...removeLines.map(markRemoveLine)); lines.push(''); }
-    if(installLines.length){ lines.push('ติดตั้ง'); lines.push(...installLines); lines.push(''); }
+    if(installLines.length){ lines.push('ติดตั้ง'); lines.push(...installLines.map(markInstallLine)); lines.push(''); }
     if(editLines.length){ lines.push('แก้ไข'); lines.push(...editLines); lines.push(''); }
   } else {
-    const fixLines = state.fixes.map(fixLine).filter(Boolean).map(markRemoveLine);
+    const fixLines = state.fixes.map(markedFixLine).filter(Boolean);
     if(fixLines.length){
       lines.push(markRemoveHeader(FIXES_CARD_LABEL[state.tpl] || 'แก้ไข'));
       lines.push(...fixLines);
