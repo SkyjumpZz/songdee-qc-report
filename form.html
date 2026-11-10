@@ -10,7 +10,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.120.0">
+<meta name="app-version" content="1.121.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@100..900&display=swap" rel="stylesheet">
@@ -2875,6 +2875,13 @@ function deviceTypeForProduct(name){
   // คือ IMEI ที่เลือกจาก pool เครื่องว่าง (mdvrAllDevices/mdvrAvailableDevices)
   // ไม่ใช่ SN พิมพ์เอง ดู buildProductHalf()'s showMdvrImeiPicker
   if(n.includes('mdvr')) return 'mdvr';
+  // Fatigue Momenta (แมงดา)/(กล้อง) — tracked by IMEI ใน Momenta Tracking
+  // sheet แยกต่างหาก เหมือน DMS/ADAS/AI Box เป๊ะ (คอลัมน์ Vehicle No./
+  // Customer/Installed Date/Technician1-3/Note เหมือนกัน) buildDeviceSwaps()/
+  // pushDeviceSwaps() ใช้ type นี้ยิง /device-swap ได้เลยโดยไม่ต้องแก้อะไร
+  // เพิ่ม (generic ผ่าน row.oldSN/newSN อยู่แล้ว) ดู DEVICE_SHEETS.momenta
+  // ฝั่ง songdee-vehicle-lookup
+  if(n.includes('momenta')) return 'momenta';
   return undefined;
 }
 // ซิม — identity คือเบอร์โทร ไม่ใช่ยี่ห้อ/รุ่นเหมือนอุปกรณ์อื่น เลือกแล้วโชว์
