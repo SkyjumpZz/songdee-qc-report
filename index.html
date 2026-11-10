@@ -2,12 +2,17 @@
 <html lang="th">
 <head>
 <meta charset="UTF-8">
+<!-- จำกัดว่าหน้านี้โหลดสคริปต์/ส่งข้อมูลไปที่ไหนได้บ้าง (เฉพาะ Firebase/Google Fonts/
+     Worker ของเราเอง) — ถ้ามีโค้ดแปลกปลอมหลุดเข้ามารันในหน้า จะโหลดสคริปต์จากเว็บ
+     อื่นหรือแอบส่ง token/ข้อมูลออกไปเซิร์ฟเวอร์อื่นผ่าน fetch/รูป/ฟอร์มไม่ได้
+     เพิ่มปลายทางใหม่ (Worker/CDN) ต้องมาเพิ่มในนี้ด้วย ไม่งั้นเบราว์เซอร์จะบล็อก -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https://drive.google.com https://*.googleusercontent.com; connect-src 'self' https://*.googleapis.com https://songdee-vehicle-lookup.songdeegps.workers.dev https://songdee-line-proxy.songdeegps.workers.dev https://songdee-drive-proxy.songdeegps.workers.dev; frame-src 'self' https://songdee-stock.firebaseapp.com; object-src 'none'; base-uri 'self'; form-action 'self'">
 <script>
 (function(){try{if(localStorage.getItem('sd-theme')==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>Dashboard · SONGDEE GPS</title>
-<meta name="app-version" content="1.38.0">
+<meta name="app-version" content="1.39.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@100..900&display=swap" rel="stylesheet">

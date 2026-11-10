@@ -1,0 +1,12 @@
+# Header ความปลอดภัยของทุกหน้า (Cloudflare Workers static assets)
+# - X-Frame-Options / frame-ancestors: ห้ามเว็บอื่นเอาหน้านี้ไปฝังใน iframe (กันหลอกให้กดปุ่มทับ)
+# - nosniff: เบราว์เซอร์ไม่เดาชนิดไฟล์เอง
+# - Referrer-Policy: เปิดลิงก์ออกไปเว็บอื่นไม่ส่ง URL เต็ม (มีรหัสรายงานอยู่ใน ?report=)
+# - HSTS: บังคับ HTTPS เสมอ
+# CSP ตัวเต็มอยู่ใน <meta http-equiv> ของแต่ละหน้า (frame-ancestors ใส่ใน meta ไม่ได้ ต้องเป็น header)
+/*
+  X-Frame-Options: DENY
+  Content-Security-Policy: frame-ancestors 'none'
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Strict-Transport-Security: max-age=31536000

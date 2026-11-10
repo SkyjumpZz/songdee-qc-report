@@ -2,6 +2,11 @@
 <html lang="th">
 <head>
 <meta charset="UTF-8">
+<!-- จำกัดว่าหน้านี้โหลดสคริปต์/ส่งข้อมูลไปที่ไหนได้บ้าง (เฉพาะ Firebase/Google Fonts/
+     Worker ของเราเอง) — ถ้ามีโค้ดแปลกปลอมหลุดเข้ามารันในหน้า จะโหลดสคริปต์จากเว็บ
+     อื่นหรือแอบส่ง token/ข้อมูลออกไปเซิร์ฟเวอร์อื่นผ่าน fetch/รูป/ฟอร์มไม่ได้
+     เพิ่มปลายทางใหม่ (Worker/CDN) ต้องมาเพิ่มในนี้ด้วย ไม่งั้นเบราว์เซอร์จะบล็อก -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https://drive.google.com https://*.googleusercontent.com; connect-src 'self' https://*.googleapis.com https://songdee-vehicle-lookup.songdeegps.workers.dev https://songdee-line-proxy.songdeegps.workers.dev https://songdee-drive-proxy.songdeegps.workers.dev; frame-src 'self' https://songdee-stock.firebaseapp.com; object-src 'none'; base-uri 'self'; form-action 'self'">
 <script>
 // ตั้ง data-theme ก่อน CSS วาดจอ ไม่งั้นจะเห็นธีมขาวกระพริบแวบหนึ่งก่อน
 // สลับเป็นมืดทุกครั้งที่โหลดหน้า (คนละจุดกับ toggleTheme() ด้านล่าง ซึ่งรันหลัง
@@ -10,7 +15,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.122.0">
+<meta name="app-version" content="1.123.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@100..900&display=swap" rel="stylesheet">
@@ -1002,6 +1007,22 @@ installReadMeter('qc-form', 'https://songdee-line-proxy.songdeegps.workers.dev/s
 const _auth = firebase.auth();
 const _db = firebase.firestore();
 
+// ทุกคำขอที่ยิงเข้า Worker หลังบ้าน (songdee-vehicle-lookup) ต้องแนบ Firebase ID
+// token ของผู้ใช้ที่ล็อกอินอยู่ — Worker ตรวจลายเซ็น token + สิทธิ์ (roles/{uid})
+// ก่อนอ่าน/เขียนชีตให้ (ดู authenticate() ฝั่ง Worker) เดิมไม่แนบอะไรเลย ใครรู้
+// URL ก็เรียกได้โดยไม่ต้องล็อกอิน token อายุ 1 ชม. getIdToken() ต่ออายุให้เองเมื่อ
+// ใกล้หมด — รอ authReady ก่อนเสมอ เพราะตัวโหลดบางตัวถูกเรียกตั้งแต่หน้าเพิ่งเปิด
+// ก่อน Firebase จะกู้เซสชันจากเครื่องเสร็จ (currentUser ยังเป็น null)
+const authReady = new Promise(resolve=>{
+  const off = _auth.onAuthStateChanged(user=>{ off(); resolve(user); });
+});
+async function authFetch(url, opts = {}){
+  const user = _auth.currentUser || await authReady;
+  const headers = { ...(opts.headers || {}) };
+  if(user) headers.Authorization = 'Bearer ' + await user.getIdToken();
+  return fetch(url, { ...opts, headers });
+}
+
 let tester = { uid: null, techName: null };
 
 // Login lives on index.html (Dashboard) now — this page just gates on
@@ -1486,7 +1507,7 @@ async function loadVehicleOldModels(){
     return;
   }
   try{
-    const res = await fetch(`${VEHICLE_LOOKUP_ENDPOINT}?plate=${encodeURIComponent(plate)}`);
+    const res = await authFetch(`${VEHICLE_LOOKUP_ENDPOINT}?plate=${encodeURIComponent(plate)}`);
     const data = await res.json();
     vehicleOldModels = Array.isArray(data.items) ? data.items : [];
     vehicleEmptySlots = Array.isArray(data.emptySlots)
@@ -1592,7 +1613,7 @@ function autofillMdvrModel(imei){
 }
 async function loadMdvrAvailable(){
   try{
-    const res = await fetch(MDVR_AVAILABLE_ENDPOINT);
+    const res = await authFetch(MDVR_AVAILABLE_ENDPOINT);
     const data = await res.json();
     mdvrAvailableDevices = Array.isArray(data.items) ? data.items : [];
   }catch(e){
@@ -1612,7 +1633,7 @@ async function loadMdvrAllDevices(){
   if(mdvrAllDevicesLoading) return;
   mdvrAllDevicesLoading = true;
   try{
-    const res = await fetch('https://songdee-vehicle-lookup.songdeegps.workers.dev/mdvr-list');
+    const res = await authFetch('https://songdee-vehicle-lookup.songdeegps.workers.dev/mdvr-list');
     const data = await res.json();
     mdvrAllDevices = Array.isArray(data.items) ? data.items : [];
   }catch(e){
@@ -1755,7 +1776,7 @@ async function loadDeviceTrackingSNs(type){
   if(deviceTrackingSNsLoading[type]) return;
   deviceTrackingSNsLoading[type] = true;
   try{
-    const res = await fetch(`https://songdee-vehicle-lookup.songdeegps.workers.dev/device-list?type=${encodeURIComponent(type)}`);
+    const res = await authFetch(`https://songdee-vehicle-lookup.songdeegps.workers.dev/device-list?type=${encodeURIComponent(type)}`);
     const data = await res.json();
     deviceTrackingSNs[type] = (data && data.items) || [];
   }catch(e){
@@ -1769,7 +1790,7 @@ async function loadDeviceTrackingSNs(type){
 // still sends either way.
 async function pushMdvrInstall(){
   if(state.tpl !== 'new_install' || !state.mdvrImei) return null;
-  const res = await fetch(MDVR_INSTALL_ENDPOINT, {
+  const res = await authFetch(MDVR_INSTALL_ENDPOINT, {
     method:'POST',
     headers:{'Content-Type':'application/json'},
     body: JSON.stringify({
@@ -1808,7 +1829,7 @@ async function pushMdvrUnitSwaps(){
   if(!plate) return null;
   const results = [];
   for(const s of swaps){
-    const res = await fetch(MDVR_UNIT_SWAP_ENDPOINT, {
+    const res = await authFetch(MDVR_UNIT_SWAP_ENDPOINT, {
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body: JSON.stringify({ plate, newImei: s.newImei, deviceId: s.deviceId, server: s.server, customer: state.customer, fleet: state.fleet, date: state.date, technician: onSiteTechName(), technicianRaw: onSiteTechNameRaw() })
@@ -1847,7 +1868,7 @@ async function pushMdvrFixInstalls(){
   if(!plate) return null;
   const results = [];
   for(const it of installs){
-    const res = await fetch(MDVR_INSTALL_ENDPOINT, {
+    const res = await authFetch(MDVR_INSTALL_ENDPOINT, {
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body: JSON.stringify({ imei: it.imei, deviceId: it.deviceId, server: it.server, plate, customer: state.customer, fleet: state.fleet, date: state.date, technician: onSiteTechName() })
@@ -1878,7 +1899,7 @@ async function pushMdvrChecklist(){
   };
   if(steelbox && typeof steelbox.has === 'boolean') body.steelbox = steelbox.has;
   if(db9 && typeof db9.has === 'boolean') body.db9 = db9.has;
-  const res = await fetch('https://songdee-vehicle-lookup.songdeegps.workers.dev/mdvr-checklist', {
+  const res = await authFetch('https://songdee-vehicle-lookup.songdeegps.workers.dev/mdvr-checklist', {
     method:'POST',
     headers:{'Content-Type':'application/json'},
     body: JSON.stringify(body)
@@ -1919,7 +1940,7 @@ async function loadDeviceLookup(){
     return;
   }
   try{
-    const res = await fetch(`${DEVICES_ENDPOINT}?plate=${encodeURIComponent(plate)}`);
+    const res = await authFetch(`${DEVICES_ENDPOINT}?plate=${encodeURIComponent(plate)}`);
     deviceLookup = await res.json();
   }catch(e){
     console.error('[Device lookup]', e);
@@ -1943,7 +1964,7 @@ let openIssues = []; // [{ticketNo, feedback, closeChecked, cause}] — a plate 
 const QC_LOG_ENDPOINT = 'https://songdee-vehicle-lookup.songdeegps.workers.dev/qc-log';
 async function pushQcReportLog(lineSent){
   if(!currentReportId) return null;
-  const res = await fetch(QC_LOG_ENDPOINT, {
+  const res = await authFetch(QC_LOG_ENDPOINT, {
     method:'POST',
     headers:{'Content-Type':'application/json'},
     body: JSON.stringify({
@@ -1986,7 +2007,7 @@ async function loadOpenIssue(){
     return;
   }
   try{
-    const res = await fetch(`${ISSUE_ENDPOINT}?plate=${encodeURIComponent(plate)}`);
+    const res = await authFetch(`${ISSUE_ENDPOINT}?plate=${encodeURIComponent(plate)}`);
     const data = await res.json();
     const items = (data && Array.isArray(data.items)) ? data.items : [];
     // closeChecked เริ่มต้นติ๊กไว้เฉพาะเทมเพลตซ่อม (งานซ่อมมักเป็นการแก้ Issue
@@ -2121,7 +2142,7 @@ const renderPlateSuggest = wireSuggestInput('jobPlate', 'jobPlateSuggestions', p
 });
 async function loadPlateSuggestions(){
   try{
-    const res = await fetch('https://songdee-vehicle-lookup.songdeegps.workers.dev/plates');
+    const res = await authFetch('https://songdee-vehicle-lookup.songdeegps.workers.dev/plates');
     const data = await res.json();
     allPlateSuggestions = (Array.isArray(data.plates) ? data.plates : []).sort();
     plateCustomerMap = (data.plateCustomers && typeof data.plateCustomers === 'object') ? data.plateCustomers : {};
@@ -2988,7 +3009,7 @@ async function autofillDeviceSN(row, idx, type, sn){
   snHints[idx] = 'กำลังค้นหา SN...';
   renderFixRows();
   try{
-    const res = await fetch(`https://songdee-vehicle-lookup.songdeegps.workers.dev/device-sn?type=${encodeURIComponent(type)}&sn=${encodeURIComponent(target)}`);
+    const res = await authFetch(`https://songdee-vehicle-lookup.songdeegps.workers.dev/device-sn?type=${encodeURIComponent(type)}&sn=${encodeURIComponent(target)}`);
     const data = await res.json();
     if(!data || !data.found){
       snHints[idx] = 'ไม่พบ SN นี้ในชีต Tracking';
@@ -3042,7 +3063,7 @@ async function autofillOldDeviceVersion(row, idx, type, sn){
   oldSnHints[idx] = 'กำลังค้นหา SN...';
   renderFixRows();
   try{
-    const res = await fetch(`https://songdee-vehicle-lookup.songdeegps.workers.dev/device-sn?type=${encodeURIComponent(type)}&sn=${encodeURIComponent(target)}`);
+    const res = await authFetch(`https://songdee-vehicle-lookup.songdeegps.workers.dev/device-sn?type=${encodeURIComponent(type)}&sn=${encodeURIComponent(target)}`);
     const data = await res.json();
     if(!data || !data.found){
       row.oldModelVersion = '';
@@ -4882,7 +4903,7 @@ async function pushSheetUpdates(){
   });
   const results = [];
   for(const [plate, group] of byPlate){
-    const res = await fetch('https://songdee-vehicle-lookup.songdeegps.workers.dev/update', {
+    const res = await authFetch('https://songdee-vehicle-lookup.songdeegps.workers.dev/update', {
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body: JSON.stringify({ plate, updates: group })
@@ -4938,7 +4959,7 @@ async function pushMdvrClears(){
   const dateStr = state.date || '';
   const results = [];
   for(const c of clears){
-    const res = await fetch('https://songdee-vehicle-lookup.songdeegps.workers.dev/mdvr-clear', {
+    const res = await authFetch('https://songdee-vehicle-lookup.songdeegps.workers.dev/mdvr-clear', {
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body: JSON.stringify({ plate, column: c.column, date: dateStr, technician: onSiteTechName(), technicianRaw: onSiteTechNameRaw() })
@@ -4999,7 +5020,7 @@ async function pushDeviceSwaps(){
   if(!swaps.length) return null;
   const results = [];
   for(const payload of swaps){
-    const res = await fetch('https://songdee-vehicle-lookup.songdeegps.workers.dev/device-swap', {
+    const res = await authFetch('https://songdee-vehicle-lookup.songdeegps.workers.dev/device-swap', {
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body: JSON.stringify(payload)
@@ -5026,7 +5047,7 @@ async function pushIssueClose(){
   const fixLines = state.fixes.map(fixLine).filter(Boolean);
   const results = [];
   for(const issue of toClose){
-    const res = await fetch('https://songdee-vehicle-lookup.songdeegps.workers.dev/issue-close', {
+    const res = await authFetch('https://songdee-vehicle-lookup.songdeegps.workers.dev/issue-close', {
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body: JSON.stringify({
