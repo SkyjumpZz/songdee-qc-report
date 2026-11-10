@@ -10,7 +10,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.118.0">
+<meta name="app-version" content="1.119.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@100..900&display=swap" rel="stylesheet">
@@ -4663,6 +4663,23 @@ function fixLine(row){
   return null;
 }
 
+// เน้นบรรทัด/หัวข้อที่เป็นการ "ถอด" ด้วย 🔴 ในข้อความ Line (ตามที่ขอ "ถ้ามีคำว่า
+// ถอด ให้มันเป็นสีแดง") — ข้อความ Line แบบ type:"text" ธรรมดาใส่สีตัวอักษรจริงๆ
+// ไม่ได้เลย (ต้องเป็น Flex Message ซึ่งคัดลอก/แก้ไข/ส่งต่อในแชทไม่ได้ ตามที่เคย
+// เปลี่ยนกลับมาใช้ข้อความธรรมดาไปแล้ว) ใช้ 🔴 แทนสีตามที่เลือก — markRemoveLine()
+// เช็คเฉพาะ "- ทำการถอด " ตรงๆ (prefix ที่ fixLine() ใช้เป๊ะ) ไม่ใช่ทุกบรรทัดที่
+// มีคำว่า "ถอด" เผื่อไปโดนข้อความอื่นที่ไม่เกี่ยวโดยไม่ตั้งใจ (เช่น "ถอดย้าย
+// อุปกรณ์" ในชื่อประเภทงานที่ไม่ใช่รายการอุปกรณ์) ใช้ได้ทั้งบรรทัดเดี่ยวและ
+// บรรทัดคู่ถอด+ติดตั้งที่คั่นด้วย \n (เช็คแค่ prefix ของทั้งสตริง ไม่กระทบบรรทัด
+// ที่ 2 ที่ต่อท้าย)
+function markRemoveLine(line){
+  const prefix = '- ทำการถอด ';
+  return line.startsWith(prefix) ? `- 🔴 ทำการถอด ${line.slice(prefix.length)}` : line;
+}
+function markRemoveHeader(header){
+  return header.includes('ถอด') ? `🔴 ${header}` : header;
+}
+
 // MDVR Tracking's Ch1-Ch9 columns record DMS/ADAS generically — checked the
 // real sheet data: "DMS"/"ADAS" literal are by far the dominant values
 // there (1602/1503 occurrences), the specific catalog variant ("DMS Camera
@@ -5041,13 +5058,13 @@ function buildMessage(){
   }
   if(state.tpl === 'upgrade'){
     const { removeLines, installLines, editLines } = buildUpgradeFixSections();
-    if(removeLines.length){ lines.push('ถอด'); lines.push(...removeLines); lines.push(''); }
+    if(removeLines.length){ lines.push(markRemoveHeader('ถอด')); lines.push(...removeLines.map(markRemoveLine)); lines.push(''); }
     if(installLines.length){ lines.push('ติดตั้ง'); lines.push(...installLines); lines.push(''); }
     if(editLines.length){ lines.push('แก้ไข'); lines.push(...editLines); lines.push(''); }
   } else {
-    const fixLines = state.fixes.map(fixLine).filter(Boolean);
+    const fixLines = state.fixes.map(fixLine).filter(Boolean).map(markRemoveLine);
     if(fixLines.length){
-      lines.push(FIXES_CARD_LABEL[state.tpl] || 'แก้ไข');
+      lines.push(markRemoveHeader(FIXES_CARD_LABEL[state.tpl] || 'แก้ไข'));
       lines.push(...fixLines);
       lines.push('');
     }
