@@ -10,7 +10,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.119.0">
+<meta name="app-version" content="1.120.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@100..900&display=swap" rel="stylesheet">
@@ -3962,11 +3962,10 @@ function buildOldModelHalf(row, idx, standalone){
   oldWrap.className = standalone ? 'fix-entry' : 'old-model-row';
   const oldLabel = document.createElement('label');
   oldLabel.textContent = standalone ? 'อุปกรณ์เดิมที่ถอด' : 'อุปกรณ์เดิมที่ถอด/เปลี่ยน หรือช่องว่างที่ยังไม่มีอุปกรณ์ (ถ้ามี) — เลือกอุปกรณ์ใหม่ด้านล่างด้วยถ้ามีของมาแทน ถ้าถอดออกเฉยๆ ไม่ต้องเลือกช่อง "อุปกรณ์"';
-  // Only ever sourced from this vehicle's actual recorded equipment —
-  // no generic PRODUCTS catalog fallback group. If nothing's on file
-  // for this plate yet, the only option is "ไม่มีการเปลี่ยนอุปกรณ์";
-  // we don't want techs picking a guessed/generic old model that
-  // isn't really what's on the vehicle.
+  // เดิมเลือกได้แค่จากประวัติทะเบียนนี้เอง (ไม่มี fallback ไปแคตตาล็อกทั่วไป กัน
+  // ช่างเลือกรุ่นที่เดาเอาซึ่งไม่ตรงกับของจริงบนรถ) — เปลี่ยนตามที่ขอ: ยังขึ้น
+  // ประวัติทะเบียนนี้ก่อนเป็นกลุ่มแรกเสมอ (แม่นกว่า) แต่เพิ่มกลุ่ม "จากสต็อก
+  // ทั้งหมด" ต่อท้ายด้วย แทนที่ "อื่นๆ (พิมพ์เอง)" เดิม — ดูด้านล่าง
   const oldGroups = [];
   if(vehicleOldModels.length){
     oldGroups.push({
@@ -3985,11 +3984,17 @@ function buildOldModelHalf(row, idx, standalone){
       options: vehicleEmptySlots.map(m=> ({ value: m.label, text: m.label })),
     });
   }
-  // ให้พิมพ์รุ่นเก่าเองได้เสมอ — เผื่อของจริงไม่ตรงกับประวัติที่บันทึกไว้ (ประวัติ
-  // อาจตกหล่น/ผิด) หรือยังไม่เคยมีประวัติเลย
+  // เดิมมีแค่ "อื่นๆ (พิมพ์เอง)" ให้พิมพ์เองเป็นตัวเลือกสุดท้ายเสมอ — เปลี่ยนเป็น
+  // เลือกจาก Stock ทั้งหมดแทน (ตามที่ขอ "ไม่ให้พิมเองแต่ให้เลือกของจากใน Stock
+  // ทั้งหมด") ใช้ catalog ชุดเดียวกับฝั่ง "อุปกรณ์ใหม่" (baseCatalog ใน
+  // buildProductHalf()) เผื่อประวัติทะเบียนนี้ไม่มี/ไม่ครบ ยังเลือกของจริงได้
+  // ไม่ต้องพิมพ์เดา (แถวเก่าที่เคยบันทึก "อื่นๆ (พิมพ์เอง)" ไว้ก่อนเปลี่ยนยังเปิด
+  // มาแก้ไข/แสดงช่องพิมพ์เดิมได้ตามปกติ — ดู oldCustom input ด้านล่าง — แค่
+  // เลือกใหม่จากตรงนี้ไม่ได้อีกต่อไป)
+  const oldCatalog = dedupeNewVariants([...new Set([...(liveCatalog || PRODUCTS), ...MDVR_CAMERA_MODELS])]);
   oldGroups.push({
-    label: null,
-    options: [{ value: 'อื่นๆ (พิมพ์เอง)', text: 'อื่นๆ (พิมพ์เอง)' }],
+    label: 'จากสต็อกทั้งหมด',
+    options: oldCatalog.map(p=> ({ value: p, text: p })),
   });
   const oldSel = buildSearchableSelect(oldGroups, row.oldModel, '-- ไม่มีการเปลี่ยนอุปกรณ์ --', (newValue)=>{
     row.oldModel = newValue;
