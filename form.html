@@ -15,7 +15,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.123.0">
+<meta name="app-version" content="1.124.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@100..900&display=swap" rel="stylesheet">
@@ -915,19 +915,17 @@
 // instead of a separate Worker. Remember: songdee-line-proxy only allows
 // requests from origins listed in its ALLOWED_ORIGINS — add this page's
 // real domain there once it's hosted (see songdee-line-proxy source).
+// ไม่มี API key ฝังในหน้านี้แล้ว (เดิมมี — ใครเปิดดูซอร์สก็เอาไปยิง LINE ได้)
+// ยืนยันตัวด้วย Firebase ID token ของผู้ใช้ที่ล็อกอินอยู่แทน ดู authFetch()
 const LINE_ENDPOINT = "https://songdee-line-proxy.songdeegps.workers.dev";
-const LINE_API_KEY = "d124c1ea1175a07fcbf0358d733e0c57d822df836ff3f1004dfa5285fb28d69f";
 
 // Photo attachments upload through the shared songdee-drive-proxy Worker
 // (same one songdee-admin already uses for its own photo uploads) into
 // Google Drive, then the returned public viewUrl is what actually gets
 // sent to LINE/Firestore — never the raw image bytes. This app's origin
-// was added to that Worker's ALLOWED_ORIGINS, and DRIVE_API_KEY here must
-// match the UPLOAD_API_KEY_QC secret configured on songdee-drive-proxy —
-// a separate key from admin's existing UPLOAD_API_KEY, so this never
-// risks admin's own uploads if one key is rotated later.
+// was added to that Worker's ALLOWED_ORIGINS. ไม่มี API key ฝังในหน้านี้แล้ว
+// เช่นกัน — ยืนยันตัวด้วย Firebase ID token ผ่าน authFetch()
 const DRIVE_ENDPOINT = "https://songdee-drive-proxy.songdeegps.workers.dev";
-const DRIVE_API_KEY = "d1532dd2c3e8c1bacd5fa27465ebe5bf80d52a0489f7ac3a555786f0d850535e";
 
 // ---------------------------------------------------------------
 // Firebase Auth + Firestore — same "songdee-stock" project used by the
@@ -1007,10 +1005,13 @@ installReadMeter('qc-form', 'https://songdee-line-proxy.songdeegps.workers.dev/s
 const _auth = firebase.auth();
 const _db = firebase.firestore();
 
-// ทุกคำขอที่ยิงเข้า Worker หลังบ้าน (songdee-vehicle-lookup) ต้องแนบ Firebase ID
-// token ของผู้ใช้ที่ล็อกอินอยู่ — Worker ตรวจลายเซ็น token + สิทธิ์ (roles/{uid})
-// ก่อนอ่าน/เขียนชีตให้ (ดู authenticate() ฝั่ง Worker) เดิมไม่แนบอะไรเลย ใครรู้
-// URL ก็เรียกได้โดยไม่ต้องล็อกอิน token อายุ 1 ชม. getIdToken() ต่ออายุให้เองเมื่อ
+// ทุกคำขอที่ยิงเข้า Worker หลังบ้าน (songdee-vehicle-lookup / songdee-line-proxy
+// / songdee-drive-proxy) ต้องแนบ Firebase ID token ของผู้ใช้ที่ล็อกอินอยู่ — Worker
+// ตรวจลายเซ็น token + สิทธิ์ (roles/{uid}) ก่อนอ่าน/เขียนชีต ส่ง LINE หรืออัปโหลด
+// รูปให้ เดิม vehicle-lookup ไม่แนบอะไรเลย (ใครรู้ URL ก็เรียกได้) ส่วน LINE/Drive
+// ใช้ API key ที่ฝังในซอร์สหน้านี้ (ใครเปิดดูก็เอาไปใช้ได้) — ห้ามกลับไปฝัง key/
+// secret ใดๆ ในไฟล์นี้อีก ทุกอย่างในหน้าเว็บคนนอกอ่านได้หมด
+// token อายุ 1 ชม. getIdToken() ต่ออายุให้เองเมื่อ
 // ใกล้หมด — รอ authReady ก่อนเสมอ เพราะตัวโหลดบางตัวถูกเรียกตั้งแต่หน้าเพิ่งเปิด
 // ก่อน Firebase จะกู้เซสชันจากเครื่องเสร็จ (currentUser ยังเป็น null)
 const authReady = new Promise(resolve=>{
@@ -4591,9 +4592,9 @@ document.addEventListener('paste', e=>{
 async function uploadPhotoToDrive(photo){
   photo.uploading = true; photo.error = null; renderPhotos();
   try{
-    const res = await fetch(DRIVE_ENDPOINT + '/upload', {
+    const res = await authFetch(DRIVE_ENDPOINT + '/upload', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Api-Key': DRIVE_API_KEY },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         // วันที่_ทะเบียน_ลำดับรูป.jpg — อ่านออกว่าเป็นรูปของรายงานไหน แทนที่
         // จะเป็น uuid สุ่มยาวๆ ที่ดูจากชื่อไฟล์แล้วบอกอะไรไม่ได้เลย
@@ -5724,9 +5725,9 @@ async function sendToLine(){
       // ทำให้ขึ้นเป็นชุดเดียวกันในแชท ไม่ใช่ทยอยส่งทีละรูป
       const imageUrls = state.photos.filter(p=> p.driveUrl).map(p=> p.driveUrl).slice(0, 4);
       const pushResults = await Promise.all(destinations.map(groupId=>
-        fetch(endpoint, {
+        authFetch(endpoint, {
           method:'POST',
-          headers:{'Content-Type':'application/json', 'X-Api-Key': LINE_API_KEY},
+          headers:{'Content-Type':'application/json'},
           body: JSON.stringify({ message: text, ...(groupId ? { groupId } : {}), ...(imageUrls.length ? { imageUrls } : {}) })
         }).then(res=> ({ ok: res.ok, status: res.status })).catch(()=> ({ ok:false, status:0 }))
       ));
