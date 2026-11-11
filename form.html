@@ -15,7 +15,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.124.0">
+<meta name="app-version" content="1.125.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@100..900&display=swap" rel="stylesheet">
@@ -1892,9 +1892,15 @@ async function pushMdvrChecklist(){
   if(!plate) return null;
   const steelbox = state.checklist && state.checklist.steelbox;
   const db9 = state.checklist && state.checklist.db9;
+  // งานซ่อมไม่ส่งชื่อช่างในจุดนี้ — Technician1 ของแถวรถใน MDVR Tracking คือ
+  // ช่างที่ติดตั้ง/เปลี่ยนตัว MDVR ซ่อมแค่เปลี่ยนกล้อง/อุปกรณ์อื่นไม่ควรไปทับ
+  // ชื่อนั้น (ตามที่แจ้ง) ฝั่ง Worker ข้ามคอลัมน์นี้เองเมื่อ technician ว่าง ถ้า
+  // ซ่อมแล้วเปลี่ยนตัว MDVR จริง ชื่อช่างถูกเขียนผ่าน pushMdvrUnitSwaps()/
+  // pushMdvrFixInstalls() อยู่แล้ว ไม่ต้องพึ่งจุดนี้
   const body = {
     plate,
-    customer: state.customer || '', fleet: state.fleet || '', technician: onSiteTechName(),
+    customer: state.customer || '', fleet: state.fleet || '',
+    technician: state.tpl === 'repair' ? '' : onSiteTechName(),
     mdvrPosition: state.mdvrPosition || '', groundPoint: state.groundPoint || '',
     province: state.province || '', statusDlt: state.statusDlt || '', tapIo: state.tapIo || '',
   };
