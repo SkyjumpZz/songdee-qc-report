@@ -760,16 +760,6 @@
         <input type="text" id="statusDltInput" placeholder="สถานะ DLT" autocomplete="off">
       </div>
     </div>
-    <!-- เช่า/ซื้อ — คอลัมน์ "เช่า/ซื้อ" ของทะเบียนนี้ใน MDVR Tracking ไม่บังคับเลือก
-         ปล่อย "ไม่ระบุ" ไว้ก็ไม่เขียนทับของเดิมในชีต เหมือนช่องอื่นในการ์ดนี้ -->
-    <div>
-      <label>อุปกรณ์เช่า/ซื้อ</label>
-      <select id="rentOrBuySelect">
-        <option value="">-- ไม่ระบุ --</option>
-        <option value="เช่า">เช่า</option>
-        <option value="ซื้อ">ซื้อ</option>
-      </select>
-    </div>
     <div>
       <label>หมายเหตุสาย IO (TAP IO)</label>
       <textarea id="tapIoInput" rows="2" placeholder="เช่น IO2 = PTO"></textarea>
@@ -1931,7 +1921,6 @@ async function pushMdvrChecklist(){
     technician: state.tpl === 'repair' ? '' : onSiteTechName(),
     mdvrPosition: state.mdvrPosition || '', groundPoint: state.groundPoint || '',
     province: state.province || '', statusDlt: state.statusDlt || '', tapIo: state.tapIo || '',
-    rentOrBuy: state.rentOrBuy || '',
   };
   if(steelbox && typeof steelbox.has === 'boolean') body.steelbox = steelbox.has;
   if(db9 && typeof db9.has === 'boolean') body.db9 = db9.has;
@@ -2605,6 +2594,7 @@ function fixRowSummaryForDiff(row){
   if(row.oldPhoneNo) parts.push(`เบอร์เดิม:${row.oldPhoneNo}`);
   if(row.phoneNo) parts.push(`เบอร์:${row.phoneNo}`);
   if(row.newMdvrImei) parts.push(`IMEIใหม่:${row.newMdvrImei}`);
+  if(row.ownership) parts.push(`เช่า/ซื้อ:${row.ownership}`);
   if(row.remark) parts.push(`หมายเหตุ:${row.remark}`);
   return parts.join(' ') || '(ว่าง)';
 }
@@ -2615,7 +2605,7 @@ const REPORT_FIELD_LABELS = {
   installSpeakerPlacement: 'จุดติดตั้งลำโพง', installMicPlacement: 'จุดติดตั้งไมค์',
   stickerRemark: 'Remark สติ๊กเกอร์', onSiteTechNames: 'ช่างที่กำลังทำรายงานนี้',
   mdvrPosition: 'MDVR position', groundPoint: 'จุดจั๊มไฟ', province: 'Province', statusDlt: 'Status DLT',
-  tapIo: 'หมายเหตุสาย IO (TAP IO)', rentOrBuy: 'อุปกรณ์เช่า/ซื้อ',
+  tapIo: 'หมายเหตุสาย IO (TAP IO)',
 };
 function diffReportFields(oldDoc, payload){
   const changes = [];
@@ -2709,7 +2699,6 @@ async function saveReport(){
     network: state.network || '',
     mdvrPosition: state.mdvrPosition || '', groundPoint: state.groundPoint || '',
     province: state.province || '', statusDlt: state.statusDlt || '', tapIo: state.tapIo || '',
-    rentOrBuy: state.rentOrBuy || '',
     techUid: tester.uid, techName: tester.techName,
     // ช่างที่กำลังทำรายงานนี้ (ของ Spare/มอบหมายงานที่ใช้ตอนกรอก) — เดิมไม่เคย
     // บันทึกไว้เลย เป็นแค่ state ในหน่วยความจำของเบราว์เซอร์ ทำให้เปิดรายงาน
@@ -2773,7 +2762,6 @@ function loadReportIntoForm(doc){
     network: doc.network || '',
     mdvrPosition: doc.mdvrPosition || '', groundPoint: doc.groundPoint || '',
     province: doc.province || '', statusDlt: doc.statusDlt || '', tapIo: doc.tapIo || '',
-    rentOrBuy: doc.rentOrBuy || '',
   };
   syncFormInputsFromState();
   resetSendButton();
@@ -3329,7 +3317,6 @@ function defaultState(){
     province: "",
     statusDlt: "",
     tapIo: "",
-    rentOrBuy: "",
   };
 }
 let state = defaultState();
@@ -3411,7 +3398,6 @@ function syncFormInputsFromState(){
   document.getElementById('provinceInput').value = state.province || '';
   document.getElementById('statusDltInput').value = state.statusDlt || '';
   document.getElementById('tapIoInput').value = state.tapIo || '';
-  document.getElementById('rentOrBuySelect').value = state.rentOrBuy || '';
 }
 
 const TPL_ICON = { upgrade: '⬆️', new_install: '✨', repair: '🛠️', remove: '📤' };
@@ -3679,6 +3665,27 @@ function buildSearchableSelect(groups, selectedValue, placeholder, onChange){
 // การเขียนทับข้อความ Device type แบบเดิมไปเลยสำหรับแถวนี้) — row.product
 // ยังถูกตั้งอัตโนมัติจาก deviceType ของ IMEI ที่เลือก ให้ fixLine()/preview
 // แสดงผลเหมือนแถวอื่นปกติ
+// เช่า/ซื้อ ของอุปกรณ์ชิ้นนั้น (ต่อแถว ไม่ใช่ต่อรายงาน — คันเดียวมีทั้งของเช่าและของ
+// ซื้อปนกันได้) ไม่บังคับเลือก ปล่อย "ไม่ระบุ" ไว้ได้ ไม่อยู่ใน getMissingFields()
+// เก็บใน row.ownership ไปกับรายงาน และต่อท้ายบรรทัดของแถวนั้นในข้อความ Line
+// (ดู fixLine()) — ยังไม่เขียนลงชีต Tracking (ชีตมีคอลัมน์ "เช่า/ซื้อ" ช่องเดียวต่อคัน)
+const OWNERSHIP_OPTIONS = ['เช่า', 'ซื้อ'];
+function buildOwnershipSelect(row){
+  const sel = document.createElement('select');
+  sel.style.marginTop = '6px';
+  const blank = document.createElement('option');
+  blank.value = ''; blank.textContent = '-- ไม่ระบุ เช่า/ซื้อ --';
+  sel.appendChild(blank);
+  OWNERSHIP_OPTIONS.forEach(v=>{
+    const o = document.createElement('option');
+    o.value = v; o.textContent = v;
+    if(v === row.ownership) o.selected = true;
+    sel.appendChild(o);
+  });
+  sel.onchange = ()=>{ row.ownership = sel.value; updatePreview(); };
+  return sel;
+}
+
 function buildMdvrUnitSwapHalf(row, idx){
   const wrap = document.createElement('div');
   wrap.className = 'fix-entry';
@@ -3725,6 +3732,7 @@ function buildMdvrUnitSwapHalf(row, idx){
 
   line.appendChild(sel); line.appendChild(qty); line.appendChild(rm);
   wrap.appendChild(line);
+  wrap.appendChild(buildOwnershipSelect(row));
 
   // เลือกเครื่องที่มี Tracking อยู่แล้วที่ทะเบียนอื่น — ไม่ได้ห้ามเลือก (ตามที่
   // ขอ "ไม่ต้องเลือกเฉพาะที่ว่างก็ได้") แค่เตือนชัดๆ ให้ช่างยืนยันว่าตั้งใจย้าย
@@ -3855,6 +3863,7 @@ function buildProductHalf(row, idx, ctx){
 
   line.appendChild(sel); line.appendChild(qty); line.appendChild(rm);
   wrap.appendChild(line);
+  if(row.product) wrap.appendChild(buildOwnershipSelect(row));
 
   // ติดตั้งใหม่ เฉพาะแถวที่ต้องมี CH จริง (กล้องใน Stock's "Camera" category,
   // หรือ DMS/ADAS — ไม่รวม AI Box ซึ่งไม่ได้ต่อช่องกล้องช่องไหน) เลือก CH
@@ -4122,6 +4131,10 @@ function buildOldModelHalf(row, idx, standalone){
     oldPhone.oninput = ()=>{ row.oldPhoneNo = oldPhone.value; updatePreview(); };
     oldWrap.appendChild(oldPhone);
   }
+
+  // แถวถอดอย่างเดียว ("① ถอด") — แถวรวมถอด+ติดตั้งใช้ตัวเลือกในฝั่งอุปกรณ์ใหม่แทน
+  // (buildProductHalf()) ไม่ต้องมีซ้ำสองที่ในแถวเดียว
+  if(standalone && row.oldModel) oldWrap.appendChild(buildOwnershipSelect(row));
 
   if(standalone){
     const rm = document.createElement('button');
@@ -4716,6 +4729,9 @@ function fixLine(row){
   // buildOldModelHalf()
   const oldPhoneTag = (row.oldPhoneNo || '').trim() ? ` (เบอร์เดิม: ${row.oldPhoneNo.trim()})` : '';
   const extraTag = row.extra ? ' [ของนอกเหนือรายการ]' : '';
+  // เช่า/ซื้อ ของชิ้นนี้ (ถ้าระบุ — ดู buildOwnershipSelect()) แถวรวมถอด+ติดตั้งใส่ที่
+  // ฝั่งอุปกรณ์ใหม่ แถวถอดอย่างเดียวใส่ที่บรรทัดถอด
+  const ownTag = OWNERSHIP_OPTIONS.includes(row.ownership) ? ` (${row.ownership})` : '';
   // ไม่ได้เปลี่ยนอุปกรณ์เลย (เช่น สายหลวม หมุนให้แน่น) — ใช้ remark ตรงๆ เป็น
   // บรรทัดของแถวนี้แทน; ถ้าเลือกอุปกรณ์/รุ่นเก่าไว้ด้วย remark ต่อท้ายเป็น
   // หมายเหตุแทน ดู buildProductHalf()'s remark textarea.
@@ -4725,13 +4741,13 @@ function fixLine(row){
   // ดู buildMdvrUnitSwapHalf()) เดิมรวมเป็นบรรทัดเดียว "ทำการเปลี่ยน X เป็น Y"
   // แยกเป็น 2 บรรทัดแทน (ตามที่ขอ "Upgrade ให้เป็นรายการแยกกัน") ให้ฟอร์แมต
   // ตรงกับแถวถอด-อย่างเดียว/ติดตั้ง-อย่างเดียวด้านล่างเป๊ะๆ
-  if(oldName && name) return `- ทำการถอด ${oldName}${oldTag}${oldPhoneTag}\n- ${name}${deviceIdTag}${chTag}${storageSlotTag}${phoneTag}${extraTag}${remarkTag}`;
+  if(oldName && name) return `- ทำการถอด ${oldName}${oldTag}${oldPhoneTag}\n- ${name}${deviceIdTag}${chTag}${storageSlotTag}${phoneTag}${ownTag}${extraTag}${remarkTag}`;
   if(name){
     const qty = row.qty ? ` x${row.qty}` : '';
     // ตัดคำ "ทำการติดตั้ง" ออก (ตามที่ขอ "สั้นๆ") — เหลือแค่ "- ชื่ออุปกรณ์..."
-    return `- ${name}${qty}${deviceIdTag}${chTag}${storageSlotTag}${phoneTag}${extraTag}${remarkTag}`;
+    return `- ${name}${qty}${deviceIdTag}${chTag}${storageSlotTag}${phoneTag}${ownTag}${extraTag}${remarkTag}`;
   }
-  if(oldName) return `- ทำการถอด ${oldName}${oldTag}${remarkTag}`;
+  if(oldName) return `- ทำการถอด ${oldName}${oldTag}${ownTag}${remarkTag}`;
   if(remark) return `- ${remark}`;
   return null;
 }
@@ -5203,7 +5219,6 @@ function buildMessage(){
     state.province ? `Province : ${state.province}` : null,
     state.statusDlt ? `Status DLT : ${state.statusDlt}` : null,
     state.tapIo ? `TAP IO : ${state.tapIo}` : null,
-    state.rentOrBuy ? `อุปกรณ์ : ${state.rentOrBuy}` : null,
   ].filter(Boolean);
   if(installDetailLines.length){
     lines.push('');
@@ -5406,7 +5421,6 @@ document.getElementById('groundPointInput').addEventListener('input', e=>{ state
 document.getElementById('provinceInput').addEventListener('input', e=>{ state.province = e.target.value; updatePreview(); });
 document.getElementById('statusDltInput').addEventListener('input', e=>{ state.statusDlt = e.target.value; updatePreview(); });
 document.getElementById('tapIoInput').addEventListener('input', e=>{ state.tapIo = e.target.value; updatePreview(); });
-document.getElementById('rentOrBuySelect').addEventListener('change', e=>{ state.rentOrBuy = e.target.value; updatePreview(); });
 document.getElementById('mdvrServerSelect').addEventListener('change', e=>{ state.mdvrServer = e.target.value; updatePreview(); });
 document.getElementById('installMdvrPlacementInput').addEventListener('input', e=>{ state.installMdvrPlacement = e.target.value; updatePreview(); });
 document.getElementById('installPowerSourceInput').addEventListener('input', e=>{ state.installPowerSource = e.target.value; updatePreview(); });
