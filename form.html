@@ -15,7 +15,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.126.0">
+<meta name="app-version" content="1.127.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@100..900&display=swap" rel="stylesheet">
@@ -759,6 +759,16 @@
         <label>Status DLT</label>
         <input type="text" id="statusDltInput" placeholder="สถานะ DLT" autocomplete="off">
       </div>
+    </div>
+    <!-- เช่า/ซื้อ — คอลัมน์ "เช่า/ซื้อ" ของทะเบียนนี้ใน MDVR Tracking ไม่บังคับเลือก
+         ปล่อย "ไม่ระบุ" ไว้ก็ไม่เขียนทับของเดิมในชีต เหมือนช่องอื่นในการ์ดนี้ -->
+    <div>
+      <label>อุปกรณ์เช่า/ซื้อ</label>
+      <select id="rentOrBuySelect">
+        <option value="">-- ไม่ระบุ --</option>
+        <option value="เช่า">เช่า</option>
+        <option value="ซื้อ">ซื้อ</option>
+      </select>
     </div>
     <div>
       <label>หมายเหตุสาย IO (TAP IO)</label>
@@ -1921,6 +1931,7 @@ async function pushMdvrChecklist(){
     technician: state.tpl === 'repair' ? '' : onSiteTechName(),
     mdvrPosition: state.mdvrPosition || '', groundPoint: state.groundPoint || '',
     province: state.province || '', statusDlt: state.statusDlt || '', tapIo: state.tapIo || '',
+    rentOrBuy: state.rentOrBuy || '',
   };
   if(steelbox && typeof steelbox.has === 'boolean') body.steelbox = steelbox.has;
   if(db9 && typeof db9.has === 'boolean') body.db9 = db9.has;
@@ -2604,7 +2615,7 @@ const REPORT_FIELD_LABELS = {
   installSpeakerPlacement: 'จุดติดตั้งลำโพง', installMicPlacement: 'จุดติดตั้งไมค์',
   stickerRemark: 'Remark สติ๊กเกอร์', onSiteTechNames: 'ช่างที่กำลังทำรายงานนี้',
   mdvrPosition: 'MDVR position', groundPoint: 'จุดจั๊มไฟ', province: 'Province', statusDlt: 'Status DLT',
-  tapIo: 'หมายเหตุสาย IO (TAP IO)',
+  tapIo: 'หมายเหตุสาย IO (TAP IO)', rentOrBuy: 'อุปกรณ์เช่า/ซื้อ',
 };
 function diffReportFields(oldDoc, payload){
   const changes = [];
@@ -2698,6 +2709,7 @@ async function saveReport(){
     network: state.network || '',
     mdvrPosition: state.mdvrPosition || '', groundPoint: state.groundPoint || '',
     province: state.province || '', statusDlt: state.statusDlt || '', tapIo: state.tapIo || '',
+    rentOrBuy: state.rentOrBuy || '',
     techUid: tester.uid, techName: tester.techName,
     // ช่างที่กำลังทำรายงานนี้ (ของ Spare/มอบหมายงานที่ใช้ตอนกรอก) — เดิมไม่เคย
     // บันทึกไว้เลย เป็นแค่ state ในหน่วยความจำของเบราว์เซอร์ ทำให้เปิดรายงาน
@@ -2761,6 +2773,7 @@ function loadReportIntoForm(doc){
     network: doc.network || '',
     mdvrPosition: doc.mdvrPosition || '', groundPoint: doc.groundPoint || '',
     province: doc.province || '', statusDlt: doc.statusDlt || '', tapIo: doc.tapIo || '',
+    rentOrBuy: doc.rentOrBuy || '',
   };
   syncFormInputsFromState();
   resetSendButton();
@@ -3316,6 +3329,7 @@ function defaultState(){
     province: "",
     statusDlt: "",
     tapIo: "",
+    rentOrBuy: "",
   };
 }
 let state = defaultState();
@@ -3397,6 +3411,7 @@ function syncFormInputsFromState(){
   document.getElementById('provinceInput').value = state.province || '';
   document.getElementById('statusDltInput').value = state.statusDlt || '';
   document.getElementById('tapIoInput').value = state.tapIo || '';
+  document.getElementById('rentOrBuySelect').value = state.rentOrBuy || '';
 }
 
 const TPL_ICON = { upgrade: '⬆️', new_install: '✨', repair: '🛠️', remove: '📤' };
@@ -5188,6 +5203,7 @@ function buildMessage(){
     state.province ? `Province : ${state.province}` : null,
     state.statusDlt ? `Status DLT : ${state.statusDlt}` : null,
     state.tapIo ? `TAP IO : ${state.tapIo}` : null,
+    state.rentOrBuy ? `อุปกรณ์ : ${state.rentOrBuy}` : null,
   ].filter(Boolean);
   if(installDetailLines.length){
     lines.push('');
@@ -5390,6 +5406,7 @@ document.getElementById('groundPointInput').addEventListener('input', e=>{ state
 document.getElementById('provinceInput').addEventListener('input', e=>{ state.province = e.target.value; updatePreview(); });
 document.getElementById('statusDltInput').addEventListener('input', e=>{ state.statusDlt = e.target.value; updatePreview(); });
 document.getElementById('tapIoInput').addEventListener('input', e=>{ state.tapIo = e.target.value; updatePreview(); });
+document.getElementById('rentOrBuySelect').addEventListener('change', e=>{ state.rentOrBuy = e.target.value; updatePreview(); });
 document.getElementById('mdvrServerSelect').addEventListener('change', e=>{ state.mdvrServer = e.target.value; updatePreview(); });
 document.getElementById('installMdvrPlacementInput').addEventListener('input', e=>{ state.installMdvrPlacement = e.target.value; updatePreview(); });
 document.getElementById('installPowerSourceInput').addEventListener('input', e=>{ state.installPowerSource = e.target.value; updatePreview(); });
