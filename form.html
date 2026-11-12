@@ -15,7 +15,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.127.0">
+<meta name="app-version" content="1.128.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@100..900&display=swap" rel="stylesheet">
@@ -2449,10 +2449,17 @@ async function loadEquipmentSheetNameMap(){
     console.error('[Equipment sheet name map] load failed', e);
     equipmentSheetNameMap = {};
   }
+  // แมปนี้กระทบข้อความ Line ด้วยแล้ว (equipmentLineName() ใช้เป็นตัวสำรอง) — re-render
+  // เหมือน loadEquipmentLineNameMap() ด้านบน
+  renderFixRows(); updatePreview();
 }
 
+// ชื่อที่โชว์ในข้อความ Line: ชื่อที่ตั้งไว้ในการ์ด "ชื่ออุปกรณ์ที่เขียนลง LINE" ก่อน ถ้าไม่ได้
+// ตั้งไว้ ใช้ชื่อจากการ์ด "ชื่ออุปกรณ์ที่เขียนลง Track (ชีต)" แทน (ตามที่ขอ "ชื่อพวกนี้เอา
+// เวลาลง Line ด้วย" — ไม่ต้องตั้งซ้ำสองการ์ด) ไม่มีทั้งคู่ค่อยใช้ชื่อ catalog ดิบ
+// ฝั่งเขียนชีต (sheetValueForColumn()) ยังดูแค่ equipmentSheetNameMap เหมือนเดิม
 function equipmentLineName(product){
-  return (product && equipmentLineNameMap[product]) || product;
+  return (product && (equipmentLineNameMap[product] || equipmentSheetNameMap[product])) || product;
 }
 
 // ---------------------------------------------------------------
@@ -4707,8 +4714,10 @@ function fixLine(row){
   // report loaded from before the tpl-based section split (or edited
   // across a tpl switch) can still have it set in state even though the
   // UI hides it for this job type.
+  // อุปกรณ์เดิมที่ถอดเลือกจาก catalog ของ Stock ได้แล้ว — ใช้ชื่อชุดเดียวกับฝั่งติดตั้ง
+  // (ป้ายจากประวัติทะเบียน เช่น "Ch2: ..." ไม่อยู่ในแมป ได้ค่าเดิมกลับมาเอง)
   const oldName = tplHasOldModel(state.tpl)
-    ? (row.oldModel === "อื่นๆ (พิมพ์เอง)" ? (row.oldModelCustom || "") : row.oldModel)
+    ? (row.oldModel === "อื่นๆ (พิมพ์เอง)" ? (row.oldModelCustom || "") : equipmentLineName(row.oldModel))
     : "";
   // SN จริงไม่ต้องโชว์ในข้อความรายงานแล้ว (ตามที่ขอ "ไม่ต้องเอา EMEI ของกล้อง
   // จริงๆ มาใส่ก็ได้ ให้ใส่แค่ในระบบพอ") — row.newSN/row.oldSN ยังถูกส่งเข้า

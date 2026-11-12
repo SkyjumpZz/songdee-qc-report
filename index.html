@@ -12,7 +12,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>Dashboard · SONGDEE GPS</title>
-<meta name="app-version" content="1.40.0">
+<meta name="app-version" content="1.41.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@100..900&display=swap" rel="stylesheet">
@@ -698,7 +698,8 @@
     <div class="admin-hint">
       ชื่ออุปกรณ์ที่เลือกได้ในฟอร์ม (จาก catalog ของ Stock) → ชื่อที่จะโชว์ในข้อความ LINE แทน — สำหรับอุปกรณ์ที่ชื่อ
       ใน catalog ยาว/อ่านยาก แยกต่างหากจากชื่อที่ลงชีต (ดูการ์ด "ชื่ออุปกรณ์ที่เขียนลง Track" ด้านล่าง — จะตั้งให้
-      เหมือนกันหรือต่างกันก็ได้) อุปกรณ์ที่ยังไม่ตั้งไว้ที่นี่จะใช้ชื่อ catalog ดิบๆ ไปเขียนเหมือนเดิม
+      เหมือนกันหรือต่างกันก็ได้) อุปกรณ์ที่ยังไม่ตั้งไว้ที่นี่จะใช้ชื่อจากการ์ด "ชื่ออุปกรณ์ที่เขียนลง Track (ชีต)" แทน
+      ถ้าการ์ดนั้นก็ไม่ได้ตั้งไว้ ค่อยใช้ชื่อ catalog ดิบๆ — ตั้งที่นี่เฉพาะตัวที่อยากให้ LINE ใช้ชื่อต่างจากชีต
     </div>
     <div id="equipmentLineNameMapRows"></div>
     <div class="name-map-add">
@@ -715,7 +716,8 @@
     <div class="admin-hint">
       ชื่ออุปกรณ์ที่เลือกได้ในฟอร์ม (จาก catalog ของ Stock) → ชื่อจริงที่จะเขียนลงชีต MDVR Tracking แทน — สำหรับ
       อุปกรณ์ที่ชื่อใน catalog ไม่ตรงกับชื่อที่ชีตใช้มานาน (เช่นคอลัมน์ Ch ใช้แค่ "DMS"/"ADAS" ไม่ใช่ชื่อรุ่นเต็มๆ)
-      แยกต่างหากจากชื่อที่ลง LINE ด้านบน อุปกรณ์ที่ยังไม่ตั้งไว้ที่นี่จะใช้ชื่อ catalog ดิบๆ ไปเขียนเหมือนเดิม
+      ข้อความ LINE ใช้ชื่อจากการ์ดนี้ด้วย (เว้นแต่ตั้งชื่อเฉพาะสำหรับ LINE ไว้ในการ์ดด้านบน) อุปกรณ์ที่ยังไม่ตั้งไว้
+      ที่นี่จะใช้ชื่อ catalog ดิบๆ ไปเขียนเหมือนเดิม
       (ไม่กระทบคอลัมน์ Yes/No เช่น Motor/Buzzer — คอลัมน์พวกนั้นลง "Yes" เสมอไม่ว่าจะตั้งชื่อไว้หรือไม่)
     </div>
     <div id="equipmentSheetNameMapRows"></div>
