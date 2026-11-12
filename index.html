@@ -12,7 +12,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>Dashboard · SONGDEE GPS</title>
-<meta name="app-version" content="1.39.0">
+<meta name="app-version" content="1.40.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@100..900&display=swap" rel="stylesheet">
@@ -643,6 +643,22 @@
     <div class="name-map-status" id="testerRosterStatus"></div>
   </div>
 
+  <div class="card app-hidden" id="techNameListCard">
+    <div class="card-title"><span class="dot">👷</span>จัดการรายชื่อช่าง</div>
+    <div class="admin-hint">
+      รายชื่อที่เลือกได้ในช่อง "ช่างที่กำลังทำรายงานนี้" ของฟอร์ม (และใน Dropdown "เลือกชื่อช่าง" ของการ์ดด้านล่างทุกใบ) —
+      ปกติรายชื่อมาจาก Stock (ช่างที่มีของ Spare) กับงานที่เคยมอบหมายใน Admin web เท่านั้น ช่างใหม่ที่ยังไม่มีทั้งสอง
+      อย่างจะไม่มีชื่อให้เลือก เพิ่มชื่อเองได้ที่นี่ ชื่อที่เพิ่มจากหน้านี้ลบได้ ส่วนชื่อที่มาจาก Stock/Admin web ลบจาก
+      หน้านี้ไม่ได้ (ต้องไปแก้ที่ต้นทาง)
+    </div>
+    <div class="name-map-add single-col">
+      <input type="text" id="techNameListNew" placeholder="ชื่อช่างใหม่ เช่น ช่างเอ" onkeydown="if(event.key==='Enter') addTechNameListRow()">
+      <button type="button" onclick="addTechNameListRow()">+ เพิ่ม</button>
+    </div>
+    <div class="name-map-status" id="techNameListStatus"></div>
+    <div class="scroll-list" id="techNameListRows"></div>
+  </div>
+
   <div class="card app-hidden" id="adminNameMapCard">
     <div class="card-title"><span class="dot">🔧</span>จัดการชื่อช่าง (เชื่อมกับ Admin web)</div>
     <div class="admin-hint">
@@ -1033,6 +1049,7 @@ _auth.onAuthStateChanged(async user=>{
     // ดู renderLineGroupMapTechOptions() ซึ่งต้องมี knownTechNames จาก
     // loadKnownTechNames() ก่อนถึงเรียกได้ — รายชื่อตรงนี้คือชื่อที่เลือกได้ใน
     // ฟอร์ม "ช่างที่กำลังทำรายงานนี้" ไม่ใช่ roles.techName ตอนล็อกอิน)
+    document.getElementById('techNameListCard').classList.toggle('app-hidden', !role.superAdmin);
     document.getElementById('adminNameMapCard').classList.toggle('app-hidden', !role.superAdmin);
     document.getElementById('trackNameMapCard').classList.toggle('app-hidden', !role.superAdmin);
     document.getElementById('equipmentLineNameMapCard').classList.toggle('app-hidden', !role.superAdmin);
@@ -1498,6 +1515,11 @@ function addEquipmentSheetNameMapRow(){
 // ---------------------------------------------------------------
 let lineGroupMap = {};
 let knownTechNames = [];
+// knownTechNames = sourceTechNames (Stock's sd_tech + งานที่มอบหมาย — แก้จากหน้านี้
+// ไม่ได้) รวมกับ extraTechNames (sd_qcTechNames — Super Admin เพิ่ม/ลบเองจากการ์ด
+// "จัดการรายชื่อช่าง") form.html รวมสองชุดนี้แบบเดียวกันใน refreshTechStockNames()
+let sourceTechNames = [];
+let extraTechNames = [];
 
 // ===== ประหยัดโควตาอ่าน Firestore (โปรเจกต์เดียวกับ Stock/Admin — ฟรี 50,000 reads/วันรวมทุกแอป) =====
 // รายการที่เปลี่ยนไม่บ่อย (ชื่อช่าง/คำแนะนำ) เก็บใน localStorage ตามเวลาที่กำหนด แทนอ่านใหม่ทุกครั้งที่เปิดหน้า
@@ -1509,8 +1531,9 @@ async function lsCached(key, ttlMs, loader){
 }
 async function loadKnownTechNames(){
   try{
-    const [techSnap, assignedNames] = await Promise.all([
+    const [techSnap, extraSnap, assignedNames] = await Promise.all([
       _db.collection('sd').doc('sd_tech').get(),
+      _db.collection('sd').doc('sd_qcTechNames').get(),
       // ชื่อช่างจากงานทั้งหมด — เก็บไว้ 24 ชม. (เดิมอ่านงานทุกใบทุกครั้ง)
       lsCached('qc_assign_names_v1', 24*60*60*1000, async ()=>{
         const snap = await _db.collection('assignments').get();
@@ -1518,14 +1541,85 @@ async function loadKnownTechNames(){
       }),
     ]);
     const allTechStock = techSnap.exists ? JSON.parse(techSnap.data().v || '{}') : {};
-    knownTechNames = [...new Set([...Object.keys(allTechStock), ...assignedNames])].sort((a,b)=>a.localeCompare(b));
+    sourceTechNames = [...new Set([...Object.keys(allTechStock), ...assignedNames])];
+    const extra = extraSnap.exists ? JSON.parse(extraSnap.data().v || '[]') : [];
+    extraTechNames = Array.isArray(extra) ? extra.filter(n=> typeof n === 'string' && n.trim()) : [];
   }catch(e){
     console.error('[Known tech names] load failed', e);
-    knownTechNames = [];
+    sourceTechNames = []; extraTechNames = [];
   }
+  refreshKnownTechNames();
+}
+
+function refreshKnownTechNames(){
+  knownTechNames = [...new Set([...sourceTechNames, ...extraTechNames])].sort((a,b)=>a.localeCompare(b));
+  renderTechNameListEditor();
   renderLineGroupMapTechOptions();
   renderNameMapTechOptions();
   renderTrackNameMapTechOptions();
+}
+
+async function persistTechNameList(){
+  const statusEl = document.getElementById('techNameListStatus');
+  statusEl.textContent = 'กำลังบันทึก...';
+  statusEl.className = 'name-map-status';
+  try{
+    await _db.collection('sd').doc('sd_qcTechNames').set({ k:'sd:qcTechNames', v: JSON.stringify(extraTechNames) });
+    statusEl.textContent = 'บันทึกแล้ว ✓';
+    statusEl.className = 'name-map-status ok';
+  }catch(e){
+    statusEl.textContent = 'บันทึกไม่สำเร็จ: ' + e.message;
+    statusEl.className = 'name-map-status err';
+  }
+}
+
+function renderTechNameListEditor(){
+  const wrap = document.getElementById('techNameListRows');
+  if(!wrap) return;
+  wrap.innerHTML = '';
+  knownTechNames.forEach(name=>{
+    const row = document.createElement('div');
+    row.className = 'name-map-row single-col';
+
+    const input = document.createElement('input');
+    input.type = 'text'; input.disabled = true;
+
+    // ชื่อที่ Stock/Admin web มีอยู่แล้วด้วย ลบจากหน้านี้ไปก็ยังโผล่ใน Dropdown อยู่ดี
+    // (มาจากต้นทาง) เลยไม่ให้ปุ่มลบ กันเข้าใจผิดว่าลบแล้วจะหายไป
+    const fromSource = sourceTechNames.includes(name);
+    input.value = fromSource ? `${name}  (จาก Stock/Admin web)` : name;
+    row.appendChild(input);
+
+    const rm = document.createElement('button');
+    rm.type = 'button'; rm.textContent = 'ลบ';
+    if(fromSource){
+      rm.style.visibility = 'hidden';
+    } else {
+      rm.onclick = ()=>{
+        extraTechNames = extraTechNames.filter(n=> n !== name);
+        refreshKnownTechNames();
+        persistTechNameList();
+      };
+    }
+    row.appendChild(rm);
+    wrap.appendChild(row);
+  });
+}
+
+function addTechNameListRow(){
+  const input = document.getElementById('techNameListNew');
+  const statusEl = document.getElementById('techNameListStatus');
+  const name = input.value.trim();
+  if(!name) return;
+  if(knownTechNames.includes(name)){
+    statusEl.textContent = `มีชื่อ "${name}" อยู่ในรายชื่อแล้ว`;
+    statusEl.className = 'name-map-status err';
+    return;
+  }
+  extraTechNames.push(name);
+  input.value = '';
+  refreshKnownTechNames();
+  persistTechNameList();
 }
 
 async function loadLineGroupMap(){

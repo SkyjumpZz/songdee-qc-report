@@ -15,7 +15,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.125.0">
+<meta name="app-version" content="1.126.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@100..900&display=swap" rel="stylesheet">
@@ -1202,6 +1202,10 @@ function applyTechStockNames(names){
 }
 
 let techStockNames = []; // merged, deduped names available to pick from
+// ชื่อช่างที่ Super Admin เพิ่มเองจากการ์ด "จัดการรายชื่อช่าง" ใน Dashboard
+// (sd_qcTechNames) — ช่างใหม่ที่ยังไม่มีของ Spare ใน Stock และยังไม่เคยถูก
+// มอบหมายงานใน Admin web จะไม่มีชื่อให้เลือกเลยถ้าไม่มีชุดนี้
+let extraTechNames = [];
 let assignedTechNames = []; // assignedToName values seen across all `assignments` docs (see loadCustomerFleetSuggestions)
 
 // Gating this list on Spare-stock ownership alone (Object.keys(allTechStock))
@@ -1212,7 +1216,7 @@ let assignedTechNames = []; // assignedToName values seen across all `assignment
 // options as long as ANY job has ever been assigned to anyone, not only once
 // someone's Spare stock has been logged in Stock.
 function refreshTechStockNames(){
-  techStockNames = [...new Set([...Object.keys(allTechStock), ...assignedTechNames])].sort();
+  techStockNames = [...new Set([...Object.keys(allTechStock), ...assignedTechNames, ...extraTechNames])].sort();
   wireTechStockSearch();
 }
 
@@ -1321,12 +1325,26 @@ function wireTechStockSearch(){
 }
 
 async function loadTechStock(){
+  // แยก try คนละก้อน — sd_qcTechNames โหลดไม่ได้ (เช่นยังไม่เคยมีเอกสาร/เน็ตสะดุด)
+  // ต้องไม่ทำให้ของ Spare จาก sd_tech หายไปด้วย
+  const [stockRes, extraRes] = await Promise.allSettled([
+    _db.collection('sd').doc('sd_tech').get(),
+    _db.collection('sd').doc('sd_qcTechNames').get(),
+  ]);
   try{
-    const snap = await _db.collection('sd').doc('sd_tech').get();
-    allTechStock = snap.exists ? JSON.parse(snap.data().v || '{}') : {};
+    if(stockRes.status !== 'fulfilled') throw stockRes.reason;
+    allTechStock = stockRes.value.exists ? JSON.parse(stockRes.value.data().v || '{}') : {};
   }catch(e){
     console.error('[Tech stock]', e);
     allTechStock = {};
+  }
+  try{
+    if(extraRes.status !== 'fulfilled') throw extraRes.reason;
+    const extra = extraRes.value.exists ? JSON.parse(extraRes.value.data().v || '[]') : [];
+    extraTechNames = Array.isArray(extra) ? extra.filter(n=> typeof n === 'string' && n.trim()) : [];
+  }catch(e){
+    console.error('[Extra tech names]', e);
+    extraTechNames = [];
   }
   techStockChecked = true;
   refreshTechStockNames();
