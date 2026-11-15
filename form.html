@@ -15,7 +15,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.128.0">
+<meta name="app-version" content="1.129.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@100..900&display=swap" rel="stylesheet">
@@ -278,6 +278,11 @@
     transition:border-color .15s ease, color .15s ease, background .15s ease;
   }
   .btn-add:hover{border-color:var(--accent); color:var(--accent); background:rgba(216,25,33,.06);}
+  /* ปุ่มที่ปิดอยู่ต้องดูออกว่ากดไม่ได้ — เดิมหน้าตาเหมือนปุ่มปกติทุกอย่าง (hover ก็ยังขึ้นสีแดง)
+     กดแล้วเงียบ เลยดูเหมือนปุ่มเสีย */
+  .btn-add:disabled, .btn-add:disabled:hover{
+    opacity:.5; cursor:not-allowed; border-color:var(--line); color:var(--text-dim); background:transparent;
+  }
   .check-item{
     border:1px solid var(--line-soft); border-radius:var(--r-md);
     padding:0; margin-bottom:10px; background:var(--bg-panel-2);
@@ -3473,7 +3478,7 @@ function renderProblemRows(){
 // technician brought over from another job, not part of this job's
 // ใบเบิก/ของ Spare. Such a row always gets the full free-pick catalog in
 // buildProductHalf() regardless of whether the rest of the form is locked
-// to a ใบเบิก/Spare list, and doesn't count against lockedOptionsCount.
+// to a ใบเบิก/Spare list, and doesn't count against the ใบเบิก/Spare quantities (see canAddLockedRow()).
 function addFixRow(extra){
   // แถวก่อนหน้าที่เลือกอุปกรณ์ไว้แล้วแต่ยังไม่เคยสั่งย่อ/ขยายเอง — ย่ออัตโนมัติ
   // ตอนนี้ (ถือว่า "จบ" แล้วถึงมาเพิ่มแถวใหม่ต่อ) ไม่กระทบแถวที่ช่างกดเองไว้แล้ว
@@ -3569,7 +3574,6 @@ function fixRowsStockContext(){
   // not part of this job's ใบเบิก/ของ Spare) still needs the full
   // free-pick catalog regardless of the rest of the form's lock state.
   const freeOptions = [...genericDeviceTypes, ...baseCatalog, "อื่นๆ (พิมพ์เอง)"];
-  const lockedOptionsCount = Object.keys(lockItems).length;
 
   // ล็อกรายการจากใบเบิก/ของ Spare มีจำนวนจำกัดต่อชิ้น — ถ้ามีของชิ้นเดียวกัน
   // แต่ต้องใช้หลายแถว (เช่น Motor เหลือ 1) ต้องหักจำนวนที่แถวอื่นเลือกไปแล้ว
@@ -3584,7 +3588,27 @@ function fixRowsStockContext(){
     }, 0);
     return Math.max(0, (lockItems[product]||0) - usedElsewhere);
   }
-  return { hasLock, hasTechStock, locked, lockItems, freeOptions, lockedOptionsCount, remainingFor };
+  // ยังมีของในใบเบิก/ของ Spare เหลือให้แถวใหม่เลือกอีกไหม — ใช้ตัดสินว่าจะปิดปุ่ม "+ เพิ่ม..."
+  // หรือไม่ เดิมเทียบ "จำนวนแถวทั้งหมด >= จำนวนชนิดของในใบเบิก" ซึ่งผิดสองทาง: (1) นับแถว
+  // "① ถอด" ของอัปเกรดรวมไปด้วย ทั้งที่แถวถอดไม่ได้เบิกของเลย — ถอดเยอะๆ แล้วปุ่ม "+ เพิ่ม
+  // อุปกรณ์ที่ติดตั้ง" ดับไปเฉยๆ ตั้งแต่ยังไม่ได้เพิ่มของสักชิ้น (ตามที่แจ้ง "กดแล้วไม่มีอะไร
+  // เกิดขึ้น") (2) นับตามชนิด ไม่ใช่จำนวนชิ้น — เบิกกล้องรุ่นเดียว 4 ตัวได้แถวเดียว ทั้งที่
+  // ต้องแยกแถวเพื่อเลือก CH ของแต่ละตัว ตอนนี้นับจำนวนชิ้นที่เหลือจริง: ยอดในใบเบิก/Spare
+  // หักที่แถวอื่นเลือกไปแล้ว และหักแถวว่างที่ยังรอเลือกของอยู่ (แถวที่มีแต่หมายเหตุ ไม่ได้
+  // เลือกของ ไม่นับ — ไม่ได้ใช้ของ)
+  function canAddLockedRow(){
+    if(!locked) return true;
+    const used = {};
+    let pending = 0;
+    state.fixes.forEach(r=>{
+      if(r.extra || r.section === 'remove') return;
+      if(r.product in lockItems) used[r.product] = (used[r.product]||0) + (parseInt(r.qty) || 0);
+      else if(!r.product && !(r.remark||'').trim()) pending++;
+    });
+    const left = Object.entries(lockItems).reduce((sum, [k, v])=> sum + Math.max(0, (v||0) - (used[k]||0)), 0);
+    return left - pending > 0;
+  }
+  return { hasLock, hasTechStock, locked, lockItems, freeOptions, remainingFor, canAddLockedRow };
 }
 
 // Searchable, optionally-grouped replacement for a plain <select> — the
@@ -4244,10 +4268,10 @@ function renderFixRows(){
     container.appendChild(wrap);
   });
   const addBtn = document.getElementById('addFixBtn');
-  // row.extra rows ("ของนอกเหนือรายการ") draw from the free catalog, not
-  // the ใบเบิก/Spare pool — don't count them against lockedOptionsCount.
-  const lockedRowCount = state.fixes.filter(r=> !r.extra).length;
-  addBtn.disabled = ctx.locked ? lockedRowCount >= ctx.lockedOptionsCount : false;
+  // ของในใบเบิก/ของ Spare ถูกเลือกครบแล้วเท่านั้นถึงปิดปุ่ม (ดู canAddLockedRow()) — ของ
+  // เพิ่มนอกรายการใช้ปุ่ม "+ เพิ่มของนอกเหนือรายการ" ด้านล่างแทน
+  addBtn.disabled = !ctx.canAddLockedRow();
+  addBtn.title = addBtn.disabled ? 'ของในใบเบิก/ของ Spare ถูกเลือกครบแล้ว — ถ้ามีของเพิ่ม กด "+ เพิ่มของนอกเหนือรายการ"' : '';
   const addExtraBtn = document.getElementById('addFixExtraBtn');
   if(addExtraBtn) addExtraBtn.classList.toggle('app-hidden', !ctx.locked);
 }
@@ -4314,11 +4338,18 @@ function renderRemoveSections(ctx){
   // ① ถอด ไม่มีแคปจำนวนจากใบเบิก/ของ Spare (อิงประวัติรถเอง ไม่ได้เบิกของ) —
   // ② ติดตั้ง ล็อกตามใบเบิก/ของ Spare เฉพาะอัปเกรด (installCtx ด้านบน — ถอดย้าย
   // ยัง free-pick เสมอ ไม่มีแคป) — ③ แก้ไข ล็อกตามปกติเหมือน renderFixRows()
-  const lockedRowCount = state.fixes.filter(r=> !r.extra).length;
-  document.getElementById('addRemoveEditBtn').disabled = ctx.locked && lockedRowCount >= ctx.lockedOptionsCount;
+  // "+ เพิ่มรายการแก้ไข" ไม่ปิดอีกแล้ว — รายการแก้ไขพิมพ์แค่หมายเหตุโดยไม่เลือกของก็ได้
+  // ไม่ควรโดนจำนวนของในใบเบิกมาบล็อก
+  document.getElementById('addRemoveEditBtn').disabled = false;
   const addRemoveEditExtraBtn = document.getElementById('addRemoveEditExtraBtn');
   if(addRemoveEditExtraBtn) addRemoveEditExtraBtn.classList.toggle('app-hidden', !ctx.locked);
-  document.getElementById('addRemoveNewBtn').disabled = installCtx.locked && lockedRowCount >= installCtx.lockedOptionsCount;
+  // ปิดเฉพาะตอนของในใบเบิก/ของ Spare ถูกเลือกครบจริงๆ (ดู canAddLockedRow()) และบอกเหตุผล
+  // บนปุ่มเลย ไม่ให้เป็นปุ่มที่กดแล้วเงียบ
+  const addRemoveNewBtn = document.getElementById('addRemoveNewBtn');
+  addRemoveNewBtn.disabled = installCtx.locked && !installCtx.canAddLockedRow();
+  addRemoveNewBtn.textContent = addRemoveNewBtn.disabled
+    ? 'ของในใบเบิก/ของ Spare เลือกครบแล้ว — ถ้ามีของเพิ่ม กดปุ่มด้านล่าง'
+    : '+ เพิ่มอุปกรณ์ที่ติดตั้ง';
   const addRemoveNewExtraBtn = document.getElementById('addRemoveNewExtraBtn');
   if(addRemoveNewExtraBtn) addRemoveNewExtraBtn.classList.toggle('app-hidden', !installCtx.locked);
 }
