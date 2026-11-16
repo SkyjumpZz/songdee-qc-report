@@ -15,7 +15,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.131.0">
+<meta name="app-version" content="1.132.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@100..900&display=swap" rel="stylesheet">
@@ -4838,17 +4838,18 @@ function fixLine(row){
   // หมายเหตุแทน ดู buildProductHalf()'s remark textarea.
   const remark = (row.remark || '').trim();
   const remarkTag = remark ? ` (${remark})` : '';
+  // บอกคำว่า "ถอด"/"ติดตั้ง" + "จำนวน N ตัว" ทุกบรรทัดอุปกรณ์ (ตามที่ขอ 2026-11-16
+  // "เวลาลงงานผ่าน Line แล้วไม่ชัด") — เดิมบรรทัดติดตั้งเหลือแค่ชื่ออุปกรณ์เฉยๆ และ
+  // ไม่บอกจำนวน ช่องจำนวนในฟอร์มตั้งต้นเป็น 1 อยู่แล้ว ค่าว่าง/ไม่ใช่ตัวเลขถือเป็น 1
+  const qtyN = parseInt(row.qty, 10) > 0 ? parseInt(row.qty, 10) : 1;
+  const qtyTag = ` จำนวน ${qtyN} ตัว`;
   // แถวที่มีทั้ง oldModel และ product พร้อมกัน (เช่น เปลี่ยน MDVR ทั้งเครื่อง —
   // ดู buildMdvrUnitSwapHalf()) เดิมรวมเป็นบรรทัดเดียว "ทำการเปลี่ยน X เป็น Y"
   // แยกเป็น 2 บรรทัดแทน (ตามที่ขอ "Upgrade ให้เป็นรายการแยกกัน") ให้ฟอร์แมต
   // ตรงกับแถวถอด-อย่างเดียว/ติดตั้ง-อย่างเดียวด้านล่างเป๊ะๆ
-  if(oldName && name) return `- ทำการถอด ${oldName}${oldTag}${oldPhoneTag}\n- ${name}${deviceIdTag}${chTag}${storageSlotTag}${phoneTag}${ownTag}${extraTag}${remarkTag}`;
-  if(name){
-    const qty = row.qty ? ` x${row.qty}` : '';
-    // ตัดคำ "ทำการติดตั้ง" ออก (ตามที่ขอ "สั้นๆ") — เหลือแค่ "- ชื่ออุปกรณ์..."
-    return `- ${name}${qty}${deviceIdTag}${chTag}${storageSlotTag}${phoneTag}${ownTag}${extraTag}${remarkTag}`;
-  }
-  if(oldName) return `- ทำการถอด ${oldName}${oldTag}${ownTag}${remarkTag}`;
+  if(oldName && name) return `- ถอด ${oldName}${qtyTag}${oldTag}${oldPhoneTag}\n- ติดตั้ง ${name}${qtyTag}${deviceIdTag}${chTag}${storageSlotTag}${phoneTag}${ownTag}${extraTag}${remarkTag}`;
+  if(name) return `- ติดตั้ง ${name}${qtyTag}${deviceIdTag}${chTag}${storageSlotTag}${phoneTag}${ownTag}${extraTag}${remarkTag}`;
+  if(oldName) return `- ถอด ${oldName}${qtyTag}${oldTag}${ownTag}${remarkTag}`;
   if(remark) return `- ${remark}`;
   return null;
 }
@@ -4857,14 +4858,14 @@ function fixLine(row){
 // ถอด ให้มันเป็นสีแดง") — ข้อความ Line แบบ type:"text" ธรรมดาใส่สีตัวอักษรจริงๆ
 // ไม่ได้เลย (ต้องเป็น Flex Message ซึ่งคัดลอก/แก้ไข/ส่งต่อในแชทไม่ได้ ตามที่เคย
 // เปลี่ยนกลับมาใช้ข้อความธรรมดาไปแล้ว) ใช้ 🔴 แทนสีตามที่เลือก — markRemoveLine()
-// เช็คเฉพาะ "- ทำการถอด " ตรงๆ (prefix ที่ fixLine() ใช้เป๊ะ) ไม่ใช่ทุกบรรทัดที่
+// เช็คเฉพาะ "- ถอด " ตรงๆ (prefix ที่ fixLine() ใช้เป๊ะ) ไม่ใช่ทุกบรรทัดที่
 // มีคำว่า "ถอด" เผื่อไปโดนข้อความอื่นที่ไม่เกี่ยวโดยไม่ตั้งใจ (เช่น "ถอดย้าย
 // อุปกรณ์" ในชื่อประเภทงานที่ไม่ใช่รายการอุปกรณ์) ใช้ได้ทั้งบรรทัดเดี่ยวและ
 // บรรทัดคู่ถอด+ติดตั้งที่คั่นด้วย \n (เช็คแค่ prefix ของทั้งสตริง ไม่กระทบบรรทัด
 // ที่ 2 ที่ต่อท้าย)
 function markRemoveLine(line){
-  const prefix = '- ทำการถอด ';
-  return line.startsWith(prefix) ? `- 🔴 ทำการถอด ${line.slice(prefix.length)}` : line;
+  const prefix = '- ถอด ';
+  return line.startsWith(prefix) ? `- 🔴 ถอด ${line.slice(prefix.length)}` : line;
 }
 function markRemoveHeader(header){
   return header.includes('ถอด') ? `🔴 ${header}` : header;
@@ -4876,7 +4877,7 @@ function markRemoveHeader(header){
 // เหลือแค่ชื่อเฉยๆ เลยดูแยกไม่ออกว่าเป็นถอดหรือติดตั้ง (ตามที่แจ้ง "ไม่มีคำมา
 // บอกมันจะทำให้อ่านยาก") ใช้ 🟢 นำหน้าแทน ไม่เอาคำกลับมา (ตามที่เลือก) —
 // markInstallLine() ไม่เช็ค prefix เฉพาะเจาะจงแบบ markRemoveLine() เพราะบรรทัด
-// ติดตั้งไม่มี prefix คงที่ให้เช็ค (ต่างจาก "- ทำการถอด ") ผู้เรียกต้องมั่นใจเองว่า
+// ติดตั้งเช็คจากข้อมูลแถวแทน (ดู markedFixLine()) ผู้เรียกต้องมั่นใจเองว่า
 // line ที่ส่งเข้ามาเป็นบรรทัดติดตั้งจริงๆ ไม่ใช่บรรทัด remark เฉยๆ — ดู
 // markedFixLine() ด้านล่างที่เช็คจากข้อมูลแถว (row.oldModel/row.product) แทน
 // การเดาจากข้อความ เพื่อไม่ให้ไปติดบรรทัด remark ที่หน้าตาเหมือนกันทุกประการ
