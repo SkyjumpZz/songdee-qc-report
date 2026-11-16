@@ -15,7 +15,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.132.0">
+<meta name="app-version" content="1.133.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@100..900&display=swap" rel="stylesheet">
@@ -2624,6 +2624,14 @@ const REPORT_FIELD_LABELS = {
   mdvrPosition: 'MDVR position', groundPoint: 'จุดจั๊มไฟ', province: 'Province', statusDlt: 'Status DLT',
   tapIo: 'หมายเหตุสาย IO (TAP IO)',
 };
+// สำเนาแบบลึกของรายงานไว้เทียบตอนบันทึกครั้งถัดไป (originalReportDoc) — เดิมใช้ {...x}
+// ซึ่งก๊อปแค่ชั้นบนสุด problems/fixes/stickers/checklist ยังเป็นก้อนเดียวกับ state ที่
+// ฟอร์มแก้ค่าตรงๆ (state.problems[i].symptom = ...) พอแก้ในฟอร์ม "ของเดิม" ก็เปลี่ยนตาม
+// diffReportFields() เลยเห็นว่าเท่ากันเสมอ log ประวัติไม่เคยบันทึกการแก้ ปัญหา/รายการ
+// แก้ไข/สติ๊กเกอร์/checklist เลย (เจอตอนตามหารายงานที่ถูกเขียนทับ 2026-11-16)
+function snapshotReport(doc){
+  return JSON.parse(JSON.stringify(doc));
+}
 function diffReportFields(oldDoc, payload){
   const changes = [];
   const tplForLabels = payload.tpl || oldDoc.tpl;
@@ -2752,7 +2760,7 @@ async function saveReport(){
     await logReportChange('create', payload, []);
   }
   if(epoch !== reportEpoch) return;
-  originalReportDoc = { ...payload, id: currentReportId };
+  originalReportDoc = snapshotReport({ ...payload, id: currentReportId });
 }
 
 // บันทึกรายงานให้ได้ก่อนส่งเข้า LINE เสมอ — ลองซ้ำสูงสุด 3 รอบ แต่ละรอบรอไม่เกิน 20 วิ
@@ -2783,7 +2791,7 @@ function loadReportIntoForm(doc){
   currentReportId = doc.id;
   reportEpoch++;
   pendingNewReportRef = null;
-  originalReportDoc = { ...doc };
+  originalReportDoc = snapshotReport(doc);
   isResendOfExistingReport = true;
   isQuickResend = false; // caller (loadReportFromUrlIfAny()) sets this true right after, only for &autosend=1
   selectedAssignmentId = null;
