@@ -11,7 +11,7 @@
 (function(){try{if(localStorage.getItem('sd-theme')==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
-<meta name="app-version" content="1.9.0">
+<meta name="app-version" content="1.10.0">
 <title>ประวัติรายงาน · SONGDEE GPS</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -593,8 +593,10 @@ function relativeDateLabel(dateStr){
   if(!dateStr) return 'ไม่ระบุวันที่';
   const today = new Date(); today.setHours(0,0,0,0);
   const yesterday = new Date(today); yesterday.setDate(yesterday.getDate()-1);
-  if(dateStr === today.toISOString().slice(0,10)) return 'วันนี้';
-  if(dateStr === yesterday.toISOString().slice(0,10)) return 'เมื่อวาน';
+  // วันที่ของเครื่อง ไม่ใช่ UTC — toISOString() ทำให้ป้ายเลื่อนไป 1 วันในไทย (UTC+7)
+  const localDateStr = d=> `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  if(dateStr === localDateStr(today)) return 'วันนี้';
+  if(dateStr === localDateStr(yesterday)) return 'เมื่อวาน';
   return dateStr.split('-').reverse().join('/');
 }
 

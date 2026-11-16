@@ -15,7 +15,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.130.0">
+<meta name="app-version" content="1.131.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@100..900&display=swap" rel="stylesheet">
@@ -903,6 +903,7 @@
   </div>
   <div class="app-hidden" id="sentLinkWrap" style="text-align:center; margin-top:8px;">
     <a href="index.html" style="color:var(--accent-2); font-size:13px; text-decoration:underline; text-underline-offset:2px;">✅ ส่งแล้ว — ไปหน้า Dashboard</a>
+    <a class="app-hidden" id="sentRetrackLink" href="#" onclick="event.preventDefault(); retrackCurrentReport();" style="display:block; margin-top:6px; color:var(--danger); font-size:13px; text-decoration:underline; text-underline-offset:2px;">⚠️ Track บางรายการไม่สำเร็จ — กดเพื่อลอง Track ใหม่</a>
   </div>
 </div>
 
@@ -1009,6 +1010,10 @@ firebase.initializeApp(FIREBASE_CONFIG);
 installReadMeter('qc-form', 'https://songdee-line-proxy.songdeegps.workers.dev/stats/reads', async()=>({'Content-Type':'application/json', Authorization:'Bearer '+await firebase.auth().currentUser.getIdToken()}));
 const _auth = firebase.auth();
 const _db = firebase.firestore();
+// ค่า undefined ที่หลุดเข้าไปใน state (เช่น ติ๊กแล้วเอาออก) ทำให้ Firestore ปฏิเสธการบันทึก
+// ทั้งใบ ("Unsupported field value: undefined") — ให้ข้ามช่องนั้นไปแทน รายงานต้องบันทึกได้
+// เสมอ try/catch กันกรณี settings() ถูกเรียกช้าไป ไม่ให้ทั้งหน้าพัง
+try{ _db.settings({ ignoreUndefinedProperties: true, merge: true }); }catch(e){ console.warn('[Firestore settings]', e); }
 
 // ทุกคำขอที่ยิงเข้า Worker หลังบ้าน (songdee-vehicle-lookup / songdee-line-proxy
 // / songdee-drive-proxy) ต้องแนบ Firebase ID token ของผู้ใช้ที่ล็อกอินอยู่ — Worker
@@ -2727,20 +2732,57 @@ async function saveReport(){
     updatedAt: Date.now(),
   };
   const changes = (currentReportId && originalReportDoc) ? diffReportFields(originalReportDoc, payload) : [];
+  const epoch = reportEpoch;
   if(currentReportId){
-    await _db.collection('qc_reports').doc(currentReportId).set(payload, {merge:true});
+    const id = currentReportId;
+    await _db.collection('qc_reports').doc(id).set(payload, {merge:true});
+    if(epoch !== reportEpoch) return;
     if(changes.length) await logReportChange('update', payload, changes);
   } else {
     payload.createdAt = Date.now();
-    const ref = await _db.collection('qc_reports').add(payload);
+    // จองรหัสเอกสารไว้ก่อนแล้วค่อย set() (ไม่ใช้ add()) — sendToLine() ลองบันทึกซ้ำเมื่อ
+    // ล้มเหลว/ค้างเกินเวลา ถ้ารอบแรกจริงๆ ไปถึงเซิร์ฟเวอร์แล้ว รอบถัดไปจะเขียนทับเอกสาร
+    // เดิม ไม่เกิดรายงานซ้ำสองใบ
+    pendingNewReportRef = pendingNewReportRef || _db.collection('qc_reports').doc();
+    const ref = pendingNewReportRef;
+    await ref.set(payload);
+    if(epoch !== reportEpoch) return; // ฟอร์มกลายเป็นรายงานใบอื่นไปแล้วระหว่างรอ — อย่าแตะ state ของใบใหม่
     currentReportId = ref.id;
+    pendingNewReportRef = null;
     await logReportChange('create', payload, []);
   }
+  if(epoch !== reportEpoch) return;
   originalReportDoc = { ...payload, id: currentReportId };
+}
+
+// บันทึกรายงานให้ได้ก่อนส่งเข้า LINE เสมอ — ลองซ้ำสูงสุด 3 รอบ แต่ละรอบรอไม่เกิน 20 วิ
+// (Firestore ตอนเน็ตหลุดจะไม่ error แต่ค้างรอไปเรื่อยๆ ปุ่มส่งจะค้างตามถ้าไม่ตั้งเวลา)
+// คืน null เมื่อบันทึกสำเร็จ ไม่งั้นคืน error ของรอบสุดท้าย
+async function saveReportReliably(){
+  let lastErr = null;
+  for(let attempt = 1; attempt <= 3; attempt++){
+    try{
+      await Promise.race([
+        saveReport(),
+        new Promise((_, reject)=> setTimeout(()=> reject(new Error('หมดเวลารอ — อินเทอร์เน็ตช้าหรือหลุด')), 20000)),
+      ]);
+      return null;
+    }catch(e){
+      lastErr = e;
+      console.error(`[Report save] attempt ${attempt}`, e);
+      if(attempt < 3){
+        showToast(`บันทึกรายงานยังไม่สำเร็จ — กำลังลองใหม่ (ครั้งที่ ${attempt + 1}/3)...`);
+        await new Promise(r=> setTimeout(r, 1500 * attempt));
+      }
+    }
+  }
+  return lastErr;
 }
 
 function loadReportIntoForm(doc){
   currentReportId = doc.id;
+  reportEpoch++;
+  pendingNewReportRef = null;
   originalReportDoc = { ...doc };
   isResendOfExistingReport = true;
   isQuickResend = false; // caller (loadReportFromUrlIfAny()) sets this true right after, only for &autosend=1
@@ -2838,15 +2880,27 @@ async function loadReportFromUrlIfAny(){
 
 // ล้างปุ่ม "✅ ส่งแล้ว" + ลิงก์ไป Dashboard กลับเป็นสถานะปกติ — เรียกทุกครั้งที่
 // เริ่ม/เปิดรายงานใหม่ ไม่งั้นสถานะ "ส่งแล้ว" ของรายงานก่อนหน้าจะค้างข้ามมา
+// วันที่ของเครื่อง (ไม่ใช่ UTC) รูปแบบ YYYY-MM-DD — toISOString() เป็นเวลา UTC ทำให้ช่วง
+// 00:00-06:59 ของไทยได้วันที่ของเมื่อวาน
+function localDateStr(d){
+  d = d || new Date();
+  const pad = n=> String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
 function resetSendButton(){
   const sendBtn = document.getElementById('sendBtn');
   if(sendBtn){ sendBtn.disabled = false; sendBtn.textContent = '📤 ส่งเข้า LINE'; }
   const linkWrap = document.getElementById('sentLinkWrap');
   if(linkWrap) linkWrap.classList.add('app-hidden');
+  const retrackLink = document.getElementById('sentRetrackLink');
+  if(retrackLink) retrackLink.classList.add('app-hidden');
 }
 
 function startNewReport(){
   currentReportId = null;
+  reportEpoch++;
+  pendingNewReportRef = null;
   originalReportDoc = null;
   isResendOfExistingReport = false;
   isQuickResend = false;
@@ -2876,6 +2930,8 @@ function startNextVehicle(){
   const keepFleet = state.fleet;
   const keepTpl = state.tpl;
   currentReportId = null;
+  reportEpoch++;
+  pendingNewReportRef = null;
   originalReportDoc = null;
   isResendOfExistingReport = false;
   isQuickResend = false;
@@ -3286,7 +3342,7 @@ const STICKERS = [
 function defaultState(){
   return {
     tpl: "upgrade",
-    date: new Date().toISOString().slice(0,10),
+    date: localDateStr(),
     customer: "",
     fleet: "",
     plate: "",
@@ -3333,6 +3389,11 @@ function defaultState(){
 }
 let state = defaultState();
 let currentReportId = null;
+let pendingNewReportRef = null; // ดู saveReport() — รหัสเอกสารที่จองไว้ระหว่างลองบันทึกรายงานใหม่
+// เพิ่มทุกครั้งที่ฟอร์มเปลี่ยนไปเป็นรายงานใบอื่น (เปิดใบเดิม/เริ่มใบใหม่/คันถัดไป) — saveReport()
+// ที่ค้างเกินเวลาแล้วมาเสร็จทีหลังจะเช็คเลขนี้ก่อนแตะ currentReportId ไม่งั้นรหัสของรายงาน
+// คันก่อนจะกลับมาเกาะฟอร์มของคันใหม่ แล้วการส่งครั้งถัดไปจะเขียนทับรายงานคันก่อน
+let reportEpoch = 0;
 // Snapshot of the qc_reports doc as loaded/last saved — diffed against the
 // next save's payload to build the "qc_report_logs" change entry. See
 // saveReport()/diffReportFields() above.
@@ -4475,7 +4536,7 @@ function renderChecklist(){
     const txt = document.createElement('span');
     txt.textContent = CHECK_PASS_LABEL[item.type];
     cb.onchange = ()=>{
-      state.checklist[item.key] = cb.checked ? true : undefined;
+      if(cb.checked) state.checklist[item.key] = true; else delete state.checklist[item.key];
       renderChecklist();
       updatePreview();
     };
@@ -4486,7 +4547,7 @@ function renderChecklist(){
     naBtn.className = 'check-na-btn' + (state.checklist[item.key] === 'na' ? ' active' : '');
     naBtn.textContent = '- ไม่มีอุปกรณ์นี้';
     naBtn.onclick = ()=>{
-      state.checklist[item.key] = state.checklist[item.key] === 'na' ? undefined : 'na';
+      if(state.checklist[item.key] === 'na') delete state.checklist[item.key]; else state.checklist[item.key] = 'na';
       renderChecklist();
       updatePreview();
     };
@@ -5700,6 +5761,30 @@ async function retrackReport(doc){
   showToast((suffix ? 'Track ซ้ำเสร็จแล้ว' + suffix : 'Track ซ้ำเสร็จแล้ว — ไม่มีรายการที่ต้องเขียนลง Tracking สำหรับรายงานนี้'));
 }
 
+// ลิงก์ "ลอง Track ใหม่" ใต้ปุ่ม ✅ ส่งแล้ว — รันเฉพาะ write-back ลง Tracking ของรายงาน
+// ที่เพิ่งส่งไป (ไม่ส่ง LINE ซ้ำ ไม่บันทึกรายงานซ้ำ) ใช้ state ที่ยังค้างอยู่ในฟอร์ม
+let retrackBusy = false;
+async function retrackCurrentReport(){
+  if(retrackBusy || !currentReportId) return;
+  retrackBusy = true;
+  const link = document.getElementById('sentRetrackLink');
+  try{
+    showToast('กำลัง track ซ้ำ...');
+    await loadVehicleOldModels();
+    const { results: trackResults, suffix } = await runTrackWriteBacks();
+    try{ await _db.collection('qc_reports').doc(currentReportId).set({ trackResults, trackResultsAt: Date.now() }, {merge:true}); }
+    catch(e){ console.error('[trackResults save]', e); }
+    const stillFailed = Object.values(trackResults || {}).some(r=> r && r.ok === false);
+    link.classList.toggle('app-hidden', !stillFailed);
+    showToast('Track ซ้ำเสร็จแล้ว' + suffix);
+  }catch(e){
+    console.error('[retrack current]', e);
+    showToast('Track ซ้ำไม่สำเร็จ: ' + e.message);
+  }finally{
+    retrackBusy = false;
+  }
+}
+
 async function sendToLine(){
   const endpoint = LINE_ENDPOINT.trim();
   const sendBtn = document.getElementById('sendBtn');
@@ -5739,6 +5824,31 @@ async function sendToLine(){
       if(!ok){ showToast('ยกเลิกการส่ง (ยังไม่ได้เลือกช่าง)'); return; }
     }
 
+    // กันรายงานถูกเขียนทับ: ฟอร์มนี้ยังผูกกับรายงานที่บันทึกไปแล้ว (currentReportId) แต่
+    // ทะเบียนถูกเปลี่ยนเป็นอีกคัน — เดิมจะ set(merge) ทับเอกสารเดิมทันที ทำให้รายงานของ
+    // คันก่อนหายไปจาก Dashboard ทั้งที่ส่งเข้า LINE ไปแล้ว (LINE มี 2 ข้อความ แต่ในระบบ
+    // เหลือใบเดียว) ถามให้ชัดก่อนว่าเป็นรถอีกคัน (→ บันทึกเป็นใบใหม่ ใบเดิมอยู่ครบ)
+    // หรือแค่แก้ทะเบียนที่พิมพ์ผิดของใบเดิม
+    if(currentReportId && originalReportDoc){
+      const oldPlate = normPlate(originalReportDoc.plate || '');
+      const newPlate = normPlate(state.plate || '');
+      if(oldPlate && newPlate && oldPlate !== newPlate){
+        const asNew = confirm(`ทะเบียนเปลี่ยนจาก "${originalReportDoc.plate}" เป็น "${state.plate}"\n\nเป็นรถอีกคันใช่หรือไม่?\n\nกด "ตกลง" = บันทึกเป็นรายงานใบใหม่ (รายงานของ ${originalReportDoc.plate} ยังอยู่เหมือนเดิม)\nกด "ยกเลิก" = ไม่ใช่ เป็นรถคันเดิม`);
+        if(asNew){
+          currentReportId = null;
+          reportEpoch++;
+          pendingNewReportRef = null;
+          originalReportDoc = null;
+          isResendOfExistingReport = false;
+          isQuickResend = false;
+          document.getElementById('editingBanner').classList.add('app-hidden');
+        } else {
+          const fixPlate = confirm(`แก้ทะเบียนของรายงานใบเดิมจาก "${originalReportDoc.plate}" เป็น "${state.plate}" ใช่หรือไม่?\n\n(รายงานใบเดิมจะถูกแก้ไข ไม่มีการสร้างใบใหม่)`);
+          if(!fixPlate){ showToast('ยกเลิกการส่ง'); return; }
+        }
+      }
+    }
+
     // ยังไม่มี currentReportId แปลว่าเป็นรายงานใหม่ (ไม่ใช่กำลังแก้ไข/ส่งซ้ำ
     // รายงานที่เปิดมาจากประวัติ) — เช็คว่ามีรายงานทะเบียน+วันที่+ประเภทงาน
     // เดียวกันถูกส่งไปแล้วเมื่อไม่นานนี้หรือไม่ (น่าจะมาจากอีกเครื่อง เพราะ
@@ -5767,18 +5877,24 @@ async function sendToLine(){
 
     const text = buildMessage();
 
-    let saveError = null;
-    try{ await saveReport(); }
-    catch(e){ saveError = e; console.error('[Report save]', e); }
-    let saveSuffix = (saveError ? ` (บันทึกลง database ไม่สำเร็จ: ${saveError.message})` : '') + photoSuffix;
+    // ต้องบันทึกรายงานลงระบบให้ได้ก่อนเสมอ ถึงจะส่งเข้า LINE — เดิมถ้าบันทึกไม่สำเร็จ
+    // ก็ยังส่ง LINE ต่อ (แค่มีข้อความเตือนสั้นๆ ใน toast) ทำให้มีข้อความใน LINE แต่ไม่มี
+    // รายงานบน Dashboard ตอนนี้ลองบันทึกซ้ำให้เอง 3 รอบ ถ้ายังไม่ได้จะหยุดตรงนี้ ไม่ส่ง
+    // LINE ไม่เขียน Tracking — ข้อมูลในฟอร์มยังอยู่ครบ กดส่งใหม่ได้ทันทีเมื่อเน็ตกลับมา
+    showToast('กำลังบันทึกรายงาน...');
+    const saveError = await saveReportReliably();
+    if(saveError){
+      showToast('บันทึกรายงานไม่สำเร็จ — ยังไม่ได้ส่งเข้า LINE');
+      alert(`บันทึกรายงานลงระบบไม่สำเร็จ จึงยังไม่ได้ส่งเข้า LINE\n\nสาเหตุ: ${saveError.message}\n\nข้อมูลที่กรอกยังอยู่ครบ — ตรวจสอบสัญญาณอินเทอร์เน็ต แล้วกด "ส่งเข้า LINE" อีกครั้ง`);
+      return;
+    }
+    let saveSuffix = photoSuffix;
 
     // บันทึกลงชีต "QC Report Log" ด้วย — สถานะ "ยังไม่ส่ง" ก่อน (อัปเดตเป็น
     // "ส่งแล้ว" อีกทีตอน push LINE สำเร็จด้านล่าง) ไม่ fatal — รายงานยังถือว่า
     // บันทึก/ส่งสำเร็จแม้บันทึกลงชีตนี้ไม่สำเร็จ
-    if(!saveError){
-      try{ await pushQcReportLog(false); }
-      catch(e){ console.error('[QC log save]', e); }
-    }
+    try{ await pushQcReportLog(false); }
+    catch(e){ console.error('[QC log save]', e); }
 
     // Tracking-sheet write-backs (MDVR install/swap/checklist, Ch1-Ch9/other
     // column updates, ถอดย้าย clears, Ai Box/ADAS/DMS swaps, Issue close) —
@@ -5849,11 +5965,15 @@ async function sendToLine(){
         // ทำให้ auth state หลุดได้ โดยเฉพาะบนมือถือ) เปลี่ยนมาไม่ reload หน้า
         // เลยแทน — ปิดปุ่มค้างไว้ (ไม่ปล่อยให้ finally ด้านล่างเปิดกลับ) พร้อม
         // โชว์ลิงก์ไปหน้า Dashboard ให้กดเองตอนพร้อม แทนที่จะบังคับเปลี่ยนหน้าทันที
-        if(!saveSuffix.includes('ไม่สำเร็จ')){
-          sentSuccessfully = true;
-          sendBtn.textContent = '✅ ส่งแล้ว';
-          document.getElementById('sentLinkWrap').classList.remove('app-hidden');
-        }
+        // เดิมถ้ามีขั้นตอนไหน "ไม่สำเร็จ" (Track/รูป) จะเปิดปุ่มส่งกลับมาให้กดอีก ทั้งที่
+        // LINE ส่งไปแล้ว — กดซ้ำ = ข้อความซ้ำใน LINE และถ้าเปลี่ยนทะเบียนไปทำคันถัดไป
+        // ในฟอร์มเดิมก็เขียนทับรายงานใบนี้ ตอนนี้ล็อกปุ่มทุกครั้งที่ LINE ส่งสำเร็จ
+        // ส่วน Track ที่ไม่สำเร็จมีลิงก์ให้ลองใหม่เฉพาะส่วน Track (ไม่ส่ง LINE ซ้ำ)
+        sentSuccessfully = true;
+        sendBtn.textContent = '✅ ส่งแล้ว';
+        document.getElementById('sentLinkWrap').classList.remove('app-hidden');
+        const trackFailed = Object.values(trackResults || {}).some(r=> r && r.ok === false);
+        document.getElementById('sentRetrackLink').classList.toggle('app-hidden', !trackFailed);
       }
       else{
         const partial = okCount > 0 ? ` (สำเร็จ ${okCount}/${destinations.length} กลุ่ม)` : ' (' + res.status + ')';

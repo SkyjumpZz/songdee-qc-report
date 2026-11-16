@@ -12,7 +12,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>Dashboard · SONGDEE GPS</title>
-<meta name="app-version" content="1.41.0">
+<meta name="app-version" content="1.42.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@100..900&display=swap" rel="stylesheet">
@@ -404,6 +404,13 @@
     background:var(--bg-panel-2); color:var(--text); cursor:pointer; font-family:inherit;
   }
   .hi-retrack-btn:hover{border-color:var(--accent); color:var(--accent);}
+  .load-more-btn{
+    display:block; width:100%; margin:14px 0 4px; padding:12px; font-size:13px; font-weight:600;
+    border-radius:var(--r-pill); border:1px solid var(--line-soft); background:var(--bg-panel-2);
+    color:var(--text); cursor:pointer; font-family:inherit;
+  }
+  .load-more-btn:hover{border-color:var(--accent); color:var(--accent);}
+  .load-more-btn:disabled{opacity:.6; cursor:default;}
   .empty, .err, .loading{color:var(--text-dim); font-size:13px; padding:40px 0; text-align:center;}
   .skeleton-wrap{display:flex; flex-direction:column; gap:10px;}
   .skeleton-row{
@@ -808,6 +815,7 @@
     <div class="section-title">🕘 รายงานล่าสุด (ทุกช่าง)</div>
   </div>
   <div id="list" class="loading">กำลังตรวจสอบสิทธิ์...</div>
+  <button type="button" class="load-more-btn app-hidden" id="loadMoreBtn" onclick="loadMoreReports()">โหลดรายงานเก่ากว่านี้</button>
 </main>
 
 <script>
@@ -2075,10 +2083,48 @@ function renderSkeleton(container, count){
   container.innerHTML = Array.from({length: count}).map(()=>'<div class="skeleton-row"></div>').join('');
 }
 
+// วันที่ของเครื่อง (ไม่ใช่ UTC) รูปแบบ YYYY-MM-DD ให้ตรงกับ doc.date ที่ฟอร์มบันทึก —
+// เดิมใช้ toISOString() (UTC) ทำให้ไทย (UTC+7) ได้วันผิด: ตัวเลข "วันนี้" ช่วงเช้ามืดนับ
+// ของเมื่อวาน และป้ายกลุ่ม "วันนี้/เมื่อวาน" ในรายการเลื่อนไป 1 วัน
+function localDateStr(d){
+  d = d || new Date();
+  const pad = n=> String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+const DASH_PAGE_SIZE = 20;
+let dashDocs = [];        // รายงานที่โชว์อยู่ทั้งหมด (ไม่ซ้ำ id) เรียงใหม่สุดก่อน
+let dashCursor = null;    // เอกสารสุดท้ายของหน้าล่าสุดที่โหลดแบบเรียง createdAt — จุดเริ่มของ "โหลดเพิ่ม"
+
+function mergeDashDocs(docs){
+  const byId = new Map(dashDocs.map(d=> [d.id, d]));
+  docs.forEach(d=> byId.set(d.id, d));
+  dashDocs = [...byId.values()].sort((a, b)=> (b.createdAt || 0) - (a.createdAt || 0));
+}
+
+async function loadMoreReports(){
+  const btn = document.getElementById('loadMoreBtn');
+  if(!dashCursor || btn.disabled) return;
+  btn.disabled = true;
+  btn.textContent = 'กำลังโหลด...';
+  try{
+    const snap = await _db.collection('qc_reports').orderBy('createdAt', 'desc').startAfter(dashCursor).limit(DASH_PAGE_SIZE).get();
+    if(snap.docs.length) dashCursor = snap.docs[snap.docs.length - 1];
+    mergeDashDocs(snap.docs.map(d=> ({id: d.id, ...d.data()})));
+    renderList(dashDocs);
+    btn.classList.toggle('app-hidden', snap.docs.length < DASH_PAGE_SIZE);
+    btn.textContent = 'โหลดรายงานเก่ากว่านี้';
+  }catch(e){
+    btn.textContent = 'โหลดไม่สำเร็จ — กดเพื่อลองใหม่';
+  }finally{
+    btn.disabled = false;
+  }
+}
+
 async function loadDashboard(){
   const listEl = document.getElementById('list');
   renderSkeleton(listEl, 3);
-  const todayStr = new Date().toISOString().slice(0,10);
+  const todayStr = localDateStr();
   try{
     // firebase-firestore-compat doesn't expose count() aggregate queries here,
     // and where()+orderBy() on different fields needs a composite index we
@@ -2087,7 +2133,7 @@ async function loadDashboard(){
     // เดิมอ่าน 1000 ใบทุกครั้งที่เปิด Dashboard เพื่อนับ 2 ตัวเลข → อ่าน 20 ใบล่าสุด + ใบของวันนี้
     // ส่วน "ทั้งหมด" นับเต็มวันละครั้งแล้วเก็บไว้ ระหว่างวันบวกเฉพาะใบที่ใหม่กว่า
     const [latestSnap, todaySnap] = await Promise.all([
-      _db.collection('qc_reports').orderBy('createdAt', 'desc').limit(20).get(),
+      _db.collection('qc_reports').orderBy('createdAt', 'desc').limit(DASH_PAGE_SIZE).get(),
       _db.collection('qc_reports').where('date', '==', todayStr).get(),
     ]);
     const latest = latestSnap.docs.map(d=>({id:d.id, ...d.data()}));
@@ -2107,7 +2153,14 @@ async function loadDashboard(){
     try{ localStorage.setItem('qc_dash_total_v1', JSON.stringify(tot)); }catch(e){}
     animateCount(document.getElementById('statTotal'), tot.n);
     animateCount(document.getElementById('statToday'), todaySnap.size);
-    renderList(latest);
+    // รายการ = 20 ใบล่าสุด + รายงานของ "วันนี้" ทุกใบ (todaySnap ดึงมาอยู่แล้วเพื่อนับ) —
+    // เดิมโชว์แค่ 20 ใบล่าสุด วันที่ส่งเกิน 20 ใบ ใบที่ส่งช่วงเช้าจะหลุดจากหน้านี้ไปเลย
+    dashDocs = [];
+    mergeDashDocs(latest);
+    mergeDashDocs(todaySnap.docs.map(d=>({id:d.id, ...d.data()})));
+    dashCursor = latestSnap.docs.length ? latestSnap.docs[latestSnap.docs.length - 1] : null;
+    renderList(dashDocs);
+    document.getElementById('loadMoreBtn').classList.toggle('app-hidden', latestSnap.docs.length < DASH_PAGE_SIZE);
   }catch(e){
     listEl.className = 'err';
     listEl.textContent = 'โหลด Dashboard ไม่สำเร็จ: ' + e.message;
@@ -2121,8 +2174,8 @@ function relativeDateLabel(dateStr){
   if(!dateStr) return 'ไม่ระบุวันที่';
   const today = new Date(); today.setHours(0,0,0,0);
   const yesterday = new Date(today); yesterday.setDate(yesterday.getDate()-1);
-  if(dateStr === today.toISOString().slice(0,10)) return 'วันนี้';
-  if(dateStr === yesterday.toISOString().slice(0,10)) return 'เมื่อวาน';
+  if(dateStr === localDateStr(today)) return 'วันนี้';
+  if(dateStr === localDateStr(yesterday)) return 'เมื่อวาน';
   return dateStr.split('-').reverse().join('/');
 }
 
