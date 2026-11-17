@@ -15,7 +15,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.143.0">
+<meta name="app-version" content="1.144.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@100..900&display=swap" rel="stylesheet">
@@ -5891,6 +5891,22 @@ async function retrackCurrentReport(){
   }
 }
 
+function untrackableFixRows(){
+  const out = [];
+  const t = v => String(v || '').trim();
+  state.fixes.forEach((row, i)=>{
+    const hasItem = t(row.product) || t(row.custom) || t(row.oldModel) || t(row.oldModelCustom);
+    const hasContent = t(row.remark) || t(row.newSN) || t(row.oldSN) || t(row.phoneNo) || t(row.oldPhoneNo) || t(row.newMdvrImei);
+    const snippet = t(row.remark).replace(/\s+/g, ' ').slice(0, 40);
+    if(!hasItem && hasContent){
+      out.push(`• แถวที่ ${i + 1}: ไม่ได้เลือกอุปกรณ์${snippet ? ` ("${snippet}${t(row.remark).length > 40 ? '…' : ''}")` : ''}`);
+    } else if(isSimProduct(row.product) && !t(row.phoneNo)){
+      out.push(`• แถวที่ ${i + 1}: เลือกซิมแต่ยังไม่กรอกเบอร์ใหม่`);
+    }
+  });
+  return out;
+}
+
 async function sendToLine(){
   const endpoint = LINE_ENDPOINT.trim();
   const sendBtn = document.getElementById('sendBtn');
@@ -5928,6 +5944,16 @@ async function sendToLine(){
     if(techStockNames.length && !techStockOwnerNames.length){
       const ok = confirm('ยังไม่ได้เลือก "ช่างที่กำลังทำรายงานนี้"\n\nยืนยันส่งรายงานนี้โดยไม่ระบุช่างหรือไม่?');
       if(!ok){ showToast('ยกเลิกการส่ง (ยังไม่ได้เลือกช่าง)'); return; }
+    }
+
+    // แถวอุปกรณ์ที่ระบบ Track ไม่รู้จะเขียนอะไร: มีหมายเหตุ/SN/เบอร์ แต่ไม่ได้เลือกอุปกรณ์เลย
+    // (เคส (TC11)52-5329 17/11/2026 — พิมพ์ "เปลี่ยนซิม … (เบอร์)" ไว้ในหมายเหตุอย่างเดียว)
+    // หรือเลือกซิมแต่ไม่กรอกเบอร์ — เตือนก่อนส่ง ให้กลับไปแก้ได้ ไม่บล็อก
+    const untrackedRows = untrackableFixRows();
+    if(untrackedRows.length){
+      const ok = confirm('⚠️ รายการเหล่านี้ระบบจะไม่อัปเดตลง Tracking:\n\n' + untrackedRows.join('\n') +
+        '\n\nกด "ยกเลิก" เพื่อกลับไปเลือกอุปกรณ์/กรอกเบอร์ให้ครบ\nกด "ตกลง" เพื่อส่งต่อทั้งแบบนี้');
+      if(!ok){ showToast('กลับไปแก้รายการอุปกรณ์'); return; }
     }
 
     // กันรายงานถูกเขียนทับ: ฟอร์มนี้ยังผูกกับรายงานที่บันทึกไปแล้ว (currentReportId) แต่
