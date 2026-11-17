@@ -15,7 +15,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.140.0">
+<meta name="app-version" content="1.141.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@100..900&display=swap" rel="stylesheet">
@@ -1629,13 +1629,35 @@ function updateMdvrImeiWarning(imei){
   if(!warn) return;
   const target = (imei || '').trim();
   const dev = target ? mdvrImeiPickList().find(d=> d.imei === target) : null;
-  if(dev && dev.plate){
-    warn.textContent = `⚠️ เครื่อง IMEI นี้มี Tracking อยู่แล้วที่ "${dev.plate}" — ถ้าทะเบียนนั้นไม่ใช่ทะเบียนจริง (เช่น ค้างในสต็อก) อาจต้องแจ้งแอดมินเคลียร์ก่อนบันทึก`;
+  if(dev && dev.plate && !mdvrPlateIsCurrent(dev.plate)){
+    warn.textContent = `⚠️ ในชีต เครื่อง IMEI นี้ Track อยู่ที่ "${dev.plate.replace(/\s*\n\s*/g,' / ')}" — ถ้าบันทึก ระบบจะย้ายมาทะเบียนนี้ (ค่าเดิมเก็บไว้ในคอลัมน์ note) คนเทสตัดสินใจได้เลย`;
     warn.classList.remove('app-hidden');
   } else {
     warn.textContent = '';
     warn.classList.add('app-hidden');
   }
+}
+
+// เครื่อง MDVR ที่ชีต MDVR Tracking บอกว่าติดอยู่กับทะเบียนในฟอร์มตอนนี้ (ข้อมูลเก่าก่อนงานนี้)
+// — ให้คนเทสเห็น IMEI ที่ Track อยู่จริงก่อนตัดสินใจเลือกเครื่อง ไม่ได้บล็อกอะไร
+function mdvrPlateIsCurrent(cellPlate){
+  const plate = (state.plate || '').trim();
+  if(!plate || !cellPlate) return false;
+  return plateMatches(cellPlate, normPlate(plate), normPlateLoose(plate));
+}
+function mdvrTrackedOnPlate(){
+  if(!(state.plate || '').trim()) return [];
+  return mdvrAllDevices.filter(d=> d.plate && mdvrPlateIsCurrent(d.plate));
+}
+function buildMdvrTrackedHint(){
+  const hint = document.createElement('div');
+  hint.className = 'hint'; hint.style.marginTop = '6px';
+  const tracked = mdvrTrackedOnPlate();
+  if(!(state.plate || '').trim()) hint.textContent = '📋 MDVR ที่ Track อยู่ในชีต: ใส่ทะเบียนก่อนถึงจะแสดง';
+  else if(!mdvrAllDevices.length) hint.textContent = '📋 MDVR ที่ Track อยู่ในชีต: กำลังโหลด…';
+  else if(!tracked.length) hint.textContent = `📋 MDVR ที่ Track อยู่ในชีตกับ ${state.plate}: ไม่มี`;
+  else hint.textContent = `📋 MDVR ที่ Track อยู่ในชีตกับ ${state.plate}: ` + tracked.map(d=> `IMEI ${d.imei}${d.deviceType ? ' (' + d.deviceType + ')' : ''}`).join(', ');
+  return hint;
 }
 
 // เติมรุ่น MDVR ให้แถว "อุปกรณ์ที่ติดตั้ง" แถวแรกที่ยังว่างอัตโนมัติ เมื่อเลือก/
@@ -4089,10 +4111,11 @@ function buildProductHalf(row, idx, ctx){
   if(showMdvrImeiPicker){
     const hint = document.createElement('div');
     hint.className = 'hint'; hint.style.marginTop = '6px';
-    hint.textContent = '📡 เลือก IMEI เครื่อง MDVR ที่ว่างอยู่ (ติดตั้งใหม่ ไม่ใช่เปลี่ยนของเดิม)';
+    hint.textContent = '📡 เลือก IMEI เครื่อง MDVR ที่ติดตั้ง (เลือกได้ทุกเครื่อง แม้ในชีตจะ Track อยู่ที่อื่น)';
     wrap.appendChild(hint);
 
     loadMdvrAllDevices(); // not awaited — merges เข้า pickList เองรอบถัดไปที่ renderFixRows(), ดู loadMdvrAllDevices()
+    wrap.appendChild(buildMdvrTrackedHint());
     const pickList = mdvrImeiPickList();
     const groups = [{
       label: null,
@@ -4106,10 +4129,10 @@ function buildProductHalf(row, idx, ctx){
     wrap.appendChild(imeiSel);
 
     const pickedDev = row.newMdvrImei ? pickList.find(d=> d.imei === row.newMdvrImei) : null;
-    if(pickedDev && pickedDev.plate){
+    if(pickedDev && pickedDev.plate && !mdvrPlateIsCurrent(pickedDev.plate)){
       const warn = document.createElement('div');
       warn.className = 'hint'; warn.style.marginTop = '6px'; warn.style.color = 'var(--danger)';
-      warn.textContent = `⚠️ เครื่อง IMEI นี้มี Tracking อยู่แล้วที่ทะเบียน ${pickedDev.plate} — ถ้าเลือก ระบบจะย้ายออกจากทะเบียนนั้นมาที่นี่`;
+      warn.textContent = `⚠️ ในชีต เครื่อง IMEI นี้ Track อยู่ที่ "${pickedDev.plate.replace(/\s*\n\s*/g,' / ')}" — ถ้าบันทึก ระบบจะย้ายมาทะเบียนนี้ (ค่าเดิมเก็บไว้ในคอลัมน์ note) คนเทสตัดสินใจได้เลย`;
       wrap.appendChild(warn);
     }
 
