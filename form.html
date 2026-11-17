@@ -15,7 +15,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.136.0">
+<meta name="app-version" content="1.137.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@100..900&display=swap" rel="stylesheet">
@@ -5349,7 +5349,8 @@ function buildMessage(){
   const uploadedPhotos = state.photos.filter(p=> p.driveUrl);
   if(uploadedPhotos.length){
     lines.push(`📷 รูปภาพแนบ: ${uploadedPhotos.length} รูป`);
-    if(state.driveFolderUrl) lines.push(`เข้าดูรูปทั้งหมดใน Drive: ${state.driveFolderUrl}`);
+    // ไม่ใส่ลิงก์โฟลเดอร์ Drive ในข้อความ LINE แล้ว (ตามที่ขอ 2026-11-17) — ลิงก์ยังเก็บในรายงาน (driveFolderUrl)
+    // เปิดดูได้จาก Dashboard/ประวัติเหมือนเดิม รูปยังส่งเข้า LINE เป็นภาพตามปกติ
     lines.push('');
   }
   lines.push(`ผู้ทดสอบ: ${tester.techName || '-'}`);
