@@ -15,7 +15,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.137.0">
+<meta name="app-version" content="1.138.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@100..900&display=swap" rel="stylesheet">
@@ -1321,11 +1321,14 @@ function wireTechStockSearch(){
       // 150ms) และคีย์บอร์ดไม่หุบจนรายการเลื่อนหนีนิ้ว — เดิมบนมือถือ click มาช้ากว่านั้น แตะแล้ว
       // ไม่ได้ชื่อ ("เลือกคนไม่ได้") ยังเลือกตอน click เหมือนเดิม ปัดเลื่อนรายการจึงไม่เลือกผิดคน
       item.addEventListener('pointerdown', e=> e.preventDefault());
+      // เลือกแล้วปิดรายการ + ปล่อยโฟกัส — เดิม (v1.136.0) เปิดรายการค้างไว้ต่อ ซึ่งบังช่องด้านล่าง
+      // (ชื่อลูกค้า/Fleet/ทะเบียน) แตะช่องพวกนั้นกลายเป็นแตะโดนชื่อช่างแทน → "ใส่ข้อมูลช่องอื่นไม่ได้"
+      // จะเพิ่มอีกคนก็แตะช่องค้นหาช่างอีกครั้ง
       item.onclick = ()=>{
         addTechStockName(n);
         input.value = '';
-        render();
-        input.focus();
+        box.classList.add('app-hidden');
+        input.blur();
       };
       box.appendChild(item);
     });
@@ -1334,6 +1337,15 @@ function wireTechStockSearch(){
   input.oninput = render;
   input.onfocus = render;
   input.onblur = ()=>{ setTimeout(()=>{ box.classList.add('app-hidden'); }, 150); };
+  // แตะตรงไหนก็ได้นอกช่องค้นหา/รายการ → ปิดรายการทันที (ไม่ให้ค้างบังช่องอื่น)
+  if(!box._outsideWired){
+    box._outsideWired = true; // wireTechStockSearch() ถูกเรียกซ้ำได้ — ผูกครั้งเดียวพอ
+    document.addEventListener('pointerdown', e=>{
+      if(box.classList.contains('app-hidden')) return;
+      if(e.target === input || box.contains(e.target)) return;
+      box.classList.add('app-hidden');
+    }, true);
+  }
   window.addEventListener('scroll', ()=>{ if(!box.classList.contains('app-hidden')) positionBox(); }, true);
   window.addEventListener('resize', ()=>{ if(!box.classList.contains('app-hidden')) positionBox(); });
 }
