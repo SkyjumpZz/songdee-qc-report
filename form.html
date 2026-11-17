@@ -5102,6 +5102,13 @@ function buildSheetUpdates(){
       // อัปเกรด/ซ่อม ไม่ได้เปลี่ยนจากของเดิม — ใช้ CH ที่เลือกไว้ตรงๆ แทน
       // (buildProductHalf() เปิดให้เลือกได้แล้วสำหรับ upgrade/repair ด้วย)
       if(!src){
+        // ซิมใหม่ที่ไม่ได้จับคู่กับ "Phone No." จากประวัติทะเบียน (เช่น ถอดซิมเก่าแถวหนึ่ง
+        // ติดตั้งซิมใหม่อีกแถว) — เดิมไม่ถูกเขียนเลย ลงเบอร์ใหม่ที่คอลัมน์ Phone No. ตรงๆ
+        if(isSimProduct(row.product)){
+          const phone = (row.phoneNo || '').trim();
+          if(phone) updates.push({ plate: state.plate, column: PHONE_NO_COLUMN, value: phone });
+          return;
+        }
         if(rowChannel(row) && rowNeedsChannel(row.product)){
           const newName = row.product === "อื่นๆ (พิมพ์เอง)" ? (row.custom || "") : row.product;
           if(newName){
@@ -5134,6 +5141,11 @@ function buildSheetUpdates(){
     });
   } else if(state.tpl === 'new_install'){
     state.fixes.forEach(row=>{
+      if(isSimProduct(row.product)){
+        const phone = (row.phoneNo || '').trim();
+        if(phone) updates.push({ plate: state.plate, column: PHONE_NO_COLUMN, value: phone });
+        return;
+      }
       // rowNeedsChannel check is defense-in-depth — renderFixRows()/the
       // product picker already clear row.ch off a row that doesn't need one,
       // but a report saved before that guard existed could still have a
