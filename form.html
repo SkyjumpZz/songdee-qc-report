@@ -900,6 +900,7 @@
 <div class="actionbar app-hidden" id="actionBar">
   <div class="actionbar-inner">
     <button class="btn-secondary" onclick="copyText()">📋 คัดลอกข้อความ</button>
+    <div class="hint app-hidden" id="untrackedWarning" style="color:var(--danger); white-space:pre-line; margin-bottom:8px;"></div>
     <button class="btn-primary" id="sendBtn" onclick="sendToLine()">📤 ส่งเข้า LINE</button>
   </div>
   <div class="app-hidden" id="sentLinkWrap" style="text-align:center; margin-top:8px;">
@@ -5596,6 +5597,13 @@ function getMissingFields(){
 
 function updatePreview(){
   document.getElementById('preview').textContent = buildMessage();
+  // แถวที่ระบบ Track ไม่อัปเดต — โชว์บนหน้าเว็บเฉยๆ ไม่ถามตอนส่ง ไม่ลง LINE (ดู untrackableFixRows())
+  const untrackedEl = document.getElementById('untrackedWarning');
+  if(untrackedEl){
+    const rows = untrackableFixRows();
+    untrackedEl.textContent = rows.length ? '⚠️ รายการเหล่านี้ระบบจะไม่อัปเดตลง Tracking (เลือกอุปกรณ์/กรอกเบอร์ให้ครบ):\n' + rows.join('\n') : '';
+    untrackedEl.classList.toggle('app-hidden', !rows.length);
+  }
   const missing = getMissingFields();
   const badge = document.getElementById('missingBadge');
   const btn = document.getElementById('sendBtn');
@@ -5944,16 +5952,6 @@ async function sendToLine(){
     if(techStockNames.length && !techStockOwnerNames.length){
       const ok = confirm('ยังไม่ได้เลือก "ช่างที่กำลังทำรายงานนี้"\n\nยืนยันส่งรายงานนี้โดยไม่ระบุช่างหรือไม่?');
       if(!ok){ showToast('ยกเลิกการส่ง (ยังไม่ได้เลือกช่าง)'); return; }
-    }
-
-    // แถวอุปกรณ์ที่ระบบ Track ไม่รู้จะเขียนอะไร: มีหมายเหตุ/SN/เบอร์ แต่ไม่ได้เลือกอุปกรณ์เลย
-    // (เคส (TC11)52-5329 17/11/2026 — พิมพ์ "เปลี่ยนซิม … (เบอร์)" ไว้ในหมายเหตุอย่างเดียว)
-    // หรือเลือกซิมแต่ไม่กรอกเบอร์ — เตือนก่อนส่ง ให้กลับไปแก้ได้ ไม่บล็อก
-    const untrackedRows = untrackableFixRows();
-    if(untrackedRows.length){
-      const ok = confirm('⚠️ รายการเหล่านี้ระบบจะไม่อัปเดตลง Tracking:\n\n' + untrackedRows.join('\n') +
-        '\n\nกด "ยกเลิก" เพื่อกลับไปเลือกอุปกรณ์/กรอกเบอร์ให้ครบ\nกด "ตกลง" เพื่อส่งต่อทั้งแบบนี้');
-      if(!ok){ showToast('กลับไปแก้รายการอุปกรณ์'); return; }
     }
 
     // กันรายงานถูกเขียนทับ: ฟอร์มนี้ยังผูกกับรายงานที่บันทึกไปแล้ว (currentReportId) แต่
