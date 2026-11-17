@@ -15,7 +15,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.142.0">
+<meta name="app-version" content="1.143.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@100..900&display=swap" rel="stylesheet">
@@ -3082,8 +3082,21 @@ function isSimProduct(product){
 // ต่อเข้าช่องกล้องช่องไหน เป็นตัวประมวลผลแยก)
 function rowNeedsChannel(product){
   if(cameraProductNames.has(product)) return true;
+  // กล้องที่ไม่อยู่ในหมวด Camera ของ Stock เช่น "Camera V31BSD- CL" (กล้อง BSD) — เดิมไม่มี
+  // ช่องเลือก CH ช่างเลยพิมพ์ CH6/CH7 ไว้ในหมายเหตุ แล้วไม่ถูกเขียนลง Ch6–Ch9 (เคส (TO7)53-2257)
+  if(isBsdCameraProduct(product) || (/camera|กล้อง/i.test(product || '') && !/สาย|cable|ขา|bracket/i.test(product || ''))) return true;
   const t = deviceTypeForProduct(product);
   return t === 'dms' || t === 'adas';
+}
+function isBsdCameraProduct(product){
+  return /bsd/i.test(product || '') && !/สาย|cable|ขา|bracket/i.test(product || '') && deviceTypeForProduct(product) !== 'mdvr';
+}
+// CH ของแถว: ช่อง CH ที่เลือก ถ้าไม่มี ลองอ่านจากหมายเหตุ ("CH6", "ch 7") — รายงานเก่า
+// ที่กล้องบางรุ่นยังไม่มีช่องเลือก CH ช่างจดตำแหน่งไว้ในหมายเหตุแทน
+function rowChannel(row){
+  if(row.ch) return row.ch;
+  const m = String(row.remark || '').match(/\bch\s*([1-9])\b/i);
+  return m ? 'Ch' + m[1] : '';
 }
 
 // ต้องตรงตัวอักษรกับหัวคอลัมน์ "Ch1".."Ch9" ในชีต MDVR Tracking เป๊ะ (ดู
@@ -5024,6 +5037,8 @@ function sheetValueForColumn(column, product){
   // heuristic ทั่วไปด้านล่าง — เป็น override ที่ตั้งใจเจาะจงรายชิ้น (แยกจากชื่อที่ลง
   // LINE — ดู equipmentLineName() ที่ fixLine() ใช้)
   if(equipmentSheetNameMap[product]) return equipmentSheetNameMap[product];
+  // ชีตลงกล้อง BSD ในช่อง Ch ว่า "BSD" (เหมือน DMS/ADAS ด้านล่าง)
+  if(/^Ch[1-9]$/.test(column) && isBsdCameraProduct(product)) return 'BSD';
   const type = deviceTypeForProduct(product);
   if(/^Ch[1-9]$/.test(column) && (type === 'dms' || type === 'adas')){
     return type.toUpperCase();
@@ -5067,11 +5082,11 @@ function buildSheetUpdates(){
         const storName = row.product === "อื่นๆ (พิมพ์เอง)" ? (row.custom || "") : row.product;
         if(storName) updates.push({ plate: newPlate, column: row.storageSlot, value: storName });
       }
-      if(!row.ch || !rowNeedsChannel(row.product)) return;
+      if(!rowChannel(row) || !rowNeedsChannel(row.product)) return;
       const newName = row.product === "อื่นๆ (พิมพ์เอง)" ? (row.custom || "") : row.product;
       if(!newName) return;
-      const value = sheetValueForColumn(row.ch, row.product) || newName;
-      updates.push({ plate: newPlate, column: row.ch, value });
+      const value = sheetValueForColumn(rowChannel(row), row.product) || newName;
+      updates.push({ plate: newPlate, column: rowChannel(row), value });
     });
     return updates;
   }
@@ -5086,11 +5101,11 @@ function buildSheetUpdates(){
       // อัปเกรด/ซ่อม ไม่ได้เปลี่ยนจากของเดิม — ใช้ CH ที่เลือกไว้ตรงๆ แทน
       // (buildProductHalf() เปิดให้เลือกได้แล้วสำหรับ upgrade/repair ด้วย)
       if(!src){
-        if(row.ch && rowNeedsChannel(row.product)){
+        if(rowChannel(row) && rowNeedsChannel(row.product)){
           const newName = row.product === "อื่นๆ (พิมพ์เอง)" ? (row.custom || "") : row.product;
           if(newName){
-            const value = sheetValueForColumn(row.ch, row.product) || newName;
-            updates.push({ plate: state.plate, column: row.ch, value });
+            const value = sheetValueForColumn(rowChannel(row), row.product) || newName;
+            updates.push({ plate: state.plate, column: rowChannel(row), value });
           }
         }
         // ตัวบันทึก (SD/SSD) — เหตุผลเดียวกับ CH ด้านบน แค่คนละคอลัมน์ (ดู
@@ -5126,11 +5141,11 @@ function buildSheetUpdates(){
         const storName = row.product === "อื่นๆ (พิมพ์เอง)" ? (row.custom || "") : row.product;
         if(storName) updates.push({ plate: state.plate, column: row.storageSlot, value: storName });
       }
-      if(!row.ch || !rowNeedsChannel(row.product)) return;
+      if(!rowChannel(row) || !rowNeedsChannel(row.product)) return;
       const newName = row.product === "อื่นๆ (พิมพ์เอง)" ? (row.custom || "") : row.product;
       if(!newName) return;
-      const value = sheetValueForColumn(row.ch, row.product) || newName;
-      updates.push({ plate: state.plate, column: row.ch, value });
+      const value = sheetValueForColumn(rowChannel(row), row.product) || newName;
+      updates.push({ plate: state.plate, column: rowChannel(row), value });
     });
   }
   return updates;
