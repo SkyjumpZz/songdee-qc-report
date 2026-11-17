@@ -15,7 +15,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.141.0">
+<meta name="app-version" content="1.142.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@100..900&display=swap" rel="stylesheet">
@@ -1919,14 +1919,23 @@ async function pushMdvrUnitSwaps(){
 // เท่านั้น) เพราะฝั่ง backend (installMdvrDevice()) ไม่ได้สนใจว่ารถนี้เคยมี
 // MDVR มาก่อนหรือไม่ แค่หาแถวที่ IMEI ตรงใน Tracking แล้วเขียนทะเบียน/ลูกค้า/
 // ผู้ติดตั้งลงไป — ต่างจาก /mdvr-unit-swap ตรงที่ไม่มีแถวเก่าให้ clear
+// ถ้ารายงานเดียวกันมีแถว "① ถอด" ที่เป็น MDVR ด้วย (ถอดเครื่องเก่า + ติดตั้งเครื่องใหม่
+// คนละแถว ไม่ได้จับคู่เป็นแถว "เปลี่ยน") = เปลี่ยนเครื่องจริง → ส่งไป /mdvr-unit-swap
+// แทน /mdvr-install ให้ย้ายข้อมูลรถ (กล้อง/เบอร์/อุปกรณ์) จากแถวเครื่องเก่าไปแถว
+// เครื่องใหม่และล้างแถวเก่าให้ครบ เหมือนตอนกรอกเป็นแถว "เปลี่ยน" (เคส (TO7)53-2257
+// 17/11/2026: ทางติดตั้งใหม่ไม่ล้างแถวเก่า ทะเบียนเลยค้าง 2 แถว)
+function reportRemovesMdvr(){
+  return state.fixes.some(r=> r.section === 'remove' && deviceTypeForProduct(r.oldModel) === 'mdvr');
+}
 function buildMdvrFixInstalls(){
   if(!tplHasOldModel(state.tpl) || state.tpl === 'remove') return [];
+  const asSwap = reportRemovesMdvr();
   const installs = [];
   state.fixes.forEach(row=>{
     if(row.oldModel) return; // มี oldModel แปลว่าเป็นแถวสลับของเดิม — buildMdvrUnitSwaps() จัดการแทน
     const newImei = (row.newMdvrImei || '').trim();
     if(!newImei) return;
-    installs.push({ imei: newImei, deviceId: (row.mdvrDeviceId || '').trim(), server: (row.mdvrServer || '').trim() });
+    installs.push({ imei: newImei, deviceId: (row.mdvrDeviceId || '').trim(), server: (row.mdvrServer || '').trim(), asSwap });
   });
   return installs;
 }
@@ -1938,7 +1947,13 @@ async function pushMdvrFixInstalls(){
   if(!plate) return null;
   const results = [];
   for(const it of installs){
-    const res = await authFetch(MDVR_INSTALL_ENDPOINT, {
+    const res = it.asSwap
+      ? await authFetch(MDVR_UNIT_SWAP_ENDPOINT, {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ plate, newImei: it.imei, deviceId: it.deviceId, server: it.server, customer: state.customer, fleet: state.fleet, date: state.date, technician: onSiteTechName(), technicianRaw: onSiteTechNameRaw() })
+        })
+      : await authFetch(MDVR_INSTALL_ENDPOINT, {
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body: JSON.stringify({ imei: it.imei, deviceId: it.deviceId, server: it.server, plate, customer: state.customer, fleet: state.fleet, date: state.date, technician: onSiteTechName() })
