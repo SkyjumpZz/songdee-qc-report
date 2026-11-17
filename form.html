@@ -15,7 +15,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.134.0">
+<meta name="app-version" content="1.135.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@100..900&display=swap" rel="stylesheet">
@@ -5219,6 +5219,8 @@ async function pushIssueClose(){
       body: JSON.stringify({
         plate: state.plate, ticketNo: issue.ticketNo,
         fixedDetails: fixLines.join('\n'), technician: onSiteTechName(), date: dateStr,
+        // ชื่อเล่นภาษาไทยดิบ — ชีต Issue รถเหลืองใช้รูปแบบ "<ชื่อเล่น> ส่งดี" ไม่ใช่ชื่อ Track ภาษาอังกฤษ
+        technicianRaw: onSiteTechNameRaw(),
         cause: issue.cause || '',
       })
     });
