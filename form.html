@@ -15,7 +15,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.138.0">
+<meta name="app-version" content="1.139.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@100..900&display=swap" rel="stylesheet">
@@ -1338,8 +1338,10 @@ function wireTechStockSearch(){
   input.onfocus = render;
   input.onblur = ()=>{ setTimeout(()=>{ box.classList.add('app-hidden'); }, 150); };
   // แตะตรงไหนก็ได้นอกช่องค้นหา/รายการ → ปิดรายการทันที (ไม่ให้ค้างบังช่องอื่น)
+  input.onclick = ()=>{ if(box.classList.contains('app-hidden')) render(); };
   if(!box._outsideWired){
     box._outsideWired = true; // wireTechStockSearch() ถูกเรียกซ้ำได้ — ผูกครั้งเดียวพอ
+    box.addEventListener('pointerdown', e=> e.preventDefault()); // กดแถบเลื่อนรายการแล้วไม่ปิดเอง
     document.addEventListener('pointerdown', e=>{
       if(box.classList.contains('app-hidden')) return;
       if(e.target === input || box.contains(e.target)) return;
@@ -2362,13 +2364,15 @@ function wireSuggestInput(inputId, boxId, getList, onPick, opts){
   input.addEventListener('focus', render);
   // แตะลงในกล่อง → กันช่องพิมพ์เสียโฟกัส (กล่องไม่ถูกซ่อนก่อน click มาถึง) — เหตุผลเดียวกับ
   // รายชื่อช่างใน wireTechStockSearch()
-  box.addEventListener('pointerdown', e=>{ if(e.target.closest('.item')) e.preventDefault(); });
+  box.addEventListener('pointerdown', e=> e.preventDefault()); // ทั้งกล่อง รวมแถบเลื่อน — ไม่ให้ช่องเสียโฟกัส/รายการปิดเอง
+  input.addEventListener('click', ()=>{ if(box.classList.contains('app-hidden')) render(); });
   box.addEventListener('click', e=>{
     const item = e.target.closest('.item');
     if(!item) return;
     input.value = item.textContent;
     box.classList.add('app-hidden');
     box.innerHTML = '';
+    input.blur();
     onPick(item.textContent);
   });
   input.addEventListener('blur', ()=>{
@@ -3741,6 +3745,7 @@ function buildSearchableSelect(groups, selectedValue, placeholder, onChange){
   function pick(v, text){
     value = v; input.value = text;
     box.classList.add('app-hidden');
+    input.blur(); // ปล่อยโฟกัส — แตะช่องอีกครั้งจะได้เปิดรายการใหม่ (focus/click ด้านล่าง)
     onChange(value);
   }
   function render(){
@@ -3771,6 +3776,11 @@ function buildSearchableSelect(groups, selectedValue, placeholder, onChange){
   }
   input.addEventListener('focus', ()=>{ input.select(); render(); });
   input.addEventListener('input', render);
+  // กดช่องที่โฟกัสอยู่แล้วแต่รายการปิดไป → เปิดใหม่ (focus ไม่ยิงซ้ำถ้าโฟกัสยังอยู่)
+  input.addEventListener('click', ()=>{ if(box.classList.contains('app-hidden')) render(); });
+  // กดตรงไหนในรายการก็ได้ (รวมแถบเลื่อน/หัวกลุ่ม) ไม่ให้ช่องพิมพ์เสียโฟกัส — เดิมกดแถบเลื่อนเพื่อเลื่อนลง
+  // ไปหารายการ "จากประวัติทะเบียนนี้" แล้วรายการปิดเองก่อนเลือกได้ (ช่องเสียโฟกัส → ซ่อนใน 150ms)
+  box.addEventListener('pointerdown', e=> e.preventDefault());
   input.addEventListener('blur', ()=>{
     setTimeout(()=>{ box.classList.add('app-hidden'); input.value = labelFor(value); }, 150);
   });
