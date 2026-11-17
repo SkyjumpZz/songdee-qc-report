@@ -15,7 +15,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.144.0">
+<meta name="app-version" content="1.145.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@100..900&display=swap" rel="stylesheet">
@@ -3081,6 +3081,12 @@ function isSimProduct(product){
 // "Camera" category (DOME/Reverse ฯลฯ) บวก DMS/ADAS (ก็ต่อสายเข้าช่องกล้อง
 // ของ MDVR เหมือนกัน แค่ identity ติดตามด้วย SN คนละชีต) ไม่รวม AI Box (ไม่ได้
 // ต่อเข้าช่องกล้องช่องไหน เป็นตัวประมวลผลแยก)
+// ป้ายบอกชัดๆ ว่าช่องเบอร์ไหนคือซิมเดิม/ซิมใหม่ (ตามที่แจ้ง — ช่อง SIM สองช่องหน้าตาเหมือนกัน)
+function simPhoneLabel(text){
+  const l = document.createElement('label');
+  l.textContent = text; l.style.marginTop = '8px'; l.style.display = 'block';
+  return l;
+}
 function rowNeedsChannel(product){
   if(cameraProductNames.has(product)) return true;
   // กล้องที่ไม่อยู่ในหมวด Camera ของ Stock เช่น "Camera V31BSD- CL" (กล้อง BSD) — เดิมไม่มี
@@ -4119,9 +4125,10 @@ function buildProductHalf(row, idx, ctx){
   // buildSheetUpdates() ที่เขียนเบอร์นี้ลงคอลัมน์ "Phone No." แทนชื่อ product
   if(isSimProduct(row.product)){
     const phoneInput = document.createElement('input');
-    phoneInput.type='tel'; phoneInput.placeholder='เบอร์ซิม (เช่น 0812345678)';
-    phoneInput.value = row.phoneNo || ''; phoneInput.style.marginTop='6px';
+    phoneInput.type='tel'; phoneInput.placeholder='เบอร์ซิมใหม่ที่ใส่แทน (เช่น 0812345678)';
+    phoneInput.value = row.phoneNo || '';
     phoneInput.oninput = ()=>{ row.phoneNo = phoneInput.value; updatePreview(); };
+    wrap.appendChild(simPhoneLabel('📥 ซิมใหม่ (ที่ใส่เข้าไป) — ระบบลงเบอร์นี้ใน Tracking'));
     wrap.appendChild(phoneInput);
   }
 
@@ -4322,9 +4329,10 @@ function buildOldModelHalf(row, idx, standalone){
   if(oldIsSim){
     if(oldModelSrc && oldModelSrc.value && !row.oldPhoneNo) row.oldPhoneNo = oldModelSrc.value;
     const oldPhone = document.createElement('input');
-    oldPhone.type='tel'; oldPhone.placeholder='เบอร์ซิมเดิม (เช่น 0812345678)';
-    oldPhone.value = row.oldPhoneNo || ''; oldPhone.style.marginTop='6px';
+    oldPhone.type='tel'; oldPhone.placeholder='เบอร์ซิมเดิมที่ถอดออก (เช่น 0812345678)';
+    oldPhone.value = row.oldPhoneNo || '';
     oldPhone.oninput = ()=>{ row.oldPhoneNo = oldPhone.value; updatePreview(); };
+    oldWrap.appendChild(simPhoneLabel('📤 ซิมเดิม (ที่ถอดออก)'));
     oldWrap.appendChild(oldPhone);
   }
 
