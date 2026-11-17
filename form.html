@@ -15,7 +15,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.139.0">
+<meta name="app-version" content="1.140.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@100..900&display=swap" rel="stylesheet">
@@ -515,6 +515,7 @@
     position:absolute; left:0; right:0; top:100%; margin-top:4px;
     background:var(--bg-panel-2); border:1px solid var(--line); border-radius:var(--r-sm);
     box-shadow:var(--shadow-md); max-height:220px; overflow-y:auto; z-index:20;
+    overscroll-behavior:contain; /* เลื่อนจนสุดรายการแล้วไม่ไหลไปเลื่อนทั้งหน้าต่อ */
   }
   .suggest-dropdown .item{
     padding:9px 12px; font-size:13px; cursor:pointer; color:var(--text);
@@ -3742,9 +3743,22 @@ function buildSearchableSelect(groups, selectedValue, placeholder, onChange){
     box.style.top = (r.bottom + 4) + 'px';
     box.style.width = r.width + 'px';
   }
+  // หน้าเลื่อนขณะรายการเปิด → ให้รายการตามช่องไปด้วย (position:fixed ไม่ตามเอง — เดิมรายการค้างลอยอยู่
+  // ที่เดิมทับส่วนอื่นของฟอร์ม) ช่องเลื่อนพ้นจอแล้วปิดรายการ, การเลื่อนภายในรายการเองไม่นับ
+  let scrollHooked = false;
+  function onPageScroll(e){
+    if(e && e.target && e.target.nodeType === 1 && box.contains(e.target)) return;
+    if(!input.isConnected || box.classList.contains('app-hidden')){ unhookScroll(); return; }
+    const r = input.getBoundingClientRect();
+    if(r.bottom < 0 || r.top > window.innerHeight){ box.classList.add('app-hidden'); unhookScroll(); return; }
+    positionBox();
+  }
+  function hookScroll(){ if(!scrollHooked){ scrollHooked = true; window.addEventListener('scroll', onPageScroll, true); window.addEventListener('resize', onPageScroll); } }
+  function unhookScroll(){ if(scrollHooked){ scrollHooked = false; window.removeEventListener('scroll', onPageScroll, true); window.removeEventListener('resize', onPageScroll); } }
   function pick(v, text){
     value = v; input.value = text;
     box.classList.add('app-hidden');
+    unhookScroll();
     input.blur(); // ปล่อยโฟกัส — แตะช่องอีกครั้งจะได้เปิดรายการใหม่ (focus/click ด้านล่าง)
     onChange(value);
   }
@@ -3773,6 +3787,7 @@ function buildSearchableSelect(groups, selectedValue, placeholder, onChange){
     });
     positionBox();
     box.classList.remove('app-hidden');
+    hookScroll();
   }
   input.addEventListener('focus', ()=>{ input.select(); render(); });
   input.addEventListener('input', render);
@@ -3782,7 +3797,7 @@ function buildSearchableSelect(groups, selectedValue, placeholder, onChange){
   // ไปหารายการ "จากประวัติทะเบียนนี้" แล้วรายการปิดเองก่อนเลือกได้ (ช่องเสียโฟกัส → ซ่อนใน 150ms)
   box.addEventListener('pointerdown', e=> e.preventDefault());
   input.addEventListener('blur', ()=>{
-    setTimeout(()=>{ box.classList.add('app-hidden'); input.value = labelFor(value); }, 150);
+    setTimeout(()=>{ box.classList.add('app-hidden'); unhookScroll(); input.value = labelFor(value); }, 150);
   });
   return wrap;
 }
