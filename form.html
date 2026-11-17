@@ -15,7 +15,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.135.0">
+<meta name="app-version" content="1.136.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@100..900&display=swap" rel="stylesheet">
@@ -1317,6 +1317,10 @@ function wireTechStockSearch(){
     matches.forEach(n=>{
       const item = document.createElement('div');
       item.className = 'item'; item.textContent = n;
+      // แตะลง (pointerdown) → preventDefault กันช่องพิมพ์เสียโฟกัส: กล่องรายชื่อไม่ถูกซ่อน (onblur
+      // 150ms) และคีย์บอร์ดไม่หุบจนรายการเลื่อนหนีนิ้ว — เดิมบนมือถือ click มาช้ากว่านั้น แตะแล้ว
+      // ไม่ได้ชื่อ ("เลือกคนไม่ได้") ยังเลือกตอน click เหมือนเดิม ปัดเลื่อนรายการจึงไม่เลือกผิดคน
+      item.addEventListener('pointerdown', e=> e.preventDefault());
       item.onclick = ()=>{
         addTechStockName(n);
         input.value = '';
@@ -2344,6 +2348,9 @@ function wireSuggestInput(inputId, boxId, getList, onPick, opts){
   }
   input.addEventListener('input', render);
   input.addEventListener('focus', render);
+  // แตะลงในกล่อง → กันช่องพิมพ์เสียโฟกัส (กล่องไม่ถูกซ่อนก่อน click มาถึง) — เหตุผลเดียวกับ
+  // รายชื่อช่างใน wireTechStockSearch()
+  box.addEventListener('pointerdown', e=>{ if(e.target.closest('.item')) e.preventDefault(); });
   box.addEventListener('click', e=>{
     const item = e.target.closest('.item');
     if(!item) return;
