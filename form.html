@@ -5346,13 +5346,9 @@ function buildMessage(){
     lines.push(...installDetailLines);
   }
 
-  const uploadedPhotos = state.photos.filter(p=> p.driveUrl);
-  if(uploadedPhotos.length){
-    lines.push(`📷 รูปภาพแนบ: ${uploadedPhotos.length} รูป`);
-    // ไม่ใส่ลิงก์โฟลเดอร์ Drive ในข้อความ LINE แล้ว (ตามที่ขอ 2026-11-17) — ลิงก์ยังเก็บในรายงาน (driveFolderUrl)
-    // เปิดดูได้จาก Dashboard/ประวัติเหมือนเดิม รูปยังส่งเข้า LINE เป็นภาพตามปกติ
-    lines.push('');
-  }
+  // ไม่ใส่ "📷 รูปภาพแนบ: N รูป" และลิงก์โฟลเดอร์ Drive ในข้อความ LINE แล้ว (ตามที่ขอ 2026-11-17) —
+  // รูปยังส่งเข้า LINE เป็นภาพตามปกติ ลิงก์ Drive ยังเก็บในรายงาน (driveFolderUrl) เปิดดูจาก Dashboard/ประวัติได้
+  lines.push('');
   lines.push(`ผู้ทดสอบ: ${tester.techName || '-'}`);
 
   return lines.join('\n');
