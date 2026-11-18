@@ -15,7 +15,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.145.0">
+<meta name="app-version" content="1.146.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@100..900&display=swap" rel="stylesheet">
@@ -3819,8 +3819,10 @@ function buildSearchableSelect(groups, selectedValue, placeholder, onChange){
     input.blur(); // ปล่อยโฟกัส — แตะช่องอีกครั้งจะได้เปิดรายการใหม่ (focus/click ด้านล่าง)
     onChange(value);
   }
-  function render(){
-    const q = input.value.trim().toLowerCase();
+  // showAll: เปิดจากการแตะช่อง (focus/click) → โชว์ทุกตัวเลือก ไม่กรองด้วยชื่อที่เลือกไว้แล้ว
+  // (เดิมแตะช่องที่เลือกไว้แล้วเห็นแค่ตัวเดิมตัวเดียว ต้องลบข้อความก่อนถึงเปลี่ยนได้) กรองเฉพาะตอนพิมพ์
+  function render(showAll){
+    const q = showAll === true ? '' : input.value.trim().toLowerCase();
     box.innerHTML = '';
     const clearItem = document.createElement('div');
     clearItem.className = 'item'; clearItem.style.color = 'var(--text-faint)';
@@ -3846,10 +3848,10 @@ function buildSearchableSelect(groups, selectedValue, placeholder, onChange){
     box.classList.remove('app-hidden');
     hookScroll();
   }
-  input.addEventListener('focus', ()=>{ input.select(); render(); });
-  input.addEventListener('input', render);
+  input.addEventListener('focus', ()=>{ input.select(); render(true); });
+  input.addEventListener('input', ()=> render());
   // กดช่องที่โฟกัสอยู่แล้วแต่รายการปิดไป → เปิดใหม่ (focus ไม่ยิงซ้ำถ้าโฟกัสยังอยู่)
-  input.addEventListener('click', ()=>{ if(box.classList.contains('app-hidden')) render(); });
+  input.addEventListener('click', ()=>{ if(box.classList.contains('app-hidden')) render(true); });
   // กดตรงไหนในรายการก็ได้ (รวมแถบเลื่อน/หัวกลุ่ม) ไม่ให้ช่องพิมพ์เสียโฟกัส — เดิมกดแถบเลื่อนเพื่อเลื่อนลง
   // ไปหารายการ "จากประวัติทะเบียนนี้" แล้วรายการปิดเองก่อนเลือกได้ (ช่องเสียโฟกัส → ซ่อนใน 150ms)
   box.addEventListener('pointerdown', e=> e.preventDefault());
