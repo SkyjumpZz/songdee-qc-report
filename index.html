@@ -12,7 +12,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>Dashboard · SONGDEE GPS</title>
-<meta name="app-version" content="1.43.0">
+<meta name="app-version" content="1.44.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@100..900&display=swap" rel="stylesheet">
@@ -481,10 +481,12 @@
     margin:18px 0 8px;
   }
   .list-subheading:first-of-type{margin-top:4px;}
-  /* ลิสต์ยาว (ลูกค้า/Fleet อาจมีเป็นร้อยรายการ) — เลื่อนในกรอบตัวเองแทนที่จะ
-     ดันความสูงทั้งการ์ด/หน้าเพจยาวไม่รู้จบ */
+  /* ลิสต์ยาว (ลูกค้า/Fleet/ช่าง) — เดิมเลื่อนในกรอบตัวเอง (max-height 360px) ทำให้บางจุด
+     เลื่อนไม่ได้ (เมาส์/นิ้วอยู่บนลิสต์แล้วหน้าเพจไม่เลื่อนตาม ต้องเลื่อนทีละกรอบ) —
+     ตอนนี้ปล่อยให้ยืดเต็มความสูง เลื่อนทั้งหน้าด้วยแถบเลื่อนอันเดียว (ตามที่ขอ
+     "ให้เลื่อนได้หมด") */
   .scroll-list{
-    max-height:360px; overflow-y:auto; padding-right:4px; margin-top:4px;
+    max-height:none; overflow:visible; margin-top:4px;
   }
   .tester-roster-row{
     display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:5px 10px;
