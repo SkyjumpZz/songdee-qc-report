@@ -15,7 +15,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.132.0">
+<meta name="app-version" content="1.147.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@100..900&display=swap" rel="stylesheet">
@@ -515,6 +515,7 @@
     position:absolute; left:0; right:0; top:100%; margin-top:4px;
     background:var(--bg-panel-2); border:1px solid var(--line); border-radius:var(--r-sm);
     box-shadow:var(--shadow-md); max-height:220px; overflow-y:auto; z-index:20;
+    overscroll-behavior:contain; /* เลื่อนจนสุดรายการแล้วไม่ไหลไปเลื่อนทั้งหน้าต่อ */
   }
   .suggest-dropdown .item{
     padding:9px 12px; font-size:13px; cursor:pointer; color:var(--text);
@@ -899,6 +900,7 @@
 <div class="actionbar app-hidden" id="actionBar">
   <div class="actionbar-inner">
     <button class="btn-secondary" onclick="copyText()">📋 คัดลอกข้อความ</button>
+    <div class="hint app-hidden" id="untrackedWarning" style="color:var(--danger); white-space:pre-line; margin-bottom:8px;"></div>
     <button class="btn-primary" id="sendBtn" onclick="sendToLine()">📤 ส่งเข้า LINE</button>
   </div>
   <div class="app-hidden" id="sentLinkWrap" style="text-align:center; margin-top:8px;">
@@ -1317,11 +1319,18 @@ function wireTechStockSearch(){
     matches.forEach(n=>{
       const item = document.createElement('div');
       item.className = 'item'; item.textContent = n;
+      // แตะลง (pointerdown) → preventDefault กันช่องพิมพ์เสียโฟกัส: กล่องรายชื่อไม่ถูกซ่อน (onblur
+      // 150ms) และคีย์บอร์ดไม่หุบจนรายการเลื่อนหนีนิ้ว — เดิมบนมือถือ click มาช้ากว่านั้น แตะแล้ว
+      // ไม่ได้ชื่อ ("เลือกคนไม่ได้") ยังเลือกตอน click เหมือนเดิม ปัดเลื่อนรายการจึงไม่เลือกผิดคน
+      item.addEventListener('pointerdown', e=> e.preventDefault());
+      // เลือกแล้วปิดรายการ + ปล่อยโฟกัส — เดิม (v1.136.0) เปิดรายการค้างไว้ต่อ ซึ่งบังช่องด้านล่าง
+      // (ชื่อลูกค้า/Fleet/ทะเบียน) แตะช่องพวกนั้นกลายเป็นแตะโดนชื่อช่างแทน → "ใส่ข้อมูลช่องอื่นไม่ได้"
+      // จะเพิ่มอีกคนก็แตะช่องค้นหาช่างอีกครั้ง
       item.onclick = ()=>{
         addTechStockName(n);
         input.value = '';
-        render();
-        input.focus();
+        box.classList.add('app-hidden');
+        input.blur();
       };
       box.appendChild(item);
     });
@@ -1330,6 +1339,17 @@ function wireTechStockSearch(){
   input.oninput = render;
   input.onfocus = render;
   input.onblur = ()=>{ setTimeout(()=>{ box.classList.add('app-hidden'); }, 150); };
+  // แตะตรงไหนก็ได้นอกช่องค้นหา/รายการ → ปิดรายการทันที (ไม่ให้ค้างบังช่องอื่น)
+  input.onclick = ()=>{ if(box.classList.contains('app-hidden')) render(); };
+  if(!box._outsideWired){
+    box._outsideWired = true; // wireTechStockSearch() ถูกเรียกซ้ำได้ — ผูกครั้งเดียวพอ
+    box.addEventListener('pointerdown', e=> e.preventDefault()); // กดแถบเลื่อนรายการแล้วไม่ปิดเอง
+    document.addEventListener('pointerdown', e=>{
+      if(box.classList.contains('app-hidden')) return;
+      if(e.target === input || box.contains(e.target)) return;
+      box.classList.add('app-hidden');
+    }, true);
+  }
   window.addEventListener('scroll', ()=>{ if(!box.classList.contains('app-hidden')) positionBox(); }, true);
   window.addEventListener('resize', ()=>{ if(!box.classList.contains('app-hidden')) positionBox(); });
 }
@@ -1610,13 +1630,35 @@ function updateMdvrImeiWarning(imei){
   if(!warn) return;
   const target = (imei || '').trim();
   const dev = target ? mdvrImeiPickList().find(d=> d.imei === target) : null;
-  if(dev && dev.plate){
-    warn.textContent = `⚠️ เครื่อง IMEI นี้มี Tracking อยู่แล้วที่ "${dev.plate}" — ถ้าทะเบียนนั้นไม่ใช่ทะเบียนจริง (เช่น ค้างในสต็อก) อาจต้องแจ้งแอดมินเคลียร์ก่อนบันทึก`;
+  if(dev && dev.plate && !mdvrPlateIsCurrent(dev.plate)){
+    warn.textContent = `⚠️ ในชีต เครื่อง IMEI นี้ Track อยู่ที่ "${dev.plate.replace(/\s*\n\s*/g,' / ')}" — ถ้าบันทึก ระบบจะย้ายมาทะเบียนนี้ (ค่าเดิมเก็บไว้ในคอลัมน์ note) คนเทสตัดสินใจได้เลย`;
     warn.classList.remove('app-hidden');
   } else {
     warn.textContent = '';
     warn.classList.add('app-hidden');
   }
+}
+
+// เครื่อง MDVR ที่ชีต MDVR Tracking บอกว่าติดอยู่กับทะเบียนในฟอร์มตอนนี้ (ข้อมูลเก่าก่อนงานนี้)
+// — ให้คนเทสเห็น IMEI ที่ Track อยู่จริงก่อนตัดสินใจเลือกเครื่อง ไม่ได้บล็อกอะไร
+function mdvrPlateIsCurrent(cellPlate){
+  const plate = (state.plate || '').trim();
+  if(!plate || !cellPlate) return false;
+  return plateMatches(cellPlate, normPlate(plate), normPlateLoose(plate));
+}
+function mdvrTrackedOnPlate(){
+  if(!(state.plate || '').trim()) return [];
+  return mdvrAllDevices.filter(d=> d.plate && mdvrPlateIsCurrent(d.plate));
+}
+function buildMdvrTrackedHint(){
+  const hint = document.createElement('div');
+  hint.className = 'hint'; hint.style.marginTop = '6px';
+  const tracked = mdvrTrackedOnPlate();
+  if(!(state.plate || '').trim()) hint.textContent = '📋 MDVR ที่ Track อยู่ในชีต: ใส่ทะเบียนก่อนถึงจะแสดง';
+  else if(!mdvrAllDevices.length) hint.textContent = '📋 MDVR ที่ Track อยู่ในชีต: กำลังโหลด…';
+  else if(!tracked.length) hint.textContent = `📋 MDVR ที่ Track อยู่ในชีตกับ ${state.plate}: ไม่มี`;
+  else hint.textContent = `📋 MDVR ที่ Track อยู่ในชีตกับ ${state.plate}: ` + tracked.map(d=> `IMEI ${d.imei}${d.deviceType ? ' (' + d.deviceType + ')' : ''}`).join(', ');
+  return hint;
 }
 
 // เติมรุ่น MDVR ให้แถว "อุปกรณ์ที่ติดตั้ง" แถวแรกที่ยังว่างอัตโนมัติ เมื่อเลือก/
@@ -1878,14 +1920,23 @@ async function pushMdvrUnitSwaps(){
 // เท่านั้น) เพราะฝั่ง backend (installMdvrDevice()) ไม่ได้สนใจว่ารถนี้เคยมี
 // MDVR มาก่อนหรือไม่ แค่หาแถวที่ IMEI ตรงใน Tracking แล้วเขียนทะเบียน/ลูกค้า/
 // ผู้ติดตั้งลงไป — ต่างจาก /mdvr-unit-swap ตรงที่ไม่มีแถวเก่าให้ clear
+// ถ้ารายงานเดียวกันมีแถว "① ถอด" ที่เป็น MDVR ด้วย (ถอดเครื่องเก่า + ติดตั้งเครื่องใหม่
+// คนละแถว ไม่ได้จับคู่เป็นแถว "เปลี่ยน") = เปลี่ยนเครื่องจริง → ส่งไป /mdvr-unit-swap
+// แทน /mdvr-install ให้ย้ายข้อมูลรถ (กล้อง/เบอร์/อุปกรณ์) จากแถวเครื่องเก่าไปแถว
+// เครื่องใหม่และล้างแถวเก่าให้ครบ เหมือนตอนกรอกเป็นแถว "เปลี่ยน" (เคส (TO7)53-2257
+// 17/11/2026: ทางติดตั้งใหม่ไม่ล้างแถวเก่า ทะเบียนเลยค้าง 2 แถว)
+function reportRemovesMdvr(){
+  return state.fixes.some(r=> r.section === 'remove' && deviceTypeForProduct(r.oldModel) === 'mdvr');
+}
 function buildMdvrFixInstalls(){
   if(!tplHasOldModel(state.tpl) || state.tpl === 'remove') return [];
+  const asSwap = reportRemovesMdvr();
   const installs = [];
   state.fixes.forEach(row=>{
     if(row.oldModel) return; // มี oldModel แปลว่าเป็นแถวสลับของเดิม — buildMdvrUnitSwaps() จัดการแทน
     const newImei = (row.newMdvrImei || '').trim();
     if(!newImei) return;
-    installs.push({ imei: newImei, deviceId: (row.mdvrDeviceId || '').trim(), server: (row.mdvrServer || '').trim() });
+    installs.push({ imei: newImei, deviceId: (row.mdvrDeviceId || '').trim(), server: (row.mdvrServer || '').trim(), asSwap });
   });
   return installs;
 }
@@ -1897,7 +1948,13 @@ async function pushMdvrFixInstalls(){
   if(!plate) return null;
   const results = [];
   for(const it of installs){
-    const res = await authFetch(MDVR_INSTALL_ENDPOINT, {
+    const res = it.asSwap
+      ? await authFetch(MDVR_UNIT_SWAP_ENDPOINT, {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ plate, newImei: it.imei, deviceId: it.deviceId, server: it.server, customer: state.customer, fleet: state.fleet, date: state.date, technician: onSiteTechName(), technicianRaw: onSiteTechNameRaw() })
+        })
+      : await authFetch(MDVR_INSTALL_ENDPOINT, {
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body: JSON.stringify({ imei: it.imei, deviceId: it.deviceId, server: it.server, plate, customer: state.customer, fleet: state.fleet, date: state.date, technician: onSiteTechName() })
@@ -2344,12 +2401,17 @@ function wireSuggestInput(inputId, boxId, getList, onPick, opts){
   }
   input.addEventListener('input', render);
   input.addEventListener('focus', render);
+  // แตะลงในกล่อง → กันช่องพิมพ์เสียโฟกัส (กล่องไม่ถูกซ่อนก่อน click มาถึง) — เหตุผลเดียวกับ
+  // รายชื่อช่างใน wireTechStockSearch()
+  box.addEventListener('pointerdown', e=> e.preventDefault()); // ทั้งกล่อง รวมแถบเลื่อน — ไม่ให้ช่องเสียโฟกัส/รายการปิดเอง
+  input.addEventListener('click', ()=>{ if(box.classList.contains('app-hidden')) render(); });
   box.addEventListener('click', e=>{
     const item = e.target.closest('.item');
     if(!item) return;
     input.value = item.textContent;
     box.classList.add('app-hidden');
     box.innerHTML = '';
+    input.blur();
     onPick(item.textContent);
   });
   input.addEventListener('blur', ()=>{
@@ -2624,6 +2686,14 @@ const REPORT_FIELD_LABELS = {
   mdvrPosition: 'MDVR position', groundPoint: 'จุดจั๊มไฟ', province: 'Province', statusDlt: 'Status DLT',
   tapIo: 'หมายเหตุสาย IO (TAP IO)',
 };
+// สำเนาแบบลึกของรายงานไว้เทียบตอนบันทึกครั้งถัดไป (originalReportDoc) — เดิมใช้ {...x}
+// ซึ่งก๊อปแค่ชั้นบนสุด problems/fixes/stickers/checklist ยังเป็นก้อนเดียวกับ state ที่
+// ฟอร์มแก้ค่าตรงๆ (state.problems[i].symptom = ...) พอแก้ในฟอร์ม "ของเดิม" ก็เปลี่ยนตาม
+// diffReportFields() เลยเห็นว่าเท่ากันเสมอ log ประวัติไม่เคยบันทึกการแก้ ปัญหา/รายการ
+// แก้ไข/สติ๊กเกอร์/checklist เลย (เจอตอนตามหารายงานที่ถูกเขียนทับ 2026-11-16)
+function snapshotReport(doc){
+  return JSON.parse(JSON.stringify(doc));
+}
 function diffReportFields(oldDoc, payload){
   const changes = [];
   const tplForLabels = payload.tpl || oldDoc.tpl;
@@ -2752,7 +2822,7 @@ async function saveReport(){
     await logReportChange('create', payload, []);
   }
   if(epoch !== reportEpoch) return;
-  originalReportDoc = { ...payload, id: currentReportId };
+  originalReportDoc = snapshotReport({ ...payload, id: currentReportId });
 }
 
 // บันทึกรายงานให้ได้ก่อนส่งเข้า LINE เสมอ — ลองซ้ำสูงสุด 3 รอบ แต่ละรอบรอไม่เกิน 20 วิ
@@ -2783,7 +2853,7 @@ function loadReportIntoForm(doc){
   currentReportId = doc.id;
   reportEpoch++;
   pendingNewReportRef = null;
-  originalReportDoc = { ...doc };
+  originalReportDoc = snapshotReport(doc);
   isResendOfExistingReport = true;
   isQuickResend = false; // caller (loadReportFromUrlIfAny()) sets this true right after, only for &autosend=1
   selectedAssignmentId = null;
@@ -3011,10 +3081,29 @@ function isSimProduct(product){
 // "Camera" category (DOME/Reverse ฯลฯ) บวก DMS/ADAS (ก็ต่อสายเข้าช่องกล้อง
 // ของ MDVR เหมือนกัน แค่ identity ติดตามด้วย SN คนละชีต) ไม่รวม AI Box (ไม่ได้
 // ต่อเข้าช่องกล้องช่องไหน เป็นตัวประมวลผลแยก)
+// ป้ายบอกชัดๆ ว่าช่องเบอร์ไหนคือซิมเดิม/ซิมใหม่ (ตามที่แจ้ง — ช่อง SIM สองช่องหน้าตาเหมือนกัน)
+function simPhoneLabel(text){
+  const l = document.createElement('label');
+  l.textContent = text; l.style.marginTop = '8px'; l.style.display = 'block';
+  return l;
+}
 function rowNeedsChannel(product){
   if(cameraProductNames.has(product)) return true;
+  // กล้องที่ไม่อยู่ในหมวด Camera ของ Stock เช่น "Camera V31BSD- CL" (กล้อง BSD) — เดิมไม่มี
+  // ช่องเลือก CH ช่างเลยพิมพ์ CH6/CH7 ไว้ในหมายเหตุ แล้วไม่ถูกเขียนลง Ch6–Ch9 (เคส (TO7)53-2257)
+  if(isBsdCameraProduct(product) || (/camera|กล้อง/i.test(product || '') && !/สาย|cable|ขา|bracket/i.test(product || ''))) return true;
   const t = deviceTypeForProduct(product);
   return t === 'dms' || t === 'adas';
+}
+function isBsdCameraProduct(product){
+  return /bsd/i.test(product || '') && !/สาย|cable|ขา|bracket/i.test(product || '') && deviceTypeForProduct(product) !== 'mdvr';
+}
+// CH ของแถว: ช่อง CH ที่เลือก ถ้าไม่มี ลองอ่านจากหมายเหตุ ("CH6", "ch 7") — รายงานเก่า
+// ที่กล้องบางรุ่นยังไม่มีช่องเลือก CH ช่างจดตำแหน่งไว้ในหมายเหตุแทน
+function rowChannel(row){
+  if(row.ch) return row.ch;
+  const m = String(row.remark || '').match(/\bch\s*([1-9])\b/i);
+  return m ? 'Ch' + m[1] : '';
 }
 
 // ต้องตรงตัวอักษรกับหัวคอลัมน์ "Ch1".."Ch9" ในชีต MDVR Tracking เป๊ะ (ดู
@@ -3717,13 +3806,29 @@ function buildSearchableSelect(groups, selectedValue, placeholder, onChange){
     box.style.top = (r.bottom + 4) + 'px';
     box.style.width = r.width + 'px';
   }
+  // หน้าเลื่อนขณะรายการเปิด → ให้รายการตามช่องไปด้วย (position:fixed ไม่ตามเอง — เดิมรายการค้างลอยอยู่
+  // ที่เดิมทับส่วนอื่นของฟอร์ม) ช่องเลื่อนพ้นจอแล้วปิดรายการ, การเลื่อนภายในรายการเองไม่นับ
+  let scrollHooked = false;
+  function onPageScroll(e){
+    if(e && e.target && e.target.nodeType === 1 && box.contains(e.target)) return;
+    if(!input.isConnected || box.classList.contains('app-hidden')){ unhookScroll(); return; }
+    const r = input.getBoundingClientRect();
+    if(r.bottom < 0 || r.top > window.innerHeight){ box.classList.add('app-hidden'); unhookScroll(); return; }
+    positionBox();
+  }
+  function hookScroll(){ if(!scrollHooked){ scrollHooked = true; window.addEventListener('scroll', onPageScroll, true); window.addEventListener('resize', onPageScroll); } }
+  function unhookScroll(){ if(scrollHooked){ scrollHooked = false; window.removeEventListener('scroll', onPageScroll, true); window.removeEventListener('resize', onPageScroll); } }
   function pick(v, text){
     value = v; input.value = text;
     box.classList.add('app-hidden');
+    unhookScroll();
+    input.blur(); // ปล่อยโฟกัส — แตะช่องอีกครั้งจะได้เปิดรายการใหม่ (focus/click ด้านล่าง)
     onChange(value);
   }
-  function render(){
-    const q = input.value.trim().toLowerCase();
+  // showAll: เปิดจากการแตะช่อง (focus/click) → โชว์ทุกตัวเลือก ไม่กรองด้วยชื่อที่เลือกไว้แล้ว
+  // (เดิมแตะช่องที่เลือกไว้แล้วเห็นแค่ตัวเดิมตัวเดียว ต้องลบข้อความก่อนถึงเปลี่ยนได้) กรองเฉพาะตอนพิมพ์
+  function render(showAll){
+    const q = showAll === true ? '' : input.value.trim().toLowerCase();
     box.innerHTML = '';
     const clearItem = document.createElement('div');
     clearItem.className = 'item'; clearItem.style.color = 'var(--text-faint)';
@@ -3747,11 +3852,17 @@ function buildSearchableSelect(groups, selectedValue, placeholder, onChange){
     });
     positionBox();
     box.classList.remove('app-hidden');
+    hookScroll();
   }
-  input.addEventListener('focus', ()=>{ input.select(); render(); });
-  input.addEventListener('input', render);
+  input.addEventListener('focus', ()=>{ input.select(); render(true); });
+  input.addEventListener('input', ()=> render());
+  // กดช่องที่โฟกัสอยู่แล้วแต่รายการปิดไป → เปิดใหม่ (focus ไม่ยิงซ้ำถ้าโฟกัสยังอยู่)
+  input.addEventListener('click', ()=>{ if(box.classList.contains('app-hidden')) render(true); });
+  // กดตรงไหนในรายการก็ได้ (รวมแถบเลื่อน/หัวกลุ่ม) ไม่ให้ช่องพิมพ์เสียโฟกัส — เดิมกดแถบเลื่อนเพื่อเลื่อนลง
+  // ไปหารายการ "จากประวัติทะเบียนนี้" แล้วรายการปิดเองก่อนเลือกได้ (ช่องเสียโฟกัส → ซ่อนใน 150ms)
+  box.addEventListener('pointerdown', e=> e.preventDefault());
   input.addEventListener('blur', ()=>{
-    setTimeout(()=>{ box.classList.add('app-hidden'); input.value = labelFor(value); }, 150);
+    setTimeout(()=>{ box.classList.add('app-hidden'); unhookScroll(); input.value = labelFor(value); }, 150);
   });
   return wrap;
 }
@@ -4022,9 +4133,10 @@ function buildProductHalf(row, idx, ctx){
   // buildSheetUpdates() ที่เขียนเบอร์นี้ลงคอลัมน์ "Phone No." แทนชื่อ product
   if(isSimProduct(row.product)){
     const phoneInput = document.createElement('input');
-    phoneInput.type='tel'; phoneInput.placeholder='เบอร์ซิม (เช่น 0812345678)';
-    phoneInput.value = row.phoneNo || ''; phoneInput.style.marginTop='6px';
+    phoneInput.type='tel'; phoneInput.placeholder='เบอร์ซิมใหม่ที่ใส่แทน (เช่น 0812345678)';
+    phoneInput.value = row.phoneNo || '';
     phoneInput.oninput = ()=>{ row.phoneNo = phoneInput.value; updatePreview(); };
+    wrap.appendChild(simPhoneLabel('📥 ซิมใหม่ (ที่ใส่เข้าไป) — ระบบลงเบอร์นี้ใน Tracking'));
     wrap.appendChild(phoneInput);
   }
 
@@ -4043,10 +4155,11 @@ function buildProductHalf(row, idx, ctx){
   if(showMdvrImeiPicker){
     const hint = document.createElement('div');
     hint.className = 'hint'; hint.style.marginTop = '6px';
-    hint.textContent = '📡 เลือก IMEI เครื่อง MDVR ที่ว่างอยู่ (ติดตั้งใหม่ ไม่ใช่เปลี่ยนของเดิม)';
+    hint.textContent = '📡 เลือก IMEI เครื่อง MDVR ที่ติดตั้ง (เลือกได้ทุกเครื่อง แม้ในชีตจะ Track อยู่ที่อื่น)';
     wrap.appendChild(hint);
 
     loadMdvrAllDevices(); // not awaited — merges เข้า pickList เองรอบถัดไปที่ renderFixRows(), ดู loadMdvrAllDevices()
+    wrap.appendChild(buildMdvrTrackedHint());
     const pickList = mdvrImeiPickList();
     const groups = [{
       label: null,
@@ -4060,10 +4173,10 @@ function buildProductHalf(row, idx, ctx){
     wrap.appendChild(imeiSel);
 
     const pickedDev = row.newMdvrImei ? pickList.find(d=> d.imei === row.newMdvrImei) : null;
-    if(pickedDev && pickedDev.plate){
+    if(pickedDev && pickedDev.plate && !mdvrPlateIsCurrent(pickedDev.plate)){
       const warn = document.createElement('div');
       warn.className = 'hint'; warn.style.marginTop = '6px'; warn.style.color = 'var(--danger)';
-      warn.textContent = `⚠️ เครื่อง IMEI นี้มี Tracking อยู่แล้วที่ทะเบียน ${pickedDev.plate} — ถ้าเลือก ระบบจะย้ายออกจากทะเบียนนั้นมาที่นี่`;
+      warn.textContent = `⚠️ ในชีต เครื่อง IMEI นี้ Track อยู่ที่ "${pickedDev.plate.replace(/\s*\n\s*/g,' / ')}" — ถ้าบันทึก ระบบจะย้ายมาทะเบียนนี้ (ค่าเดิมเก็บไว้ในคอลัมน์ note) คนเทสตัดสินใจได้เลย`;
       wrap.appendChild(warn);
     }
 
@@ -4224,9 +4337,10 @@ function buildOldModelHalf(row, idx, standalone){
   if(oldIsSim){
     if(oldModelSrc && oldModelSrc.value && !row.oldPhoneNo) row.oldPhoneNo = oldModelSrc.value;
     const oldPhone = document.createElement('input');
-    oldPhone.type='tel'; oldPhone.placeholder='เบอร์ซิมเดิม (เช่น 0812345678)';
-    oldPhone.value = row.oldPhoneNo || ''; oldPhone.style.marginTop='6px';
+    oldPhone.type='tel'; oldPhone.placeholder='เบอร์ซิมเดิมที่ถอดออก (เช่น 0812345678)';
+    oldPhone.value = row.oldPhoneNo || '';
     oldPhone.oninput = ()=>{ row.oldPhoneNo = oldPhone.value; updatePreview(); };
+    oldWrap.appendChild(simPhoneLabel('📤 ซิมเดิม (ที่ถอดออก)'));
     oldWrap.appendChild(oldPhone);
   }
 
@@ -4844,17 +4958,18 @@ function fixLine(row){
   // หมายเหตุแทน ดู buildProductHalf()'s remark textarea.
   const remark = (row.remark || '').trim();
   const remarkTag = remark ? ` (${remark})` : '';
+  // บอกคำว่า "ถอด"/"ติดตั้ง" + "จำนวน N ตัว" ทุกบรรทัดอุปกรณ์ (ตามที่ขอ 2026-11-16
+  // "เวลาลงงานผ่าน Line แล้วไม่ชัด") — เดิมบรรทัดติดตั้งเหลือแค่ชื่ออุปกรณ์เฉยๆ และ
+  // ไม่บอกจำนวน ช่องจำนวนในฟอร์มตั้งต้นเป็น 1 อยู่แล้ว ค่าว่าง/ไม่ใช่ตัวเลขถือเป็น 1
+  const qtyN = parseInt(row.qty, 10) > 0 ? parseInt(row.qty, 10) : 1;
+  const qtyTag = ` จำนวน ${qtyN} ตัว`;
   // แถวที่มีทั้ง oldModel และ product พร้อมกัน (เช่น เปลี่ยน MDVR ทั้งเครื่อง —
   // ดู buildMdvrUnitSwapHalf()) เดิมรวมเป็นบรรทัดเดียว "ทำการเปลี่ยน X เป็น Y"
   // แยกเป็น 2 บรรทัดแทน (ตามที่ขอ "Upgrade ให้เป็นรายการแยกกัน") ให้ฟอร์แมต
   // ตรงกับแถวถอด-อย่างเดียว/ติดตั้ง-อย่างเดียวด้านล่างเป๊ะๆ
-  if(oldName && name) return `- ทำการถอด ${oldName}${oldTag}${oldPhoneTag}\n- ${name}${deviceIdTag}${chTag}${storageSlotTag}${phoneTag}${ownTag}${extraTag}${remarkTag}`;
-  if(name){
-    const qty = row.qty ? ` x${row.qty}` : '';
-    // ตัดคำ "ทำการติดตั้ง" ออก (ตามที่ขอ "สั้นๆ") — เหลือแค่ "- ชื่ออุปกรณ์..."
-    return `- ${name}${qty}${deviceIdTag}${chTag}${storageSlotTag}${phoneTag}${ownTag}${extraTag}${remarkTag}`;
-  }
-  if(oldName) return `- ทำการถอด ${oldName}${oldTag}${ownTag}${remarkTag}`;
+  if(oldName && name) return `- ถอด ${oldName}${qtyTag}${oldTag}${oldPhoneTag}\n- ติดตั้ง ${name}${qtyTag}${deviceIdTag}${chTag}${storageSlotTag}${phoneTag}${ownTag}${extraTag}${remarkTag}`;
+  if(name) return `- ติดตั้ง ${name}${qtyTag}${deviceIdTag}${chTag}${storageSlotTag}${phoneTag}${ownTag}${extraTag}${remarkTag}`;
+  if(oldName) return `- ถอด ${oldName}${qtyTag}${oldTag}${ownTag}${remarkTag}`;
   if(remark) return `- ${remark}`;
   return null;
 }
@@ -4863,14 +4978,14 @@ function fixLine(row){
 // ถอด ให้มันเป็นสีแดง") — ข้อความ Line แบบ type:"text" ธรรมดาใส่สีตัวอักษรจริงๆ
 // ไม่ได้เลย (ต้องเป็น Flex Message ซึ่งคัดลอก/แก้ไข/ส่งต่อในแชทไม่ได้ ตามที่เคย
 // เปลี่ยนกลับมาใช้ข้อความธรรมดาไปแล้ว) ใช้ 🔴 แทนสีตามที่เลือก — markRemoveLine()
-// เช็คเฉพาะ "- ทำการถอด " ตรงๆ (prefix ที่ fixLine() ใช้เป๊ะ) ไม่ใช่ทุกบรรทัดที่
+// เช็คเฉพาะ "- ถอด " ตรงๆ (prefix ที่ fixLine() ใช้เป๊ะ) ไม่ใช่ทุกบรรทัดที่
 // มีคำว่า "ถอด" เผื่อไปโดนข้อความอื่นที่ไม่เกี่ยวโดยไม่ตั้งใจ (เช่น "ถอดย้าย
 // อุปกรณ์" ในชื่อประเภทงานที่ไม่ใช่รายการอุปกรณ์) ใช้ได้ทั้งบรรทัดเดี่ยวและ
 // บรรทัดคู่ถอด+ติดตั้งที่คั่นด้วย \n (เช็คแค่ prefix ของทั้งสตริง ไม่กระทบบรรทัด
 // ที่ 2 ที่ต่อท้าย)
 function markRemoveLine(line){
-  const prefix = '- ทำการถอด ';
-  return line.startsWith(prefix) ? `- 🔴 ทำการถอด ${line.slice(prefix.length)}` : line;
+  const prefix = '- ถอด ';
+  return line.startsWith(prefix) ? `- 🔴 ถอด ${line.slice(prefix.length)}` : line;
 }
 function markRemoveHeader(header){
   return header.includes('ถอด') ? `🔴 ${header}` : header;
@@ -4882,7 +4997,7 @@ function markRemoveHeader(header){
 // เหลือแค่ชื่อเฉยๆ เลยดูแยกไม่ออกว่าเป็นถอดหรือติดตั้ง (ตามที่แจ้ง "ไม่มีคำมา
 // บอกมันจะทำให้อ่านยาก") ใช้ 🟢 นำหน้าแทน ไม่เอาคำกลับมา (ตามที่เลือก) —
 // markInstallLine() ไม่เช็ค prefix เฉพาะเจาะจงแบบ markRemoveLine() เพราะบรรทัด
-// ติดตั้งไม่มี prefix คงที่ให้เช็ค (ต่างจาก "- ทำการถอด ") ผู้เรียกต้องมั่นใจเองว่า
+// ติดตั้งเช็คจากข้อมูลแถวแทน (ดู markedFixLine()) ผู้เรียกต้องมั่นใจเองว่า
 // line ที่ส่งเข้ามาเป็นบรรทัดติดตั้งจริงๆ ไม่ใช่บรรทัด remark เฉยๆ — ดู
 // markedFixLine() ด้านล่างที่เช็คจากข้อมูลแถว (row.oldModel/row.product) แทน
 // การเดาจากข้อความ เพื่อไม่ให้ไปติดบรรทัด remark ที่หน้าตาเหมือนกันทุกประการ
@@ -4943,6 +5058,8 @@ function sheetValueForColumn(column, product){
   // heuristic ทั่วไปด้านล่าง — เป็น override ที่ตั้งใจเจาะจงรายชิ้น (แยกจากชื่อที่ลง
   // LINE — ดู equipmentLineName() ที่ fixLine() ใช้)
   if(equipmentSheetNameMap[product]) return equipmentSheetNameMap[product];
+  // ชีตลงกล้อง BSD ในช่อง Ch ว่า "BSD" (เหมือน DMS/ADAS ด้านล่าง)
+  if(/^Ch[1-9]$/.test(column) && isBsdCameraProduct(product)) return 'BSD';
   const type = deviceTypeForProduct(product);
   if(/^Ch[1-9]$/.test(column) && (type === 'dms' || type === 'adas')){
     return type.toUpperCase();
@@ -4986,11 +5103,11 @@ function buildSheetUpdates(){
         const storName = row.product === "อื่นๆ (พิมพ์เอง)" ? (row.custom || "") : row.product;
         if(storName) updates.push({ plate: newPlate, column: row.storageSlot, value: storName });
       }
-      if(!row.ch || !rowNeedsChannel(row.product)) return;
+      if(!rowChannel(row) || !rowNeedsChannel(row.product)) return;
       const newName = row.product === "อื่นๆ (พิมพ์เอง)" ? (row.custom || "") : row.product;
       if(!newName) return;
-      const value = sheetValueForColumn(row.ch, row.product) || newName;
-      updates.push({ plate: newPlate, column: row.ch, value });
+      const value = sheetValueForColumn(rowChannel(row), row.product) || newName;
+      updates.push({ plate: newPlate, column: rowChannel(row), value });
     });
     return updates;
   }
@@ -5005,11 +5122,18 @@ function buildSheetUpdates(){
       // อัปเกรด/ซ่อม ไม่ได้เปลี่ยนจากของเดิม — ใช้ CH ที่เลือกไว้ตรงๆ แทน
       // (buildProductHalf() เปิดให้เลือกได้แล้วสำหรับ upgrade/repair ด้วย)
       if(!src){
-        if(row.ch && rowNeedsChannel(row.product)){
+        // ซิมใหม่ที่ไม่ได้จับคู่กับ "Phone No." จากประวัติทะเบียน (เช่น ถอดซิมเก่าแถวหนึ่ง
+        // ติดตั้งซิมใหม่อีกแถว) — เดิมไม่ถูกเขียนเลย ลงเบอร์ใหม่ที่คอลัมน์ Phone No. ตรงๆ
+        if(isSimProduct(row.product)){
+          const phone = (row.phoneNo || '').trim();
+          if(phone) updates.push({ plate: state.plate, column: PHONE_NO_COLUMN, value: phone });
+          return;
+        }
+        if(rowChannel(row) && rowNeedsChannel(row.product)){
           const newName = row.product === "อื่นๆ (พิมพ์เอง)" ? (row.custom || "") : row.product;
           if(newName){
-            const value = sheetValueForColumn(row.ch, row.product) || newName;
-            updates.push({ plate: state.plate, column: row.ch, value });
+            const value = sheetValueForColumn(rowChannel(row), row.product) || newName;
+            updates.push({ plate: state.plate, column: rowChannel(row), value });
           }
         }
         // ตัวบันทึก (SD/SSD) — เหตุผลเดียวกับ CH ด้านบน แค่คนละคอลัมน์ (ดู
@@ -5037,6 +5161,11 @@ function buildSheetUpdates(){
     });
   } else if(state.tpl === 'new_install'){
     state.fixes.forEach(row=>{
+      if(isSimProduct(row.product)){
+        const phone = (row.phoneNo || '').trim();
+        if(phone) updates.push({ plate: state.plate, column: PHONE_NO_COLUMN, value: phone });
+        return;
+      }
       // rowNeedsChannel check is defense-in-depth — renderFixRows()/the
       // product picker already clear row.ch off a row that doesn't need one,
       // but a report saved before that guard existed could still have a
@@ -5045,11 +5174,11 @@ function buildSheetUpdates(){
         const storName = row.product === "อื่นๆ (พิมพ์เอง)" ? (row.custom || "") : row.product;
         if(storName) updates.push({ plate: state.plate, column: row.storageSlot, value: storName });
       }
-      if(!row.ch || !rowNeedsChannel(row.product)) return;
+      if(!rowChannel(row) || !rowNeedsChannel(row.product)) return;
       const newName = row.product === "อื่นๆ (พิมพ์เอง)" ? (row.custom || "") : row.product;
       if(!newName) return;
-      const value = sheetValueForColumn(row.ch, row.product) || newName;
-      updates.push({ plate: state.plate, column: row.ch, value });
+      const value = sheetValueForColumn(rowChannel(row), row.product) || newName;
+      updates.push({ plate: state.plate, column: rowChannel(row), value });
     });
   }
   return updates;
@@ -5220,6 +5349,8 @@ async function pushIssueClose(){
       body: JSON.stringify({
         plate: state.plate, ticketNo: issue.ticketNo,
         fixedDetails: fixLines.join('\n'), technician: onSiteTechName(), date: dateStr,
+        // ชื่อเล่นภาษาไทยดิบ — ชีต Issue รถเหลืองใช้รูปแบบ "<ชื่อเล่น> ส่งดี" ไม่ใช่ชื่อ Track ภาษาอังกฤษ
+        technicianRaw: onSiteTechNameRaw(),
         cause: issue.cause || '',
       })
     });
@@ -5303,6 +5434,7 @@ function buildMessage(){
 
   if((state.stickerRemark || '').trim()){
     lines.push(`📝 Remark: ${state.stickerRemark.trim()}`);
+    lines.push(''); // เว้น 1 บรรทัดก่อนหัวข้อสติ๊กเกอร์ (ตามที่ขอ — เดิมติดกันอ่านยาก)
   }
   lines.push('🔹ตรวจสอบ สติ๊กเกอร์ 3 จุด🔹');
   STICKERS.forEach(s=>{
@@ -5337,12 +5469,9 @@ function buildMessage(){
     lines.push(...installDetailLines);
   }
 
-  const uploadedPhotos = state.photos.filter(p=> p.driveUrl);
-  if(uploadedPhotos.length){
-    lines.push(`📷 รูปภาพแนบ: ${uploadedPhotos.length} รูป`);
-    if(state.driveFolderUrl) lines.push(`เข้าดูรูปทั้งหมดใน Drive: ${state.driveFolderUrl}`);
-    lines.push('');
-  }
+  // ไม่ใส่ "📷 รูปภาพแนบ: N รูป" และลิงก์โฟลเดอร์ Drive ในข้อความ LINE แล้ว (ตามที่ขอ 2026-11-17) —
+  // รูปยังส่งเข้า LINE เป็นภาพตามปกติ ลิงก์ Drive ยังเก็บในรายงาน (driveFolderUrl) เปิดดูจาก Dashboard/ประวัติได้
+  lines.push('');
   lines.push(`ผู้ทดสอบ: ${tester.techName || '-'}`);
 
   return lines.join('\n');
@@ -5500,6 +5629,13 @@ function getMissingFields(){
 
 function updatePreview(){
   document.getElementById('preview').textContent = buildMessage();
+  // แถวที่ระบบ Track ไม่อัปเดต — โชว์บนหน้าเว็บเฉยๆ ไม่ถามตอนส่ง ไม่ลง LINE (ดู untrackableFixRows())
+  const untrackedEl = document.getElementById('untrackedWarning');
+  if(untrackedEl){
+    const rows = untrackableFixRows();
+    untrackedEl.textContent = rows.length ? '⚠️ รายการเหล่านี้ระบบจะไม่อัปเดตลง Tracking (เลือกอุปกรณ์/กรอกเบอร์ให้ครบ):\n' + rows.join('\n') : '';
+    untrackedEl.classList.toggle('app-hidden', !rows.length);
+  }
   const missing = getMissingFields();
   const badge = document.getElementById('missingBadge');
   const btn = document.getElementById('sendBtn');
@@ -5793,6 +5929,22 @@ async function retrackCurrentReport(){
   }finally{
     retrackBusy = false;
   }
+}
+
+function untrackableFixRows(){
+  const out = [];
+  const t = v => String(v || '').trim();
+  state.fixes.forEach((row, i)=>{
+    const hasItem = t(row.product) || t(row.custom) || t(row.oldModel) || t(row.oldModelCustom);
+    const hasContent = t(row.remark) || t(row.newSN) || t(row.oldSN) || t(row.phoneNo) || t(row.oldPhoneNo) || t(row.newMdvrImei);
+    const snippet = t(row.remark).replace(/\s+/g, ' ').slice(0, 40);
+    if(!hasItem && hasContent){
+      out.push(`• แถวที่ ${i + 1}: ไม่ได้เลือกอุปกรณ์${snippet ? ` ("${snippet}${t(row.remark).length > 40 ? '…' : ''}")` : ''}`);
+    } else if(isSimProduct(row.product) && !t(row.phoneNo)){
+      out.push(`• แถวที่ ${i + 1}: เลือกซิมแต่ยังไม่กรอกเบอร์ใหม่`);
+    }
+  });
+  return out;
 }
 
 async function sendToLine(){
