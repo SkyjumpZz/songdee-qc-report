@@ -12,7 +12,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>Dashboard · SONGDEE GPS</title>
-<meta name="app-version" content="1.44.0">
+<meta name="app-version" content="1.45.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@100..900&display=swap" rel="stylesheet">
@@ -481,13 +481,36 @@
     margin:18px 0 8px;
   }
   .list-subheading:first-of-type{margin-top:4px;}
-  /* ลิสต์ยาว (ลูกค้า/Fleet/ช่าง) — เดิมเลื่อนในกรอบตัวเอง (max-height 360px) ทำให้บางจุด
-     เลื่อนไม่ได้ (เมาส์/นิ้วอยู่บนลิสต์แล้วหน้าเพจไม่เลื่อนตาม ต้องเลื่อนทีละกรอบ) —
-     ตอนนี้ปล่อยให้ยืดเต็มความสูง เลื่อนทั้งหน้าด้วยแถบเลื่อนอันเดียว (ตามที่ขอ
-     "ให้เลื่อนได้หมด") */
-  .scroll-list{
-    max-height:none; overflow:visible; margin-top:4px;
+  /* ลิสต์ในการ์ด Super admin — เลื่อนในกรอบของตัวเอง (สูงสุด ~360px) มีแถบเลื่อนให้เห็นชัด
+     ทุกการ์ดเหมือนกันหมด (เดิมบางการ์ดมีกรอบ บางการ์ดไม่มี) และการ์ดพับเก็บได้ (ดู
+     setupCollapsibleAdminCards()) — กรอบเลื่อนใช้ id ตรงๆ เพราะบางลิสต์ถูก JS เซต className ทับ */
+  .scroll-list, #testerRosterRows, #nameMapRows, #trackNameMapRows, #equipmentLineNameMapRows,
+  #equipmentSheetNameMapRows, #lineGroupMapRows{
+    max-height:360px; overflow-y:auto; margin-top:4px; padding-right:6px;
+    scrollbar-width:thin; scrollbar-color:var(--accent) var(--bg-panel-2);
+    -webkit-overflow-scrolling:touch;
   }
+  .scroll-list::-webkit-scrollbar, #testerRosterRows::-webkit-scrollbar, #nameMapRows::-webkit-scrollbar,
+  #trackNameMapRows::-webkit-scrollbar, #equipmentLineNameMapRows::-webkit-scrollbar,
+  #equipmentSheetNameMapRows::-webkit-scrollbar, #lineGroupMapRows::-webkit-scrollbar{width:8px;}
+  .scroll-list::-webkit-scrollbar-thumb, #testerRosterRows::-webkit-scrollbar-thumb, #nameMapRows::-webkit-scrollbar-thumb,
+  #trackNameMapRows::-webkit-scrollbar-thumb, #equipmentLineNameMapRows::-webkit-scrollbar-thumb,
+  #equipmentSheetNameMapRows::-webkit-scrollbar-thumb, #lineGroupMapRows::-webkit-scrollbar-thumb{
+    background:var(--accent); border-radius:8px;
+  }
+  .scroll-list::-webkit-scrollbar-track, #testerRosterRows::-webkit-scrollbar-track, #nameMapRows::-webkit-scrollbar-track,
+  #trackNameMapRows::-webkit-scrollbar-track, #equipmentLineNameMapRows::-webkit-scrollbar-track,
+  #equipmentSheetNameMapRows::-webkit-scrollbar-track, #lineGroupMapRows::-webkit-scrollbar-track{
+    background:var(--bg-panel-2); border-radius:8px;
+  }
+  /* การ์ดพับเก็บ — คลิกหัวการ์ดเพื่อกาง/พับ */
+  .card.collapsible > .card-title{cursor:pointer; user-select:none;}
+  .card.collapsible > .card-title::after{
+    content:'▾'; margin-left:auto; color:var(--text-dim); font-size:15px; transition:transform .18s ease;
+  }
+  .card.collapsible.collapsed > .card-title{margin-bottom:0;}
+  .card.collapsible.collapsed > .card-title::after{transform:rotate(-90deg);}
+  .card.collapsible.collapsed > .card-body{display:none;}
   .tester-roster-row{
     display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:5px 10px;
     padding:10px 0; border-bottom:1px solid var(--line-soft);
@@ -2306,6 +2329,40 @@ function closeAllHiMenus(){
   document.querySelectorAll('.hi-menu').forEach(m=> m.classList.add('app-hidden'));
 }
 document.addEventListener('click', closeAllHiMenus);
+
+// การ์ดจัดการของ Super admin พับเก็บได้ — หุ้มเนื้อหาใต้หัวการ์ดด้วย .card-body แล้วคลิก
+// หัวการ์ดเพื่อกาง/พับ เริ่มต้นพับไว้ทั้งหมด (หน้าไม่ยาว) จำสถานะที่กางไว้ในเครื่อง
+// (localStorage — ใช้ไม่ได้ก็แค่ไม่จำ ไม่ทำให้หน้าพัง)
+const ADMIN_CARD_IDS = ['testerRosterCard', 'techNameListCard', 'adminNameMapCard', 'trackNameMapCard',
+  'equipmentLineNameMapCard', 'equipmentSheetNameMapCard', 'lineGroupMapCard', 'customerFleetListCard', 'dropdownOptionsCard'];
+function setupCollapsibleAdminCards(){
+  let open = [];
+  try{ open = JSON.parse(localStorage.getItem('qc_admin_cards_open_v1') || '[]'); }catch(e){}
+  const save = ()=>{
+    try{ localStorage.setItem('qc_admin_cards_open_v1', JSON.stringify(ADMIN_CARD_IDS.filter(id=> { const c = document.getElementById(id); return c && !c.classList.contains('collapsed'); }))); }catch(e){}
+  };
+  ADMIN_CARD_IDS.forEach(id=>{
+    const card = document.getElementById(id);
+    const title = card && card.querySelector(':scope > .card-title');
+    if(!card || !title) return;
+    const body = document.createElement('div');
+    body.className = 'card-body';
+    while(title.nextSibling) body.appendChild(title.nextSibling);
+    card.appendChild(body);
+    card.classList.add('collapsible');
+    title.setAttribute('role', 'button');
+    title.tabIndex = 0;
+    const apply = (collapsed)=>{
+      card.classList.toggle('collapsed', collapsed);
+      title.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+    };
+    apply(!open.includes(id));
+    const toggle = ()=>{ apply(!card.classList.contains('collapsed')); save(); };
+    title.addEventListener('click', toggle);
+    title.addEventListener('keydown', e=>{ if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); toggle(); } });
+  });
+}
+setupCollapsibleAdminCards();
 
 const APP_VERSION = document.querySelector('meta[name="app-version"]').content;
 document.getElementById('versionTag').textContent = 'v' + APP_VERSION;
