@@ -11,7 +11,7 @@
 (function(){try{if(localStorage.getItem('sd-theme')==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
-<meta name="app-version" content="1.10.0">
+<meta name="app-version" content="1.11.0">
 <title>ประวัติรายงาน · SONGDEE GPS</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -158,7 +158,7 @@
     display:flex; align-items:center; justify-content:center; font-size:15px;
     background:var(--bg-panel-2); border:1px solid var(--line-soft);
   }
-  .history-item.tpl-upgrade .hi-icon{background:linear-gradient(150deg, rgba(216,25,33,.22), rgba(216,25,33,.06)); border-color:rgba(216,25,33,.28);}
+  .history-item.tpl-upgrade .hi-icon, .history-item.tpl-convert .hi-icon{background:linear-gradient(150deg, rgba(216,25,33,.22), rgba(216,25,33,.06)); border-color:rgba(216,25,33,.28);}
   .history-item.tpl-new_install .hi-icon{background:linear-gradient(150deg, rgba(61,220,151,.22), rgba(61,220,151,.06)); border-color:rgba(61,220,151,.28);}
   .history-item.tpl-repair .hi-icon{background:linear-gradient(150deg, rgba(220,38,38,.18), rgba(220,38,38,.06)); border-color:rgba(220,38,38,.26);}
   .history-item .hi-text{flex:1; min-width:0;}
@@ -408,8 +408,8 @@ installReadMeter('qc-history', 'https://songdee-line-proxy.songdeegps.workers.de
 const _auth = firebase.auth();
 const _db = firebase.firestore();
 
-const TEMPLATE_LABELS = { upgrade:"อัปเกรด", new_install:"ติดตั้งใหม่", repair:"ซ่อม", remove:"ถอดย้ายอุปกรณ์" };
-const TEMPLATE_ICONS = { upgrade:"⬆️", new_install:"✨", repair:"🛠️", remove:"📤" };
+const TEMPLATE_LABELS = { upgrade:"อัปเกรด", convert:"เปลี่ยนรูปแบบ", new_install:"ติดตั้งใหม่", repair:"ซ่อม", remove:"ถอดย้ายอุปกรณ์" };
+const TEMPLATE_ICONS = { upgrade:"⬆️", convert:"🔄", new_install:"✨", repair:"🛠️", remove:"📤" };
 const ACTION_LABELS = { create:"เพิ่มใหม่", update:"แก้ไข", delete:"ลบ" };
 
 let currentUser = null;

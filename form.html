@@ -15,7 +15,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.131.0">
+<meta name="app-version" content="1.132.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@100..900&display=swap" rel="stylesheet">
@@ -1928,7 +1928,7 @@ async function pushMdvrChecklist(){
   const body = {
     plate,
     customer: state.customer || '', fleet: state.fleet || '',
-    technician: (state.tpl === 'repair' || state.tpl === 'upgrade') ? '' : onSiteTechName(),
+    technician: (state.tpl === 'repair' || isUpgradeLike(state.tpl)) ? '' : onSiteTechName(),
     mdvrPosition: state.mdvrPosition || '', groundPoint: state.groundPoint || '',
     province: state.province || '', statusDlt: state.statusDlt || '', tapIo: state.tapIo || '',
   };
@@ -3279,6 +3279,7 @@ const CHECK_PASS_LABEL = {
 // การซ่อมด้วย" เลยเปิดให้ทุกเทมเพลตเห็น/กรอกปัญหาได้เหมือนกัน (แค่ไม่บังคับ
 // กรอกนอกจากเทมเพลตซ่อม — ดู getMissingFields()'s "ปัญหาอย่างน้อย 1 รายการ")
 function tplHasProblems(tpl){ return true; }
+function isUpgradeLike(tpl){ return tpl === 'upgrade' || tpl === 'convert'; }
 function tplHasOldModel(tpl){ return tpl !== "new_install"; }
 
 // ข้อความแสดงผลของแต่ละ checklist item ตอนพรีวิว/การ์ด LINE — แยกกรณี
@@ -3300,12 +3301,14 @@ function checklistItemLabel(item){
 const FIXES_CARD_LABEL = {
   new_install: "อุปกรณ์ที่ติดตั้ง",
   upgrade: "ถอด/ติดตั้ง",
+  convert: "ถอด/ติดตั้ง",
   repair: "แก้ไข",
   remove: "อุปกรณ์ที่ถอด",
 };
 const FIXES_ADD_BTN_LABEL = {
   new_install: "+ เพิ่มอุปกรณ์ที่ติดตั้ง",
   upgrade: "+ เพิ่มรายการถอด/ติดตั้ง",
+  convert: "+ เพิ่มรายการถอด/ติดตั้ง",
   repair: "+ เพิ่มรายการแก้ไข",
   remove: "+ เพิ่มอุปกรณ์ที่ถอด",
 };
@@ -3326,8 +3329,11 @@ const SHARED_CHECKLIST = [
   {key:"steelbox", text:"ตรวจสอบการติดตั้งกล่องเหล็ก", type:"steelbox"},
   {key:"db9",      text:"ตรวจสอบการใส่น็อตยึดหัว DB9", type:"db9"},
 ];
+// "เปลี่ยนรูปแบบ" (convert) ทำงานเหมือนอัปเกรดทุกประการ (ตามที่ขอ "copy Upgrade มาเลย")
+// — ทุกจุดที่เช็ค 'upgrade' ใช้ isUpgradeLike(tpl) แทน เปลี่ยนแค่ชื่อประเภทงานในข้อความ/รายงาน
 const TEMPLATES = {
   upgrade: { label: "อัปเกรด", checklist: SHARED_CHECKLIST },
+  convert: { label: "เปลี่ยนรูปแบบ", checklist: SHARED_CHECKLIST },
   new_install: { label: "ติดตั้งใหม่", checklist: SHARED_CHECKLIST },
   repair: { label: "ซ่อม", checklist: SHARED_CHECKLIST },
   remove: { label: "ถอดย้ายอุปกรณ์", checklist: SHARED_CHECKLIST },
@@ -3473,7 +3479,7 @@ function syncFormInputsFromState(){
   document.getElementById('tapIoInput').value = state.tapIo || '';
 }
 
-const TPL_ICON = { upgrade: '⬆️', new_install: '✨', repair: '🛠️', remove: '📤' };
+const TPL_ICON = { upgrade: '⬆️', convert: '🔄', new_install: '✨', repair: '🛠️', remove: '📤' };
 
 function renderTabs(){
   const wrap = document.getElementById('tplTabs');
@@ -3970,7 +3976,7 @@ function buildProductHalf(row, idx, ctx){
   // ติดตั้ง" เฉยๆ) ไม่มีทางระบุ CH ได้เลย เขียนลง Track ไม่ได้ตามที่แจ้ง —
   // เปิดให้เลือก CH ตรงๆ ได้เหมือนติดตั้งใหม่ (buildSheetUpdates() ใช้ค่านี้
   // เป็น fallback เมื่อหา src จากรุ่นเก่าไม่เจอ)
-  if((state.tpl === 'new_install' || needsChForRemove || state.tpl === 'upgrade' || state.tpl === 'repair') && rowNeedsChannel(row.product)){
+  if((state.tpl === 'new_install' || needsChForRemove || isUpgradeLike(state.tpl) || state.tpl === 'repair') && rowNeedsChannel(row.product)){
     const chSel = document.createElement('select');
     chSel.style.marginTop = '6px';
     const chBlank = document.createElement('option');
@@ -3989,7 +3995,7 @@ function buildProductHalf(row, idx, ctx){
   // SSD Brand) แต่ละคันมีไม่เท่ากัน เหมือนปัญหา CH ด้านบนเป๊ะ: เพิ่ม/เปลี่ยน
   // SD card โดยไม่ได้เลือกจาก "รุ่นเก่าที่เปลี่ยน" ไม่มีทางระบุได้ว่าจะลงช่อง
   // ไหน (ตามที่แจ้ง "ประเภทของตัวบันทึกก็ลงผิดช่อง") — เปิดให้เลือกช่องตรงๆ
-  if((state.tpl === 'new_install' || needsChForRemove || state.tpl === 'upgrade' || state.tpl === 'repair') && isStorageProduct(row.product)){
+  if((state.tpl === 'new_install' || needsChForRemove || isUpgradeLike(state.tpl) || state.tpl === 'repair') && isStorageProduct(row.product)){
     const slotSel = document.createElement('select');
     slotSel.style.marginTop = '6px';
     const slotBlank = document.createElement('option');
@@ -4313,7 +4319,7 @@ function renderFixRows(){
   // อัปเกรด ใช้โครง "① ถอด/② ติดตั้ง" เดียวกับถอดย้ายอุปกรณ์แล้ว (ตามที่ขอ
   // "Upgrade ให้แยกเป็นถอดกับติดตั้ง รูปแบบเดียวกันกับติดตั้ง") — ดู
   // renderRemoveSections() ที่ตอนนี้รองรับทั้งสองเทมเพลต
-  const useSplitSections = state.tpl === 'remove' || state.tpl === 'upgrade';
+  const useSplitSections = state.tpl === 'remove' || isUpgradeLike(state.tpl);
   document.getElementById('fixRows').classList.toggle('app-hidden', useSplitSections);
   document.getElementById('addFixBtn').classList.toggle('app-hidden', useSplitSections);
   document.getElementById('removeSections').classList.toggle('app-hidden', !useSplitSections);
@@ -4893,7 +4899,11 @@ function markedFixLine(row){
   const hasOld = !!row.oldModel;
   const hasNew = !!row.product;
   if(hasOld && hasNew){
+    // ถอดกับติดตั้งของแถวเดียวกันอยู่บรรทัดเดียวกัน (ตามที่ขอ "ทำให้การถอดกับซ่อม
+    // อยู่ในแถวเดียวกัน") — "- 🔴 ทำการถอด A → 🟢 B (Ch1)" แทนการแตกเป็น 2 บรรทัด
+    // ที่อ่านแล้วไม่รู้ว่าคู่กัน (อัปเกรดไม่ผ่านทางนี้ ใช้หัวข้อ ถอด/ติดตั้ง แยกกลุ่ม)
     const [removeHalf, installHalf] = line.split('\n');
+    if(removeHalf && installHalf) return `${markRemoveLine(removeHalf)} → ${markInstallLine(installHalf).replace(/^- /, '')}`;
     return [removeHalf && markRemoveLine(removeHalf), installHalf && markInstallLine(installHalf)].filter(Boolean).join('\n');
   }
   if(hasOld) return markRemoveLine(line);
@@ -5277,7 +5287,7 @@ function buildMessage(){
     lines.push(...problemLines);
     lines.push('');
   }
-  if(state.tpl === 'upgrade'){
+  if(isUpgradeLike(state.tpl)){
     const { removeLines, installLines, editLines } = buildUpgradeFixSections();
     if(removeLines.length){ lines.push(markRemoveHeader('ถอด')); lines.push(...removeLines.map(markRemoveLine)); lines.push(''); }
     if(installLines.length){ lines.push('ติดตั้ง'); lines.push(...installLines.map(markInstallLine)); lines.push(''); }
