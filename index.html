@@ -12,7 +12,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>Dashboard · SONGDEE GPS</title>
-<meta name="app-version" content="1.45.0">
+<meta name="app-version" content="1.46.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@100..900&display=swap" rel="stylesheet">
@@ -2278,7 +2278,7 @@ function renderList(list){
           <div class="hi-icon">${tplIcon}</div>
           <div class="hi-text">
             <div class="title">${escapeHtmlLite(tplLabel)} ${escapeHtmlLite(doc.customer||'')} ${sentBadge}</div>
-            <div class="meta">ทะเบียน: ${escapeHtmlLite(doc.plate||'-')} · ผู้ทดสอบ: ${escapeHtmlLite(doc.techName||'-')}</div>
+            <div class="meta">ทะเบียน: ${escapeHtmlLite(doc.plate||'-')}${Array.isArray(doc.onSiteTechNames)&&doc.onSiteTechNames.length?` · ช่าง: ${escapeHtmlLite(doc.onSiteTechNames.join(', '))}`:''} · ผู้ทดสอบ: ${escapeHtmlLite(doc.techName||'-')}</div>
           </div>
         </div>
       </a>
