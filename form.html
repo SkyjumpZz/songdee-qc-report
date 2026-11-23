@@ -15,7 +15,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.147.0">
+<meta name="app-version" content="1.148.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@100..900&display=swap" rel="stylesheet">
@@ -5361,6 +5361,41 @@ async function pushIssueClose(){
   return results;
 }
 
+// เปิด Issue คืน — แก้ทะเบียนในรายงานที่เคยปิด Issue ไปแล้ว (ช่างลงทะเบียนผิด → ไปปิด Issue ของรถคันอื่น)
+// ต้องคำนวณจากรายงานเดิม (originalReportDoc) ก่อน saveReportReliably() เพราะหลังบันทึก originalReportDoc ถูกแทนด้วยรายงานใหม่
+// ตั๋วที่เคยปิด = trackResults.issueClose.tickets ของรายงานเดิม (+ ตั๋วที่เปิดคืนรอบก่อนไม่สำเร็จ trackResults.issueReopen)
+// worker เช็คซ้ำว่าทะเบียนในแถว Issue ตรงกับทะเบียนเดิมจริงก่อนเปิดคืน
+function pendingIssueReopen(){
+  const o = originalReportDoc;
+  if(!o || !currentReportId || !o.plate) return null;
+  if(normPlate(o.plate) === normPlate(state.plate)) return null;
+  const tr = o.trackResults || {};
+  const tickets = [];
+  if(tr.issueClose && tr.issueClose.ok && Array.isArray(tr.issueClose.tickets)) tickets.push(...tr.issueClose.tickets);
+  if(tr.issueReopen && tr.issueReopen.ok === false && Array.isArray(tr.issueReopen.pending) && normPlate(tr.issueReopen.plate||'') === normPlate(o.plate)) tickets.push(...tr.issueReopen.pending);
+  const closingNow = new Set(openIssues.filter(i => i.closeChecked).map(i => i.ticketNo));
+  const list = [...new Set(tickets.filter(Boolean))].filter(t => !closingNow.has(t));
+  return list.length ? { plate: o.plate, tickets: list } : null;
+}
+async function pushIssueReopen(req){
+  const done = [], failed = [];
+  for(const ticketNo of req.tickets){
+    try{
+      const res = await authFetch('https://songdee-vehicle-lookup.songdeegps.workers.dev/issue-reopen', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ ticketNo, plate: req.plate })
+      });
+      const data = await res.json();
+      if(!res.ok || !data.ok) throw new Error(data.error || ('HTTP ' + res.status));
+      done.push(ticketNo);
+    }catch(e){
+      console.error('[Issue reopen]', ticketNo, e);
+      failed.push({ ticketNo, error: e.message });
+    }
+  }
+  return { ok: !failed.length, plate: req.plate, tickets: done, pending: failed.map(f => f.ticketNo), errors: failed };
+}
+
 // อัปเกรด — แยกรายการเป็นหัวข้อ "ถอด"/"ติดตั้ง" คนละก้อน (ตามที่ขอ พร้อม
 // ตัวอย่างจริงจากรายงาน ถอดย้ายอุปกรณ์ ที่ใช้รูปแบบนี้อยู่แล้ว) แทนการรวมทุก
 // แถวไว้ใต้หัวข้อเดียว "ถอด/ติดตั้ง" แถวที่มีแค่ oldModel → กลุ่ม "ถอด", มีแค่
@@ -6044,6 +6079,7 @@ async function sendToLine(){
     // รายงานบน Dashboard ตอนนี้ลองบันทึกซ้ำให้เอง 3 รอบ ถ้ายังไม่ได้จะหยุดตรงนี้ ไม่ส่ง
     // LINE ไม่เขียน Tracking — ข้อมูลในฟอร์มยังอยู่ครบ กดส่งใหม่ได้ทันทีเมื่อเน็ตกลับมา
     showToast('กำลังบันทึกรายงาน...');
+    const issueReopenReq = pendingIssueReopen(); // ต้องคิดก่อนบันทึก (ดู pendingIssueReopen)
     const saveError = await saveReportReliably();
     if(saveError){
       showToast('บันทึกรายงานไม่สำเร็จ — ยังไม่ได้ส่งเข้า LINE');
@@ -6064,7 +6100,15 @@ async function sendToLine(){
     // trackResults so Dashboard (index.html) can show per-report Track
     // status and offer "Track ให้ใหม่อีกครั้ง" (retrackReport() below) without
     // re-submitting the whole report.
+    // แก้ทะเบียนจากรายงานที่เคยปิด Issue ไปแล้ว → เปิด Issue ของทะเบียนเดิมคืนก่อน แล้วค่อยปิดของทะเบียนใหม่ตามปกติ
+    let issueReopenRes = null;
+    if(issueReopenReq){
+      issueReopenRes = await pushIssueReopen(issueReopenReq);
+      if(issueReopenRes.tickets.length) saveSuffix += ` · เปิด Issue ${issueReopenRes.tickets.join(', ')} คืน (ทะเบียนเดิม ${issueReopenReq.plate}) ✓`;
+      if(issueReopenRes.errors.length) saveSuffix += ` (เปิด Issue คืนไม่สำเร็จ: ${issueReopenRes.errors.map(e=>e.ticketNo+' '+e.error).join('; ')})`;
+    }
     const { results: trackResults, suffix: trackSuffix } = await runTrackWriteBacks();
+    if(issueReopenRes) trackResults.issueReopen = issueReopenRes;
     saveSuffix += trackSuffix;
     if(currentReportId){
       try{ await _db.collection('qc_reports').doc(currentReportId).set({ trackResults, trackResultsAt: Date.now() }, {merge:true}); }
