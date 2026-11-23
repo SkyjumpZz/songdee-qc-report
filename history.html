@@ -11,7 +11,7 @@
 (function(){try{if(localStorage.getItem('sd-theme')==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
-<meta name="app-version" content="1.11.0">
+<meta name="app-version" content="1.12.0">
 <title>ประวัติรายงาน · SONGDEE GPS</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -198,6 +198,13 @@
   }
   .hi-expand .warn{color:#ffb020;}
   .hi-expand .ok{color:#3ddc97;}
+  .hi-edits{margin-bottom:6px;}
+  .hi-edits .ed-h{font-weight:700; margin-top:4px;}
+  .hi-edits .ed-t{opacity:.7; font-weight:400;}
+  .hi-edits ul{margin:2px 0 4px; padding-left:16px;}
+  .hi-edits li{margin:1px 0;}
+  .hi-edits .ed-from{text-decoration:line-through; opacity:.65;}
+  .hi-sent-badge.edited{color:#b794f6; background:rgba(183,148,246,.14); border:1px solid rgba(183,148,246,.28);}
   .hi-retrack-btn{
     align-self:flex-start; margin-top:3px; font-size:12px; font-weight:600;
     padding:6px 11px; border-radius:var(--r-pill); border:1px solid var(--line-soft);
@@ -415,6 +422,30 @@ const ACTION_LABELS = { create:"เพิ่มใหม่", update:"แก้�
 let currentUser = null;
 let isAdmin = false;
 let viewScope = 'mine'; // 'mine' | 'all' (admin only)
+
+// ประวัติแก้ไขของรายงานนี้ — อ่านจาก qc_report_logs (ฟอร์มเขียนทุกครั้งที่บันทึก: action "update" + changes [{label,from,to}])
+// โหลดตอนกด ▾ ครั้งแรกของการ์ดนั้นเท่านั้น (ไม่อ่านล่วงหน้าทุกการ์ด) · เรียงใหม่→เก่า ในเครื่อง (ไม่ต้องมี composite index)
+const _reportEditsCache = {};
+async function loadReportEdits(reportId, el){
+  if(!el || !reportId) return;
+  if(_reportEditsCache[reportId]){ el.innerHTML = _reportEditsCache[reportId]; return; }
+  el.innerHTML = '<div class="ed-t">กำลังโหลดประวัติแก้ไข…</div>';
+  try{
+    const snap = await _db.collection('qc_report_logs').where('reportId', '==', reportId).get();
+    const logs = snap.docs.map(d=>d.data()).filter(r=> r.action === 'update' && Array.isArray(r.changes) && r.changes.length)
+      .sort((a,b)=>(b.at||0)-(a.at||0));
+    const pad = n=> String(n).padStart(2,'0');
+    const t = ms=>{ const d = new Date(ms||0); return `${pad(d.getDate())}/${pad(d.getMonth()+1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+    const html = logs.length
+      ? logs.map(r=> `<div class="ed-h">✏️ แก้ไขโดย ${escapeHtmlLite(r.actorName||'-')} <span class="ed-t">· ${t(r.at)}</span></div><ul>${r.changes.map(c=>`<li>${escapeHtmlLite(c.label)}: <span class="ed-from">${escapeHtmlLite(c.from)}</span> → <b>${escapeHtmlLite(c.to)}</b></li>`).join('')}</ul>`).join('')
+      : '<div class="ed-t">ไม่มีประวัติการแก้ไข</div>';
+    _reportEditsCache[reportId] = html;
+    el.innerHTML = html;
+  }catch(e){
+    console.error('[report edits]', e);
+    el.innerHTML = `<div class="warn">โหลดประวัติแก้ไขไม่สำเร็จ (${escapeHtmlLite(e.code||e.message||'error')})</div>`;
+  }
+}
 
 function escapeHtmlLite(s){
   return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -646,7 +677,7 @@ function renderList(list, showAdmin){
         <div class="hi-row">
           <div class="hi-icon">${tplIcon}</div>
           <div class="hi-text">
-            <div class="title">${escapeHtmlLite(tplLabel)} ${escapeHtmlLite(doc.customer||'')} ${sentBadge}</div>
+            <div class="title">${escapeHtmlLite(tplLabel)} ${escapeHtmlLite(doc.customer||'')} ${sentBadge}${(doc.updatedAt && doc.createdAt && doc.updatedAt - doc.createdAt > 60000) ? ' <span class="hi-sent-badge edited">✏️ แก้ไขแล้ว</span>' : ''}</div>
             <div class="meta">${plateMeta}</div>
             ${ownerLine}
           </div>
@@ -660,6 +691,7 @@ function renderList(list, showAdmin){
         <a class="hi-menu-item" href="${editHref}">✏️ แก้ไขรายงาน</a>
       </div>
       <div class="hi-expand app-hidden">
+        <div class="hi-edits"></div>
         ${issueLine ? `<div class="${issueClass}">${issueLine}</div>` : ''}
         <div class="${trackClass}">${trackLine}</div>
         <a class="hi-retrack-btn" href="${retrackHref}">🔄 Track ให้ใหม่อีกครั้ง</a>
@@ -679,6 +711,7 @@ function renderList(list, showAdmin){
       const willShow = panel.classList.contains('app-hidden');
       panel.classList.toggle('app-hidden', !willShow);
       btn.classList.toggle('open', willShow);
+      if(willShow) loadReportEdits(doc.id, panel.querySelector('.hi-edits'));
     });
     item.querySelector('.hi-retrack-btn').addEventListener('click', e=>{ e.stopPropagation(); });
     wrap.appendChild(item);
