@@ -11,7 +11,7 @@
 (function(){try{if(localStorage.getItem('sd-theme')==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
-<meta name="app-version" content="1.12.0">
+<meta name="app-version" content="1.13.0">
 <title>ประวัติรายงาน · SONGDEE GPS</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -198,6 +198,8 @@
   }
   .hi-expand .warn{color:#ffb020;}
   .hi-expand .ok{color:#3ddc97;}
+  .hi-expand .tr-fail{margin:4px 0 2px; padding-left:18px; font-size:12.5px; line-height:1.5;}
+  .hi-expand .tr-fail b{font-weight:700;}
   .hi-edits{margin-bottom:6px;}
   .hi-edits .ed-h{font-weight:700; margin-top:4px;}
   .hi-edits .ed-t{opacity:.7; font-weight:400;}
@@ -586,7 +588,10 @@ function trackStatusSummary(doc){
   if(!tr){
     return { trackLine: 'ไม่มีข้อมูล (รายงานนี้ยังไม่เคยบันทึกสถานะ track)', trackClass: '', issueLine: null, issueClass: '' };
   }
-  const relevantKeys = ['mdvrInstall', 'mdvrUnitSwap', 'mdvrChecklist', 'sheetUpdates', 'mdvrClears', 'deviceSwaps'];
+  const relevantKeys = ['mdvrInstall', 'mdvrUnitSwap', 'mdvrFixInstall', 'mdvrChecklist', 'sheetUpdates', 'mdvrClears', 'deviceSwaps', 'issueReopen'];
+  // ชื่อแต่ละขั้นตอน — ใช้บอกว่า "ไม่สำเร็จ" ตรงไหน เพราะอะไร (ข้อความ error จากฟอร์ม/worker ที่เก็บไว้ใน trackResults)
+  const TRACK_STEP_LABELS = { mdvrInstall:'อัปเดตเครื่อง MDVR', mdvrUnitSwap:'เปลี่ยน MDVR', mdvrFixInstall:'ติดตั้ง MDVR ใหม่', mdvrChecklist:'เช็คลิสต์ MDVR',
+    sheetUpdates:'อัปเดตชีต (ช่องกล้อง/SIM)', mdvrClears:'ถอด + บันทึก', deviceSwaps:'Ai Box / ADAS / DMS', issueReopen:'เปิด Issue คืน' };
   let anyRan = false, anyFail = false;
   relevantKeys.forEach(k=>{
     if(tr[k]){ anyRan = true; if(!tr[k].ok) anyFail = true; }
@@ -594,7 +599,17 @@ function trackStatusSummary(doc){
   const atStr = doc.trackResultsAt ? ` (${formatSentAt(doc.trackResultsAt)})` : '';
   let trackLine, trackClass;
   if(!anyRan){ trackLine = 'ไม่มีรายการที่ต้อง track สำหรับรายงานนี้' + atStr; trackClass = ''; }
-  else if(anyFail){ trackLine = '⚠️ Track ไม่สำเร็จบางรายการ' + atStr; trackClass = 'warn'; }
+  else if(anyFail){
+    const fails = relevantKeys.filter(k=> tr[k] && !tr[k].ok).map(k=>{
+      const r = tr[k];
+      const why = (r.missingSNs && r.missingSNs.length) ? `หา SN ไม่เจอในชีต: ${r.missingSNs.join(', ')}`
+        : (r.errors && r.errors.length) ? r.errors.map(e=> `${e.ticketNo}: ${e.error}`).join(' · ')
+        : (r.error || 'ไม่ทราบสาเหตุ');
+      return `<li><b>${escapeHtmlLite(TRACK_STEP_LABELS[k]||k)}</b> — ${escapeHtmlLite(why)}</li>`;
+    });
+    trackLine = '⚠️ Track ไม่สำเร็จบางรายการ' + atStr + `<ul class="tr-fail">${fails.join('')}</ul>`;
+    trackClass = 'warn';
+  }
   else { trackLine = '✅ Track สำเร็จ' + atStr; trackClass = 'ok'; }
 
   let issueLine = null, issueClass = '';
