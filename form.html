@@ -15,7 +15,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.148.0">
+<meta name="app-version" content="1.149.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@100..900&display=swap" rel="stylesheet">
@@ -6159,7 +6159,7 @@ async function sendToLine(){
         // เดาจาก field อื่น. Non-fatal — รายงานก็ยังถือว่าส่งสำเร็จแม้
         // บันทึกเวลานี้ไม่สำเร็จ (เช่น เน็ตหลุดพอดีหลัง push แล้ว)
         if(currentReportId){
-          try{ await _db.collection('qc_reports').doc(currentReportId).set({ lineSentAt: Date.now() }, {merge:true}); }
+          try{ await _db.collection('qc_reports').doc(currentReportId).set({ lineSentAt: Date.now(), lineText: text }, {merge:true}); } // lineText: ข้อความที่ส่งจริง — แอป Admin (QC รอยืนยัน) เปิดดูได้
           catch(e){ console.error('[lineSentAt save]', e); }
           try{ await pushQcReportLog(true); }
           catch(e){ console.error('[QC log save]', e); }
