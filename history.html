@@ -11,7 +11,7 @@
 (function(){try{if(localStorage.getItem('sd-theme')==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
-<meta name="app-version" content="1.13.0">
+<meta name="app-version" content="1.14.0">
 <title>ประวัติรายงาน · SONGDEE GPS</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -230,6 +230,14 @@
   @media (prefers-reduced-motion: reduce){.skeleton-row{animation:none;}}
   .err{color:var(--danger);}
   .page-tabs{display:flex; gap:6px; margin-top:12px;}
+  .hf-bar{display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:12px 0;}
+  .hf-bar input[type=search]{flex:1 1 240px; min-width:0;}
+  .hf-bar input, .hf-bar select, .hf-bar button{background:var(--bg-panel); color:var(--text); border:1px solid var(--line); border-radius:10px; padding:8px 10px; font:inherit; font-size:13px;}
+  .hf-bar button{cursor:pointer;}
+  .hf-date{display:flex; align-items:center; gap:6px; font-size:12px; color:var(--text-dim);}
+  .hf-count{font-size:12px; color:var(--text-dim);}
+  #histMore{text-align:center; margin:14px 0 20px;}
+  #histMore button{background:var(--bg-panel); color:var(--text); border:1px solid var(--line); border-radius:10px; padding:9px 18px; font:inherit; cursor:pointer;}
   .page-tabs a, .page-tabs span.tab{
     flex:1; padding:9px 8px; border-radius:var(--r-sm); border:1px solid var(--line-soft);
     background:var(--bg-panel-2); color:var(--text-dim); font-family:'Noto Sans Thai',sans-serif;
@@ -338,7 +346,17 @@
     <span class="tab active" id="scopeMine" onclick="setScope('mine')">รายงานของฉัน</span>
     <span class="tab" id="scopeAll" onclick="setScope('all')">ทั้งหมด (แอดมิน)</span>
   </div>
+  <div class="hf-bar app-hidden" id="histFilters">
+    <input type="search" id="hfSearch" placeholder="🔍 ค้นหา ทะเบียน / ลูกค้า / ช่าง / ผู้ทดสอบ / Fleet" autocomplete="off" oninput="applyHistFilters()">
+    <select id="hfTpl" onchange="applyHistFilters()"><option value="">ทุกประเภทงาน</option></select>
+    <select id="hfTester" onchange="applyHistFilters()"><option value="">ผู้ทดสอบทุกคน</option></select>
+    <select id="hfSent" onchange="applyHistFilters()"><option value="">ส่ง LINE ทั้งหมด</option><option value="sent">ส่งแล้ว</option><option value="unsent">ยังไม่ส่ง</option><option value="edited">มีการแก้ไข</option></select>
+    <span class="hf-date">วันที่ <input type="date" id="hfFrom" onchange="loadReports()"> – <input type="date" id="hfTo" onchange="loadReports()"></span>
+    <button type="button" id="hfClear" onclick="clearHistFilters()">ล้าง</button>
+    <span class="hf-count" id="hfCount"></span>
+  </div>
   <div id="list" class="loading">กำลังตรวจสอบสิทธิ์...</div>
+  <div id="histMore"></div>
   <div class="card app-hidden" id="changeLogCard">
     <h2>ประวัติการเปลี่ยนแปลง (แอดมิน)</h2>
     <div id="changeLogRows" class="loading">กำลังโหลด...</div>
@@ -530,22 +548,69 @@ function setScope(scope){
 // Line แล้วไม่ขึ้นในรายการ" ที่รายงานไว้ (เช่น No.48 LCB1) orderBy() เดี่ยว
 // (ไม่มี where ประกบ) ไม่ต้องสร้าง composite index เพิ่ม — ใช้ index เดียวกับ
 // ที่ index.html ใช้งานอยู่แล้วสำหรับ query เดียวกันนี้
-async function loadReports(){
+// ดูย้อนหลัง: "ทั้งหมด (แอดมิน)" โหลดทีละ HIST_PAGE ใบ (ใหม่→เก่า) + ปุ่ม "โหลดเพิ่ม" ต่อจากใบสุดท้าย
+// หรือเลือกช่วงวันที่ (ตามเวลาบันทึก createdAt — where+orderBy ฟิลด์เดียวกัน ไม่ต้องมี composite index)
+// ตัวกรองอื่น (ค้นหา/ประเภท/ผู้ทดสอบ/ส่ง LINE) กรองจากที่โหลดมาแล้วในเครื่อง
+const HIST_PAGE = 300;
+let histDocs = [], histLastSnap = null, histHasMore = false, histShowAll = false;
+function histDateMs(id, end){ const v = (document.getElementById(id)||{}).value; if(!v) return null; const d = new Date(v+'T00:00:00'); if(end) d.setDate(d.getDate()+1); return d.getTime(); }
+async function loadReports(more){
   const listEl = document.getElementById('list');
-  renderSkeleton(listEl, 4);
+  if(!more){ renderSkeleton(listEl, 4); histDocs = []; histLastSnap = null; }
   try{
     const showAll = isAdmin && viewScope === 'all';
-    const query = showAll
-      ? _db.collection('qc_reports').orderBy('createdAt', 'desc').limit(300)
-      : _db.collection('qc_reports').where('techUid', '==', currentUser.uid).limit(2000);
-    const snap = await query.get();
-    const list = snap.docs
-      .map(d=>({id:d.id, ...d.data()}))
-      .sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
-    renderList(list, showAll);
+    histShowAll = showAll;
+    let list;
+    if(showAll){
+      let q = _db.collection('qc_reports');
+      const from = histDateMs('hfFrom'), to = histDateMs('hfTo', true);
+      if(from) q = q.where('createdAt', '>=', from);
+      if(to) q = q.where('createdAt', '<', to);
+      q = q.orderBy('createdAt', 'desc');
+      if(more && histLastSnap) q = q.startAfter(histLastSnap);
+      const snap = await q.limit(HIST_PAGE).get();
+      histLastSnap = snap.docs.length ? snap.docs[snap.docs.length-1] : histLastSnap;
+      histHasMore = snap.docs.length === HIST_PAGE;
+      histDocs = histDocs.concat(snap.docs.map(d=>({id:d.id, ...d.data()})));
+    } else {
+      const snap = await _db.collection('qc_reports').where('techUid', '==', currentUser.uid).limit(2000).get();
+      histHasMore = false;
+      const from = histDateMs('hfFrom'), to = histDateMs('hfTo', true);
+      histDocs = snap.docs.map(d=>({id:d.id, ...d.data()})).filter(r=> (!from || (r.createdAt||0) >= from) && (!to || (r.createdAt||0) < to));
+    }
+    histDocs.sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
+    document.getElementById('histFilters').classList.remove('app-hidden');
+    fillHistFilterOptions();
+    applyHistFilters();
   }catch(e){
     listEl.innerHTML = `<div class="err">โหลดประวัติไม่สำเร็จ: ${escapeHtmlLite(e.message)}</div>`;
   }
+}
+function fillHistFilterOptions(){
+  const keep = (id, opts, first)=>{ const el = document.getElementById(id); const cur = el.value;
+    el.innerHTML = `<option value="">${first}</option>` + opts.map(([v,l])=>`<option value="${escapeHtmlLite(v)}">${escapeHtmlLite(l)}</option>`).join('');
+    if(opts.some(([v])=>v===cur)) el.value = cur; };
+  keep('hfTpl', Object.keys(TEMPLATE_LABELS).filter(k=> histDocs.some(r=>r.tpl===k)).map(k=>[k, TEMPLATE_LABELS[k]]), 'ทุกประเภทงาน');
+  keep('hfTester', [...new Set(histDocs.map(r=>r.techName).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'th')).map(n=>[n,n]), 'ผู้ทดสอบทุกคน');
+}
+function applyHistFilters(){
+  const q = (document.getElementById('hfSearch').value||'').trim().toLowerCase();
+  const tpl = document.getElementById('hfTpl').value, tester = document.getElementById('hfTester').value, sent = document.getElementById('hfSent').value;
+  const list = histDocs.filter(r=>
+    (!tpl || r.tpl === tpl) && (!tester || r.techName === tester)
+    && (!sent || (sent==='sent' ? !!r.lineSentAt : sent==='unsent' ? !r.lineSentAt : (r.updatedAt && r.createdAt && r.updatedAt - r.createdAt > 60000)))
+    && (!q || [r.plate, r.newPlate, r.trailerPlate, r.customer, r.fleet, r.techName, ...(Array.isArray(r.onSiteTechNames)?r.onSiteTechNames:[])].some(v=> String(v||'').toLowerCase().includes(q))));
+  const oldest = histDocs.length ? histDocs[histDocs.length-1].createdAt : 0;
+  document.getElementById('hfCount').textContent = `${list.length} จาก ${histDocs.length} ใบ` + (oldest ? ` · ย้อนถึง ${new Date(oldest).toLocaleDateString('th-TH',{day:'numeric',month:'short',year:'2-digit'})}` : '');
+  renderList(list, histShowAll);
+  const more = document.getElementById('histMore');
+  more.innerHTML = histHasMore ? `<button type="button" onclick="this.disabled=true;this.textContent='กำลังโหลด...';loadReports(true)">⬇ โหลดเก่ากว่านี้อีก ${HIST_PAGE} ใบ</button>` : (histDocs.length ? '<span class="hf-count">— สุดรายการ —</span>' : '');
+}
+function clearHistFilters(){
+  ['hfSearch','hfTpl','hfTester','hfSent'].forEach(id=>{ document.getElementById(id).value=''; });
+  const hadDate = document.getElementById('hfFrom').value || document.getElementById('hfTo').value;
+  document.getElementById('hfFrom').value=''; document.getElementById('hfTo').value='';
+  if(hadDate) loadReports(); else applyHistFilters();
 }
 
 async function deleteReportAsAdmin(doc){
@@ -649,7 +714,7 @@ function relativeDateLabel(dateStr){
 function renderList(list, showAdmin){
   const listEl = document.getElementById('list');
   if(!list.length){
-    listEl.innerHTML = '<div class="empty">ยังไม่มีรายงาน</div>';
+    listEl.innerHTML = histDocs.length ? '<div class="empty">ไม่พบรายงานที่ตรงกับตัวกรอง</div>' : '<div class="empty">ยังไม่มีรายงาน</div>';
     return;
   }
   listEl.innerHTML = '';
