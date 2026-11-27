@@ -15,7 +15,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>รายงานตรวจสอบงานช่าง</title>
-<meta name="app-version" content="1.149.0">
+<meta name="app-version" content="1.150.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@100..900&display=swap" rel="stylesheet">
@@ -1218,6 +1218,7 @@ let techStockNames = []; // merged, deduped names available to pick from
 // (sd_qcTechNames) — ช่างใหม่ที่ยังไม่มีของ Spare ใน Stock และยังไม่เคยถูก
 // มอบหมายงานใน Admin web จะไม่มีชื่อให้เลือกเลยถ้าไม่มีชุดนี้
 let extraTechNames = [];
+let hiddenTechNames = []; // sd_qcTechHidden — ชื่อที่ Super Admin ลบออกจากการ์ด "จัดการรายชื่อช่าง" (ไม่ให้เลือก)
 let assignedTechNames = []; // assignedToName values seen across all `assignments` docs (see loadCustomerFleetSuggestions)
 
 // Gating this list on Spare-stock ownership alone (Object.keys(allTechStock))
@@ -1228,7 +1229,7 @@ let assignedTechNames = []; // assignedToName values seen across all `assignment
 // options as long as ANY job has ever been assigned to anyone, not only once
 // someone's Spare stock has been logged in Stock.
 function refreshTechStockNames(){
-  techStockNames = [...new Set([...Object.keys(allTechStock), ...assignedTechNames, ...extraTechNames])].sort();
+  techStockNames = [...new Set([...Object.keys(allTechStock), ...assignedTechNames, ...extraTechNames])].filter(n=> !hiddenTechNames.includes(n)).sort();
   wireTechStockSearch();
 }
 
@@ -1357,9 +1358,10 @@ function wireTechStockSearch(){
 async function loadTechStock(){
   // แยก try คนละก้อน — sd_qcTechNames โหลดไม่ได้ (เช่นยังไม่เคยมีเอกสาร/เน็ตสะดุด)
   // ต้องไม่ทำให้ของ Spare จาก sd_tech หายไปด้วย
-  const [stockRes, extraRes] = await Promise.allSettled([
+  const [stockRes, extraRes, hiddenRes] = await Promise.allSettled([
     _db.collection('sd').doc('sd_tech').get(),
     _db.collection('sd').doc('sd_qcTechNames').get(),
+    _db.collection('sd').doc('sd_qcTechHidden').get(),
   ]);
   try{
     if(stockRes.status !== 'fulfilled') throw stockRes.reason;
@@ -1376,6 +1378,10 @@ async function loadTechStock(){
     console.error('[Extra tech names]', e);
     extraTechNames = [];
   }
+  try{
+    const hid = hiddenRes.status === 'fulfilled' && hiddenRes.value.exists ? JSON.parse(hiddenRes.value.data().v || '[]') : [];
+    hiddenTechNames = Array.isArray(hid) ? hid.filter(n=> typeof n === 'string' && n.trim()) : [];
+  }catch(e){ hiddenTechNames = []; }
   techStockChecked = true;
   refreshTechStockNames();
 }
